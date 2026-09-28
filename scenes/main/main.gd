@@ -641,6 +641,12 @@ func _net_hit_number(at: Vector3, amount: float, crit: bool, is_melee: bool) -> 
 	HitFx.show_number(at, amount, crit, is_melee)
 
 
+## Two players hit the same orc within a second (see `Enemy.take_damage`).
+@rpc("authority", "call_local", "unreliable")
+func _net_combo(at: Vector3) -> void:
+	HitFx.show_combo(at)
+
+
 ## We got hit: vibrate, red screen edges, camera shake and a red number over us.
 func _on_local_health_changed(current: float, maximum: float) -> void:
 	var lost := _last_health - current

@@ -36,6 +36,10 @@ const TARGET_GROUPS: Array[StringName] = [&"player_units"]
 @export var health_drop_amount: int = 20
 @export var coin_drop_min: int = 2
 @export var coin_drop_max: int = 3
+@export_group("Combo")
+## A player's hit within this many seconds of a teammate's hit on this orc is a combo.
+@export var combo_window: float = 1.0
+@export var combo_damage_multiplier: float = 1.5
 
 var home: Vector3
 var target: Node3D
@@ -54,6 +58,9 @@ var _base_speed: float
 var _alert_label: Label3D
 var _alert_tween: Tween
 var _throw_timer: float = 0.0
+## Server: last hit time (ms) per player peer, for combos.
+var _player_hits: Dictionary = {}
+var _last_combo_ms: int = -100000
 ## Replicated: increments when the orc is provoked (shows the "!" on every peer).
 var alert_seq: int = 0:
 	set(value):
@@ -110,6 +117,28 @@ func is_provoked() -> bool:
 ## True while the orc is chasing or walking home (its camp keeps it awake even if far away).
 func is_busy() -> bool:
 	return is_provoked() or _returning
+
+
+## Combo: two players of the same team hitting this orc within `combo_window` — every such hit
+## (from either of them) deals bonus damage, with a "COMBO!" pop-up for everyone.
+func take_damage(amount: float, attacker: Node3D = null, is_melee: bool = true, crit: bool = false) -> void:
+	var player := HitFx.player_of(attacker)
+	if player and not is_dead:
+		var now := Time.get_ticks_msec()
+		var window_ms := int(combo_window * 1000.0)
+		var combo := false
+		for other in _player_hits.keys():
+			var mate := _player_hits[other][1] as Player
+			if other != player.peer_id and now - int(_player_hits[other][0]) <= window_ms \
+					and is_instance_valid(mate) and mate.team_id == player.team_id:
+				combo = true
+		_player_hits[player.peer_id] = [now, player]
+		if combo:
+			amount *= combo_damage_multiplier
+			if now - _last_combo_ms > 350:
+				_last_combo_ms = now
+				HitFx.report_combo(self)
+	super(amount, attacker, is_melee, crit)
 
 
 func _on_damaged(attacker: Node3D) -> void:

@@ -9,6 +9,7 @@ enum Kind { FLESH, WOOD, LEAVES }
 const NUMBER_COLOR := Color(1.0, 0.96, 0.82)
 const CRIT_COLOR := Color(1.0, 0.72, 0.15)
 const HURT_COLOR := Color(1.0, 0.3, 0.25)
+const COMBO_COLOR := Color(0.45, 0.9, 1.0)
 
 ## Set by main.gd for the running match.
 static var world: Node3D
@@ -22,14 +23,10 @@ static var _kick_frame: int = -1
 
 ## Server: a hit landed on `target` for `amount`. Numbers go to the attacking player's device.
 static func report_hit(target: Node3D, amount: float, attacker: Node, crit: bool, is_melee: bool) -> void:
-	if not is_instance_valid(target) or attacker == null or not is_instance_valid(attacker):
+	if not is_instance_valid(target):
 		return
 	# Only hits by players themselves (not their soldiers) show numbers.
-	var player := attacker as Player
-	if player == null:
-		var shooter: Variant = attacker.get("_shooter")
-		if is_instance_valid(shooter) and shooter is Player:
-			player = shooter
+	var player := player_of(attacker)
 	if player == null:
 		return
 	MatchStats.on_hit(player.peer_id, amount, is_melee)
@@ -38,6 +35,29 @@ static func report_hit(target: Node3D, amount: float, attacker: Node, crit: bool
 		show_number(at, amount, crit, is_melee)
 	elif is_instance_valid(main):
 		main.rpc_id(player.peer_id, "_net_hit_number", at, amount, crit, is_melee)
+
+
+## The player behind a hit: the player itself or the shooter of their arrow (null for soldiers, orcs…).
+static func player_of(attacker: Node) -> Player:
+	if attacker == null or not is_instance_valid(attacker):
+		return null
+	if attacker is Player:
+		return attacker
+	var shooter: Variant = attacker.get("_shooter")
+	if is_instance_valid(shooter) and shooter is Player:
+		return shooter
+	return null
+
+
+## Server: a combo hit on `target` — "COMBO!" pops up over it on every device.
+static func report_combo(target: Node3D) -> void:
+	if is_instance_valid(target) and is_instance_valid(main):
+		main.rpc("_net_combo", target.global_position + Vector3(0, _number_height(target) + 0.45, 0))
+
+
+static func show_combo(at: Vector3) -> void:
+	if is_instance_valid(world):
+		FloatingText3D.spawn(world, at, "COMBO!", COMBO_COLOR, 104, true)
 
 
 ## The local player's own hit: number + (melee) hit-stop and camera kick.
