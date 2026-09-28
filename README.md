@@ -14,7 +14,7 @@ Single-player archer vs. orc camps in a big procedural world (3D, Kenney mini pa
   for the player; dead soldiers never come back.
 - **Follower cap**: up to 25 soldiers follow you in formation; extra ones wait in a reserve (HUD "25 +N") and run in
   to replace fallen followers.
-- **Orc types**: Spearman (basic), Swordsman (tougher, faster attacks), Spear Thrower (throws spears from ~8 units,
+- **Orc types**: Spearman (basic; carries the arena sword), Swordsman (tougher, faster attacks; orc sword), Spear Thrower (throws spears from ~8 units,
   backs off when you close in), Giant (huge, slow, heavy punches that hit everything in front). Camps mix them:
   ~25% swordsmen, ~20% throwers, rest spearmen, plus 1 giant at 10+ orcs and 2 at 18+.
 - **Aggro**: hitting an orc or its camp (even with an arrow from far away) alerts the whole squad (red "!").

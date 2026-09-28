@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" path="res://scenes/characters/enemy.gd" id="1_script"]
 [ext_resource type="PackedScene" path="res://assets/characters/orc.glb" id="2_model"]
-[ext_resource type="PackedScene" path="res://assets/items/dungeon/spear.glb" id="3_spear"]
+[ext_resource type="PackedScene" path="res://assets/items/arena/sword.glb" id="3_sword"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
 radius = 0.27
@@ -45,9 +45,9 @@ melee_damage = 10.0
 melee_range = 1.15
 melee_cooldown = 1.1
 melee_mask = 15
-right_hand_item = ExtResource("3_spear")
-right_hand_offset = Vector3(-0.27, -0.2, 0)
-right_swing_offset = Vector3(-0.1, 0, 0)
+right_hand_item = ExtResource("3_sword")
+right_hand_rotation = Vector3(0, 0, 180)
+right_swing_rotation = Vector3(0, 0, -90)
 health_bar_color = Color(0.9, 0.22, 0.2, 1)
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]
