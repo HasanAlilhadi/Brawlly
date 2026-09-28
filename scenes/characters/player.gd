@@ -232,7 +232,7 @@ func _slash_fx() -> void:
 	if is_dead or not is_inside_tree():
 		return
 	var forward := facing()
-	HitFx.swing_arc(global_position + Vector3(0, 0.5, 0), atan2(forward.x, forward.z), melee_range * 1.25 + 0.3,
+	HitFx.swing_arc(self, 0.5, atan2(forward.x, forward.z), melee_range * 1.25 + 0.3,
 			Color(1.0, 0.96, 0.85))
 
 

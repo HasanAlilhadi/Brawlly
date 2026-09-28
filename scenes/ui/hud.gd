@@ -100,6 +100,7 @@ func _ready() -> void:
 	Platform.touch_mode_changed.connect(_show_touch_controls)
 	_show_touch_controls(Platform.touch_mode)
 	_build_extras()
+	_apply_design()
 
 
 func _show_touch_controls(enabled: bool) -> void:
@@ -313,17 +314,15 @@ func _build_extras() -> void:
 		button.theme_type_variation = &"ButtonBeige"
 		button.toggle_mode = true
 		button.focus_mode = Control.FOCUS_NONE
-		button.custom_minimum_size = Vector2(110, 40)
-		button.add_theme_font_size_override("font_size", 17)
+		button.custom_minimum_size = HudStyle.BUTTON_WIDE
+		button.add_theme_font_size_override("font_size", HudStyle.FONT_BUTTON)
 		if not Platform.mobile_layout:
 			button.tooltip_text = "%s (%s)" % [ARMY_ORDERS[order], ARMY_KEYS[order]]
 			# Key prompt (1 / 2 / 3) at the left of the label.
 			button.icon = load("res://assets/ui/prompts/keyboard/%s.png" % ARMY_KEYS[order])
-			button.add_theme_constant_override("icon_max_width", 32)
 			for state in ["icon_normal_color", "icon_hover_color", "icon_pressed_color", "icon_hover_pressed_color", "icon_focus_color"]:
 				button.add_theme_color_override(state, UiKit.PROMPT_INK)  # same dark key cap as UiKit.prompt
 			button.add_theme_constant_override("h_separation", 6)
-			button.custom_minimum_size.x = 138.0
 		button.pressed.connect(func() -> void:
 			_on_army_order_changed(_player.army_order if _player else 0)  # the server confirms the change
 			army_command_requested.emit(order))
@@ -378,7 +377,7 @@ func _build_downed_panel() -> void:
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_theme_constant_override("separation", 10)
 	_downed_panel.add_child(row)
-	row.add_child(UiKit.medal("skull", 52.0))
+	row.add_child(UiKit.medal("skull", HudStyle.BADGE))
 	var column := VBoxContainer.new()
 	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -387,17 +386,17 @@ func _build_downed_panel() -> void:
 	var title_row := HBoxContainer.new()
 	title_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	column.add_child(title_row)
-	_downed_title = _small_label("You're down!", 22)
+	_downed_title = _small_label("You're down!", HudStyle.FONT_TITLE)
 	_downed_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title_row.add_child(_downed_title)
-	_downed_seconds = _small_label("", 22)
+	_downed_seconds = _small_label("", HudStyle.FONT_TITLE)
 	_downed_seconds.text_direction = Control.TEXT_DIRECTION_LTR
 	title_row.add_child(_downed_seconds)
 	_bleed_bar = _downed_bar(&"ProgressBar")
 	column.add_child(_bleed_bar)
 	_revive_progress_bar = _downed_bar(&"ProgressBarGreen")
 	column.add_child(_revive_progress_bar)
-	_downed_hint = _small_label("", 15)
+	_downed_hint = _small_label("", HudStyle.FONT_SMALL)
 	_downed_hint.modulate = Color(1, 1, 1, 0.8)
 	column.add_child(_downed_hint)
 	_downed_panel.hide()
@@ -407,7 +406,7 @@ func _build_downed_panel() -> void:
 func _downed_bar(variation: StringName) -> ProgressBar:
 	var bar := ProgressBar.new()
 	bar.theme_type_variation = variation
-	bar.custom_minimum_size = Vector2(0, 12)
+	bar.custom_minimum_size = Vector2(0, HudStyle.BAR_HEIGHT_SMALL)
 	bar.show_percentage = false
 	bar.max_value = 1.0
 	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -613,14 +612,89 @@ func _update_weapon_controls() -> void:
 		child.queue_free()
 	for i in _player.weapons.size():
 		var weapon := _player.weapons[i]
-		var badge := UiKit.medal(Player.WEAPONS[weapon]["icon"], 52.0 if i == _player.weapon_index else 40.0)
-		badge.modulate = Color.WHITE if i == _player.weapon_index else Color(1, 1, 1, 0.45)
+		var badge := UiKit.medal(Player.WEAPONS[weapon]["icon"], HudStyle.BADGE)
+		badge.modulate = HudStyle.SLOT_ACTIVE if i == _player.weapon_index else HudStyle.SLOT_INACTIVE
 		badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		for part in badge.find_children("*", "Control", true, false):
 			(part as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_weapon_slots.add_child(badge)
 	if _player.weapons.size() > 1:
-		var key := UiKit.prompt("keyboard/q", 34.0)
+		var key := UiKit.prompt("keyboard/q", HudStyle.KEY)
 		key.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		key.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		_weapon_slots.add_child(key)
+
+
+# --- Design system -----------------------------------------------------------------
+
+## Lays the HUD out from HudStyle tokens: left column (stats, then square buttons), right column
+## (minimap, stats, army orders), one scale for icons, fonts and buttons.
+func _apply_design() -> void:
+	var left := _column(false)
+	var top_left := $Root/TopLeft as Control
+	top_left.reparent(left, false)
+	top_left.custom_minimum_size = Vector2(HudStyle.LEFT_WIDTH, 0)
+	var buttons := HBoxContainer.new()
+	buttons.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	buttons.add_theme_constant_override("separation", int(HudStyle.GAP))
+	left.add_child(buttons)
+	for button: Button in [pause_button, shop_button, _ping_button]:
+		button.reparent(buttons, false)
+		button.custom_minimum_size = Vector2(HudStyle.BUTTON, HudStyle.BUTTON)
+		button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		button.add_theme_font_size_override("font_size", HudStyle.FONT_TITLE)
+	health_bar.custom_minimum_size.y = HudStyle.BAR_HEIGHT
+	for label: Label in [arrows_label, coins_label]:
+		label.add_theme_font_size_override("font_size", HudStyle.FONT_TITLE)
+	_size_icons(top_left, HudStyle.ICON)
+
+	var right := _column(true)
+	var map_frame := $Root/MinimapFrame as Control
+	map_frame.reparent(right, false)
+	map_frame.custom_minimum_size = Vector2(HudStyle.COLUMN_WIDTH, HudStyle.COLUMN_WIDTH)
+	var stats := $Root/Stats as Control
+	stats.reparent(right, false)
+	stats.custom_minimum_size = Vector2(HudStyle.COLUMN_WIDTH, 0)
+	for label: Label in [allies_label, camps_label]:
+		label.add_theme_font_size_override("font_size", HudStyle.FONT_BODY)
+	_size_icons(stats, HudStyle.ICON_SMALL)
+	_army_row.reparent(right, false)
+	_army_row.add_theme_constant_override("separation", int(HudStyle.GAP))
+	for button in _army_buttons:
+		button.custom_minimum_size = HudStyle.BUTTON_WIDE
+		button.add_theme_font_size_override("font_size", HudStyle.FONT_BUTTON)
+		button.add_theme_constant_override("icon_max_width", int(HudStyle.KEY))
+
+	toast_label.add_theme_font_size_override("font_size", HudStyle.FONT_BODY)
+	score_label.add_theme_font_size_override("font_size", HudStyle.FONT_BODY)
+	respawn_label.add_theme_font_size_override("font_size", HudStyle.FONT_HEADLINE)
+	_revive_label.add_theme_font_size_override("font_size", HudStyle.FONT_TITLE)
+	_weapon_bar.offset_right = -HudStyle.MARGIN
+	_weapon_bar.offset_bottom = -HudStyle.MARGIN
+	_weapon_slots.add_theme_constant_override("separation", int(HudStyle.GAP))
+
+
+## A top-left (or top-right) column at the HUD margin that stacks its children with the HUD gap.
+func _column(right_side: bool) -> VBoxContainer:
+	var column := VBoxContainer.new()
+	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	column.add_theme_constant_override("separation", int(HudStyle.GAP))
+	column.set_anchors_preset(Control.PRESET_TOP_RIGHT if right_side else Control.PRESET_TOP_LEFT)
+	column.offset_top = HudStyle.MARGIN
+	if right_side:
+		column.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+		column.offset_right = -HudStyle.MARGIN
+		column.offset_left = -HudStyle.MARGIN
+	else:
+		column.offset_left = HudStyle.MARGIN
+	root.add_child(column)
+	root.move_child(column, 1)
+	return column
+
+
+func _size_icons(parent: Node, icon_size: float) -> void:
+	for icon in parent.find_children("*", "TextureRect", true, false):
+		var picture := icon as TextureRect
+		picture.custom_minimum_size = Vector2(icon_size, icon_size)
+		picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		picture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED

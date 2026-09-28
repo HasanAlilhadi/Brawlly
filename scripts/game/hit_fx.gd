@@ -120,11 +120,11 @@ static func flash(at: Vector3, texture: Texture2D, color: Color, size: float, li
 	tween.chain().tween_callback(sprite.queue_free)
 
 
-## Sword swing trail: a curved ribbon around `center` (flat, at its height) that sweeps across
+## Sword swing trail: a curved ribbon around `parent` (a child of it, so it moves with it; flat, `height` up) that sweeps across
 ## `arc_degrees` in front of `yaw` (like `atan2(x, z)`), bright at the blade and fading behind it.
-static func swing_arc(center: Vector3, yaw: float, radius: float, color: Color, arc_degrees: float = 120.0,
+static func swing_arc(parent: Node3D, height: float, yaw: float, radius: float, color: Color, arc_degrees: float = 120.0,
 		lifetime: float = 0.26) -> void:
-	if not is_instance_valid(world):
+	if not is_instance_valid(parent) or not parent.is_inside_tree():
 		return
 	if _arc_material == null:
 		_arc_material = StandardMaterial3D.new()
@@ -136,8 +136,8 @@ static func swing_arc(center: Vector3, yaw: float, radius: float, color: Color, 
 	var ribbon := MeshInstance3D.new()
 	ribbon.mesh = mesh
 	ribbon.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	world.add_child(ribbon)
-	ribbon.global_position = center
+	parent.add_child(ribbon)
+	ribbon.position = Vector3(0, height, 0)
 	var half := deg_to_rad(arc_degrees) * 0.5
 	var tween := ribbon.create_tween()
 	tween.tween_method(func(t: float) -> void: _draw_arc(mesh, yaw, half, radius, color, t), 0.0, 1.0, lifetime)

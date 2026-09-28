@@ -73,7 +73,10 @@ by touch index so the joystick and buttons work together with multi-touch.
 - One-arm actions (sword swing, bow shot) play on that arm only while the unit moves (`BonePoseOverride3D.start_live`),
   full-body when standing still. Player colors: `recolor_*` exports + `assets/shaders/palette_recolor.gdshader`
   replace one palette hue (soldier crest h≈0.015, archer hat h≈0.38); new unit types need their own key hue.
-- In-game HUD is deliberately compact (PanelCompact / PanelInsetCompact styles): keep new HUD elements small.
+- In-game HUD is deliberately compact (PanelCompact / PanelInsetCompact styles) and follows the **HUD design system**:
+  every size, gap and font size comes from `HudStyle` (`scenes/ui/hud_style.gd`) — no numbers in hud.gd / hud.tscn.
+  `Hud._apply_design()` stacks the HUD into a left column (stats, square buttons) and a right column (minimap,
+  stats, army orders); buttons have fixed sizes (`BUTTON`, `BUTTON_WIDE`). New HUD elements join a column.
   Touch sticks are hidden unless `Platform.touch_mode`.
 - Groups: `player`, `friendly` (player + soldiers), `allies` (soldiers), `enemies` (orcs), `enemy_team` (orcs + live camps),
   `camps`, `choppable` (trees). Physics layers are in `GameConfig` (world, player, enemies, allies).
