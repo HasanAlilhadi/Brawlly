@@ -1,16 +1,18 @@
 class_name Pickup
 extends Node3D
-## Item lying on the ground (arrows, health or coins). Spins, gets pulled toward the nearest player
+## Item lying on the ground (arrows, spears, health or coins). Spins, gets pulled toward the nearest player
 ## who can use it, and is collected on contact. Disappears after a while.
 ## Multiplayer: spawned by the server through NetSpawn; every peer animates the pull, only the
 ## server decides who collects it (freeing it removes it everywhere).
 
-enum Kind { ARROWS, HEALTH, COIN }
+## Ammo (ARROWS / SPEARS) is only pulled to and collected by players carrying that weapon.
+enum Kind { ARROWS, HEALTH, COIN, SPEARS }
 
 const SCENE_PATH := "res://scenes/items/pickup.tscn"
 const ARROW_MODEL := preload("res://assets/items/forest/arrow.glb")
 const POTION_MODEL := preload("res://assets/items/dungeon/potion.glb")
 const COIN_MODEL := preload("res://assets/items/dungeon/coin.glb")
+const SPEAR_MODEL := preload("res://assets/items/dungeon/spear.glb")
 
 @export var kind: Kind = Kind.ARROWS
 @export var amount: int = 3
@@ -39,6 +41,12 @@ func _ready() -> void:
 				arrow.position = Vector3((i - 1) * 0.06, 0, 0)
 				_visual.add_child(arrow)
 			_visual.scale = Vector3.ONE * 1.4
+		Kind.SPEARS:
+			for i in 2:
+				var spear := SPEAR_MODEL.instantiate() as Node3D
+				spear.rotation_degrees = Vector3(90, -15.0 + i * 30.0, 0)
+				spear.position = Vector3((i - 0.5) * 0.08, 0.05, 0)
+				_visual.add_child(spear)
 		Kind.HEALTH:
 			_visual.add_child(POTION_MODEL.instantiate())
 			_visual.scale = Vector3.ONE * 1.2

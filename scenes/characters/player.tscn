@@ -71,6 +71,9 @@ properties/18/replication_mode = 2
 properties/19/path = NodePath(".:weapon_index")
 properties/19/spawn = true
 properties/19/replication_mode = 2
+properties/20/path = NodePath(".:spears")
+properties/20/spawn = true
+properties/20/replication_mode = 2
 
 [node name="Player" type="CharacterBody3D"]
 collision_layer = 2

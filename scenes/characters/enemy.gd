@@ -32,6 +32,8 @@ const TARGET_GROUPS: Array[StringName] = [&"player_units"]
 @export_range(0.0, 1.0) var arrow_drop_chance: float = 0.45
 @export var arrow_drop_min: int = 2
 @export var arrow_drop_max: int = 4
+## Spears are only picked up by players carrying the spear (arrows: the bow).
+@export_range(0.0, 1.0) var spear_drop_chance: float = 0.3
 @export_range(0.0, 1.0) var health_drop_chance: float = 0.25
 @export var health_drop_amount: int = 20
 @export var coin_drop_min: int = 2
@@ -261,6 +263,8 @@ func _on_died() -> void:
 	var world := get_parent()
 	if randf() < arrow_drop_chance:
 		Pickup.drop(world, global_position, Pickup.Kind.ARROWS, randi_range(arrow_drop_min, arrow_drop_max))
+	if randf() < spear_drop_chance:
+		Pickup.drop(world, global_position, Pickup.Kind.SPEARS, randi_range(1, 2))
 	if randf() < health_drop_chance:
 		Pickup.drop(world, global_position, Pickup.Kind.HEALTH, health_drop_amount)
 	var coins := roundi(randi_range(coin_drop_min, coin_drop_max) * coin_multiplier)

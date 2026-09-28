@@ -43,13 +43,15 @@ func _tick(delta: float) -> bool:
 	match phase:
 		0:
 			player.max_health = 1e6; player.health = 1e6
+			player.buy_weapon("bow"); player.switch_weapon()  # carry the bow (arrows), sword in hand
 			arrows_before = player.arrows
 			_next("solo started: players=%d camps=%d orcs=%d peer=%d team=%d" % [players.size(), get_tree().get_nodes_in_group(&"camps").size(), get_tree().get_nodes_in_group(&"enemies").size(), player.peer_id, player.team_id])
 		1:
 			var chest: Node3D = null
 			for c in main.get_node("World").get_children():
 				if c is Chest and (chest == null or c.global_position.distance_to(player.global_position) < chest.global_position.distance_to(player.global_position)): chest = c
-			_drive(chest.global_position, 0.2)
+			# Break it open with the sword.
+			if is_instance_valid(chest) and _drive(chest.global_position, 1.0): player.attack_melee_toward(chest.global_position - player.global_position)
 			if pt > 5: _next("chest: arrows %d -> %d, coins %d" % [arrows_before, player.arrows, player.coins]); arrows_before = player.arrows
 		2:
 			var tree := _nearest(&"choppable")
@@ -60,8 +62,9 @@ func _tick(delta: float) -> bool:
 			player.global_position = camp.global_position + Vector3(0, 0, camp.radius + 3)
 			_next("at camp squad=%d" % camp.squad_size)
 		4:
-			_drive(camp.global_position, camp.radius + 1.6)
-			player.attack_melee(); player.shoot()
+			# Sword only (no bow in hand): get within reach of the wall and keep swinging at it.
+			if _drive(camp.global_position, camp.radius + 0.7): player.attack_melee_toward(camp.global_position - player.global_position)
+			else: player.attack_melee()
 			if camp.is_dead: _next("camp destroyed: my soldiers=%d reserve=%d coins=%d" % [player.followers().size(), player.reserve_soldiers, player.coins])
 			elif pt > 40: _next("FAILED camp hp %.0f" % camp.health)
 		5:

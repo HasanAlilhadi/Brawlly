@@ -125,6 +125,17 @@ base_cost = 500
 cost_growth = 1.0
 max_level = 0
 
+[sub_resource type="Resource" id="Upgrade_spears"]
+script = ExtResource("2_def")
+id = &"spears"
+title = "Spear Bundle"
+description = "+4 spears"
+icon = ExtResource("icon_spear")
+base_cost = 25
+cost_growth = 1.1
+max_level = 0
+amount = 4.0
+
 [resource]
 script = ExtResource("1_catalog")
-upgrades = Array[ExtResource("2_def")]([SubResource("Upgrade_weapon_bow"), SubResource("Upgrade_weapon_spear"), SubResource("Upgrade_vitality"), SubResource("Upgrade_blade"), SubResource("Upgrade_archery"), SubResource("Upgrade_quiver"), SubResource("Upgrade_drill"), SubResource("Upgrade_command"), SubResource("Upgrade_recruit"), SubResource("Upgrade_potion"), SubResource("Upgrade_arrows")])
+upgrades = Array[ExtResource("2_def")]([SubResource("Upgrade_weapon_bow"), SubResource("Upgrade_weapon_spear"), SubResource("Upgrade_vitality"), SubResource("Upgrade_blade"), SubResource("Upgrade_archery"), SubResource("Upgrade_quiver"), SubResource("Upgrade_drill"), SubResource("Upgrade_command"), SubResource("Upgrade_recruit"), SubResource("Upgrade_potion"), SubResource("Upgrade_arrows"), SubResource("Upgrade_spears")])

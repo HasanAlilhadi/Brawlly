@@ -68,6 +68,8 @@ var _switch_button: TouchButton
 var _weapon_bar: PanelContainer
 var _weapon_slots: HBoxContainer
 var _weapon_icons: Dictionary = {}  # weapon id -> texture for the touch buttons
+var _arrow_icon: TextureRect
+var _arrow_texture: Texture2D
 var _downed_panel: PanelContainer
 var _downed_title: Label
 var _downed_seconds: Label
@@ -98,6 +100,8 @@ func _ready() -> void:
 		stick.button_texture = TOUCH_BUTTON
 		stick.held_texture = TOUCH_BUTTON_HELD
 		stick.knob_texture = TOUCH_NUB
+	_arrow_icon = get_node("Root/TopLeft/Rows/InfoRow/ArrowIcon") as TextureRect
+	_arrow_texture = _arrow_icon.texture
 	Platform.touch_mode_changed.connect(_show_touch_controls)
 	_show_touch_controls(Platform.touch_mode)
 	_build_extras()
@@ -119,6 +123,7 @@ func setup(player: Player, camps: Array[Camp]) -> void:
 	_update_weapon_controls()
 	player.health_changed.connect(_on_health_changed)
 	player.arrows_changed.connect(_on_arrows_changed)
+	player.spears_changed.connect(_on_arrows_changed)
 	player.coins_changed.connect(_on_coins_changed)
 	_on_coins_changed(player.coins)
 	_on_health_changed(player.health, player.max_health)
@@ -250,11 +255,20 @@ func _on_health_changed(current: float, maximum: float) -> void:
 	health_bar.value = current
 
 
-func _on_arrows_changed(count: int) -> void:
-	arrows_label.text = str(count)
-	var bow := _player == null or _player.current_weapon() == "bow"
-	bow_stick.badge = str(count) if bow else ""
-	bow_stick.disabled = bow and count <= 0
+## Ammo of the ranged weapon you carry (arrows for the bow, spears for the spear; hidden with the
+## sword alone). Connected to both ammo signals, so the count argument is ignored.
+func _on_arrows_changed(_count: int = 0) -> void:
+	if _player == null:
+		return
+	var spear := _player.weapons.has("spear")
+	var ammo := _player.spears if spear else _player.arrows
+	var ranged := spear or _player.weapons.has("bow")
+	arrows_label.text = str(ammo)
+	arrows_label.visible = ranged
+	_arrow_icon.visible = ranged
+	_arrow_icon.texture = SPEAR_ICON if spear else _arrow_texture
+	bow_stick.badge = str(ammo)
+	bow_stick.disabled = ammo <= 0
 
 
 ## Keeps UI away from notches / rounded corners on phones.

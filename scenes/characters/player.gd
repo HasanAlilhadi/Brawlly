@@ -13,6 +13,7 @@ extends Unit
 ## Army orders: `command_army()` tells this player's soldiers to follow, charge a point or hold a point.
 
 signal arrows_changed(count: int)
+signal spears_changed(count: int)
 signal coins_changed(count: int)
 signal upgrades_changed
 ## Server: this player just went down / was revived (`helpers` = the players who revived them).
@@ -72,6 +73,9 @@ const MAX_ORDER_DISTANCE: float = 25.0
 ## Thrown spear: hits harder than an arrow, needs no ammo, but throws and flies slower.
 @export var spear_damage: float = 35.0
 @export var spear_cooldown: float = 1.0
+@export var max_spears: int = 8
+## Spears in hand when you buy the spear.
+@export var spear_start: int = 6
 @export var aim_range: float = 12.0
 ## Aimed shots snap to an enemy within this angle of the aim direction.
 @export var aim_assist_degrees: float = 10.0
@@ -93,6 +97,11 @@ var ally_power: float = 1.0
 	set(value):
 		arrows = value
 		arrows_changed.emit(arrows)
+## Spear ammo (replicated, like arrows).
+var spears: int = 0:
+	set(value):
+		spears = value
+		spears_changed.emit(spears)
 var coins: int = 0:
 	set(value):
 		coins = value
@@ -286,9 +295,14 @@ func _weapon_hand() -> int:
 	return int(WEAPONS.get(current_weapon(), {}).get("hand", ARM_RIGHT))
 
 
-## False only for the bow without arrows (the sword and spear never run out).
+## Ammo for the weapon in hand (the sword never runs out).
 func has_ammo() -> bool:
-	return current_weapon() != "bow" or arrows > 0
+	match current_weapon():
+		"bow":
+			return arrows > 0
+		"spear":
+			return spears > 0
+	return true
 
 
 ## Server: shop purchase of a second weapon (bow or spear). You keep the sword and carry one of the
@@ -298,6 +312,8 @@ func buy_weapon(weapon: String) -> void:
 		return
 	weapons = PackedStringArray(["sword", weapon])
 	weapon_index = 1
+	if weapon == "spear":
+		spears = maxi(spears, spear_start)
 	_apply_weapon()
 
 
@@ -386,7 +402,7 @@ func _move_anim(strength: float) -> String:
 
 func _can_hit(target: Object) -> bool:
 	var node := target as Node
-	return node != null and (GameConfig.is_hostile(self, node) or node.is_in_group(&"choppable"))
+	return node != null and (GameConfig.is_hostile(self, node) or node.is_in_group(&"choppable") or node.is_in_group(&"breakable"))
 
 
 # --- Input (called on the server) ---------------------------------------------
@@ -523,7 +539,9 @@ func shoot(direction: Vector3 = Vector3.ZERO) -> void:
 		return
 	var spear := current_weapon() == "spear"
 	_shoot_timer = spear_cooldown if spear else shoot_cooldown
-	if not spear:
+	if spear:
+		spears -= 1
+	else:
 		arrows -= 1
 	if direction == Vector3.ZERO:
 		var target := find_nearest(TARGET_GROUPS, aim_range, global_position, {&"camps": 3.0})
@@ -699,7 +717,9 @@ func can_collect(kind: Pickup.Kind) -> bool:
 		return false
 	match kind:
 		Pickup.Kind.ARROWS:
-			return arrows < max_arrows
+			return weapons.has("bow") and arrows < max_arrows
+		Pickup.Kind.SPEARS:
+			return weapons.has("spear") and spears < max_spears
 		Pickup.Kind.HEALTH:
 			return health < max_health
 		Pickup.Kind.COIN:
@@ -713,6 +733,8 @@ func collect(kind: Pickup.Kind, amount: int) -> bool:
 	match kind:
 		Pickup.Kind.ARROWS:
 			arrows = mini(arrows + amount, max_arrows)
+		Pickup.Kind.SPEARS:
+			spears = mini(spears + amount, max_spears)
 		Pickup.Kind.HEALTH:
 			heal(amount)
 		Pickup.Kind.COIN:
@@ -753,7 +775,13 @@ func is_upgrade_useful(def: UpgradeDef) -> bool:
 		&"potion":
 			return health < max_health
 		&"arrows":
-			return arrows < max_arrows
+			return weapons.has("bow") and arrows < max_arrows
+		&"quiver":
+			return weapons.has("bow")
+		&"archery":
+			return weapons.has("bow") or weapons.has("spear")
+		&"spears":
+			return weapons.has("spear") and spears < max_spears
 	return true
 
 
@@ -809,6 +837,8 @@ func _apply_upgrade(def: UpgradeDef) -> void:
 			heal(def.amount)
 		&"arrows":
 			arrows = mini(arrows + int(def.amount), max_arrows)
+		&"spears":
+			spears = mini(spears + int(def.amount), max_spears)
 		_:
 			push_warning("Upgrade '%s' has no effect in Player._apply_upgrade()" % def.id)
 
