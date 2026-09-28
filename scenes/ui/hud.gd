@@ -320,6 +320,8 @@ func _build_extras() -> void:
 			# Key prompt (1 / 2 / 3) at the left of the label.
 			button.icon = load("res://assets/ui/prompts/keyboard/%s.png" % ARMY_KEYS[order])
 			button.add_theme_constant_override("icon_max_width", 32)
+			for state in ["icon_normal_color", "icon_hover_color", "icon_pressed_color", "icon_hover_pressed_color", "icon_focus_color"]:
+				button.add_theme_color_override(state, UiKit.PROMPT_INK)  # same dark key cap as UiKit.prompt
 			button.add_theme_constant_override("h_separation", 6)
 			button.custom_minimum_size.x = 138.0
 		button.pressed.connect(func() -> void:
