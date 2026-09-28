@@ -4,7 +4,7 @@
 [ext_resource type="PackedScene" path="res://assets/environment/dungeon/chest.glb" id="2_model"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_chest"]
-size = Vector3(0.7, 0.5, 0.95)
+size = Vector3(0.7, 1.0, 0.95)
 
 [node name="Chest" type="StaticBody3D"]
 collision_layer = 1
@@ -12,7 +12,7 @@ collision_mask = 0
 script = ExtResource("1_script")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.25, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
 shape = SubResource("BoxShape3D_chest")
 
 [node name="Model" type="Node3D" parent="."]

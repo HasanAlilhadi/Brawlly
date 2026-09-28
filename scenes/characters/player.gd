@@ -571,23 +571,33 @@ func _assisted(direction: Vector3) -> Vector3:
 	return to.normalized()
 
 
-## The enemy an aimed shot toward `direction` snaps to (null if none).
+## The enemy an aimed shot toward `direction` snaps to — or, with no enemy in line, a chest (or
+## other breakable) — null if none.
 func _assist_target(direction: Vector3) -> Node3D:
 	var best: Node3D = null
 	var best_angle := deg_to_rad(aim_assist_degrees)
 	for group in TARGET_GROUPS:
 		for node in get_tree().get_nodes_in_group(group):
-			if GameConfig.is_gone(node) or node == self or not GameConfig.is_hostile(self, node):
-				continue
-			var to := (node as Node3D).global_position - global_position
-			to.y = 0.0
-			if to.length() > aim_range or to.length() < 0.1:
-				continue
-			var angle := direction.angle_to(to)
-			if angle < best_angle:
-				best_angle = angle
+			if node != self and GameConfig.is_hostile(self, node) and _assist_angle(direction, node) < best_angle:
+				best_angle = _assist_angle(direction, node)
+				best = node
+	if best == null:
+		for node in get_tree().get_nodes_in_group(&"breakable"):
+			if _assist_angle(direction, node) < best_angle:
+				best_angle = _assist_angle(direction, node)
 				best = node
 	return best
+
+
+## Angle between `direction` and a live `node` within aim range (INF if gone or out of range).
+func _assist_angle(direction: Vector3, node: Node) -> float:
+	if GameConfig.is_gone(node):
+		return INF
+	var to := (node as Node3D).global_position - global_position
+	to.y = 0.0
+	if to.length() > aim_range or to.length() < 0.1:
+		return INF
+	return direction.angle_to(to)
 
 
 ## Short tapered aim line that fades out, with an arrowhead (the arrow flies farther), plus a ring that

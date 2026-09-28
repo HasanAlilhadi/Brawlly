@@ -16,6 +16,9 @@ const LAYER_PLAYER: int = 2
 const LAYER_ENEMIES: int = 4
 const LAYER_ALLIES: int = 8
 const LAYER_UNITS: int = LAYER_PLAYER | LAYER_ENEMIES | LAYER_ALLIES
+## Shots fly at 0.55 m (arrows) to 0.7 m (spears): anything hittable needs a collision shape from the
+## ground up to at least this height, or arrows and spears pass over it (melee hits by distance).
+const HIT_HEIGHT: float = 1.0
 
 ## Difficulty (set per match): orc health/damage multiplier and respawn-delay multiplier.
 static var orc_strength: float = 1.0
