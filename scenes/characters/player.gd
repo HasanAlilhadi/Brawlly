@@ -279,7 +279,7 @@ func _slash_fx() -> void:
 
 ## Sword attack, standing or running: no clip (Kenney's melee clip twists the arm, so the blade pointed
 ## at the ground or the camera). The arm stays in the holding pose (arm forward, level) and sweeps
-## around the shoulder — wind up out to the right, slash across the front, back — while the blade turns
+## around the shoulder — wind up across to the left, slash out to the right (like the swing trail), back — while the blade turns
 ## out along the arm. Damage lands mid-sweep (`attack_hit_delay`).
 func _sword_slash(duration: float) -> void:
 	_action_time = duration
