@@ -93,7 +93,7 @@ by touch index so the joystick and buttons work together with multi-touch.
 - Anything damageable implements `take_damage(amount, attacker = null, is_melee = true)`.
 - **Weapons**: the player starts with the sword and can buy the bow and the spear (shop items `weapon_bow` /
   `weapon_spear`, 500 coins each; `Player.buy_weapon()` keeps what was bought, so Q cycles all of them). Base damage: sword 40, bow 25 (arrows),
-  spear 35 (thrown `player_spear` projectile, no ammo, `spear_cooldown` 1 s vs bow 0.4 s). Sharp Blade boosts the
+  spear 35 (thrown `player_spear` projectile, uses `spears`, `spear_cooldown` 1 s vs bow 0.4 s). Sharp Blade boosts the
   sword, Keen Points the bow and spear. Ammo: arrows (bow) and `spears` (max 8, 6 when bought); ammo pickups
   (`Pickup.Kind.ARROWS` / `SPEARS`) only go to players carrying that weapon (`Player.can_collect`). Chests are
   broken open by any weapon (group `breakable`, 60 hp), not opened by walking up. Shots fly at 0.55–0.7 m, so
