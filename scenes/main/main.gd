@@ -13,6 +13,7 @@ const GOBLIN_SCENE := preload("res://scenes/characters/treasure_goblin.tscn")
 ## PC cursor: the kit's gold sword while playing (menus use the gauntlet from Project Settings).
 const MATCH_CURSOR := preload("res://assets/ui/cursors/cursor_sword_gold.png")
 const MENU_CURSOR := preload("res://assets/ui/cursors/cursor_gauntlet_bronze.png")
+const AIM_CURSOR := preload("res://assets/ui/cursors/cursor_target_round_b.png")
 const PROJECTILE_SCENES := {
 	&"arrow": preload("res://scenes/combat/arrow_projectile.tscn"),
 	&"spear": preload("res://scenes/combat/spear_projectile.tscn"),
@@ -60,6 +61,7 @@ var _vibrate_cooldown: float = 0.0
 var _respawn_left: float = 0.0
 var _mouse_attack: bool = false
 var _mouse_bow: bool = false
+var _bow_cursor: bool = false
 var _mouse_click_left: float = 0.0
 var _last_ping_ms: Dictionary = {}  # peer -> time of their last ping (server)
 
@@ -302,6 +304,7 @@ func _on_peer_left(peer: int) -> void:
 
 func _physics_process(delta: float) -> void:
 	if _game_over or local_player == null or not is_instance_valid(local_player):
+		_show_bow_cursor(false)
 		return
 	_mouse_click_left = maxf(_mouse_click_left - delta, 0.0)
 	var move := hud.joystick.output
@@ -316,6 +319,7 @@ func _physics_process(delta: float) -> void:
 		aim = Vector3(stick.x, 0.0, stick.y)
 	if _mouse_bow:
 		aim = _cursor_direction()
+	_show_bow_cursor(_mouse_bow and not local_player.is_dead)
 	var melee_aim := Vector3.ZERO
 	if hud.melee_button.is_aiming:
 		melee_aim = Vector3(hud.melee_button.output.x, 0.0, hud.melee_button.output.y)
@@ -660,6 +664,17 @@ func _on_local_health_changed(current: float, maximum: float) -> void:
 	if _vibrate_cooldown <= 0.0:
 		_vibrate_cooldown = 0.15
 		Input.vibrate_handheld(int(lerpf(35.0, 110.0, strength)), lerpf(0.4, 1.0, strength))
+
+
+## PC: a crosshair while the right mouse button aims the bow, the gold sword otherwise.
+func _show_bow_cursor(aiming: bool) -> void:
+	if aiming == _bow_cursor or Platform.mobile_layout:
+		return
+	_bow_cursor = aiming
+	if aiming:
+		Input.set_custom_mouse_cursor(AIM_CURSOR, Input.CURSOR_ARROW, AIM_CURSOR.get_size() * 0.5)
+	else:
+		Input.set_custom_mouse_cursor(MATCH_CURSOR, Input.CURSOR_ARROW, Vector2(2, 2))
 
 
 func _exit_tree() -> void:

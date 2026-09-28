@@ -15,6 +15,8 @@ signal cancelled
 @export_range(0.0, 0.9) var aim_dead_zone: float = 0.25
 @export var aim_ring_color: Color = Color(1, 1, 1, 0.18)
 @export var knob_color: Color = Color(1, 1, 1, 0.7)
+## Optional skin for the drag knob (tinted red while the aim is cancelled).
+@export var knob_texture: Texture2D
 
 var output: Vector2 = Vector2.ZERO
 var is_aiming: bool = false
@@ -77,4 +79,9 @@ func _draw() -> void:
 	draw_arc(center, drag_radius, 0.0, TAU, 64, aim_ring_color, 4.0, true)
 	var knob_radius := minf(size.x, size.y) * 0.22
 	var color := knob_color if (is_aiming or not _dragged) else Color(1, 0.4, 0.4, 0.7)
-	draw_circle(center + output * drag_radius, knob_radius, color)
+	var knob := center + output * drag_radius
+	if knob_texture:
+		var tint := Color.WHITE if (is_aiming or not _dragged) else Color(1, 0.45, 0.45)
+		draw_texture_rect(knob_texture, Rect2(knob - Vector2(knob_radius, knob_radius), Vector2(knob_radius, knob_radius) * 2.0), false, tint)
+	else:
+		draw_circle(knob, knob_radius, color)

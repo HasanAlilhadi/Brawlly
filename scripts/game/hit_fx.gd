@@ -10,6 +10,11 @@ const NUMBER_COLOR := Color(1.0, 0.96, 0.82)
 const CRIT_COLOR := Color(1.0, 0.72, 0.15)
 const HURT_COLOR := Color(1.0, 0.3, 0.25)
 const COMBO_COLOR := Color(0.45, 0.9, 1.0)
+const HIT_SPARK := preload("res://assets/vfx/particles/star_07.png")
+const DEATH_SMOKE := preload("res://assets/vfx/particles/smoke_04.png")
+const BIG_SMOKE := preload("res://assets/vfx/particles/smoke_10.png")
+const COMBO_RING := preload("res://assets/vfx/particles/circle_03.png")
+const REVIVE_SPARKLE := preload("res://assets/vfx/particles/magic_04.png")
 
 ## Set by main.gd for the running match.
 static var world: Node3D
@@ -17,6 +22,7 @@ static var main: Node
 static var camera: FollowCamera3D
 
 static var _burst_meshes: Dictionary = {}
+static var _flash_materials: Dictionary = {}
 static var _stop_until_ms: int = 0
 static var _kick_frame: int = -1
 
@@ -58,6 +64,7 @@ static func report_combo(target: Node3D) -> void:
 static func show_combo(at: Vector3) -> void:
 	if is_instance_valid(world):
 		FloatingText3D.spawn(world, at, "COMBO!", COMBO_COLOR, 104, true)
+		flash(at - Vector3(0, 0.45, 0), COMBO_RING, COMBO_COLOR, 1.6, 0.35, Vector2(0.4, 1.4))
 
 
 ## The local player's own hit: number + (melee) hit-stop and camera kick.
@@ -89,6 +96,44 @@ static func hit_stop(seconds: float) -> void:
 		await tree.process_frame
 	_stop_until_ms = 0
 	Engine.time_scale = 1.0
+
+
+## One billboard sprite (additive glow, or `additive = false` for smoke) (Kenney Particle Pack) that pops from `grow.x` to `grow.y` times
+## `size` metres and fades out over `lifetime`. Every peer plays its own.
+static func flash(at: Vector3, texture: Texture2D, color: Color, size: float, lifetime: float = 0.25,
+		grow: Vector2 = Vector2(0.6, 1.25), additive: bool = true) -> void:
+	if not is_instance_valid(world) or texture == null:
+		return
+	var sprite := Sprite3D.new()
+	sprite.texture = texture
+	sprite.material_override = _flash_material(texture, additive)
+	sprite.modulate = color
+	sprite.pixel_size = size / float(texture.get_width())
+	sprite.rotation.z = randf() * TAU
+	world.add_child(sprite)
+	sprite.global_position = at
+	sprite.scale = Vector3.ONE * grow.x
+	var tween := sprite.create_tween().set_parallel(true)
+	tween.tween_property(sprite, "scale", Vector3.ONE * grow.y, lifetime).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	tween.tween_property(sprite, "modulate:a", 0.0, lifetime).set_ease(Tween.EASE_IN)
+	tween.chain().tween_callback(sprite.queue_free)
+
+
+static func _flash_material(texture: Texture2D, additive: bool) -> StandardMaterial3D:
+	var key := [texture, additive]
+	if _flash_materials.has(key):
+		return _flash_materials[key]
+	var material := StandardMaterial3D.new()
+	material.albedo_texture = texture
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.blend_mode = BaseMaterial3D.BLEND_MODE_ADD if additive else BaseMaterial3D.BLEND_MODE_MIX
+	material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	material.billboard_keep_scale = true
+	material.vertex_color_use_as_albedo = true
+	material.no_depth_test = true
+	_flash_materials[key] = material
+	return material
 
 
 ## Little burst of chips / sparks at `at`.

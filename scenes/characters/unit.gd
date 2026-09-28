@@ -329,6 +329,7 @@ func _roll_melee_damage() -> Array:
 func _hurt_visuals() -> void:
 	_punch()
 	HitFx.burst(global_position + Vector3(0, health_bar_height * 0.55, 0), HitFx.Kind.FLESH, 9)
+	HitFx.flash(global_position + Vector3(0, health_bar_height * 0.55, 0), HitFx.HIT_SPARK, Color(1.0, 0.9, 0.6), 1.1 * sqrt(radius / 0.35), 0.18)
 	if _flash_material == null:
 		_flash_material = StandardMaterial3D.new()
 		_flash_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -530,6 +531,7 @@ func _death_visuals() -> void:
 	if _color_ring:
 		_color_ring.hide()
 	_play_action_local("die", 99.0, ARM_BOTH)
+	HitFx.flash(global_position + Vector3(0, 0.4, 0), HitFx.DEATH_SMOKE, Color(0.85, 0.85, 0.8, 0.8), 1.6 * sqrt(radius / 0.35), 0.7, Vector2(0.5, 1.3), false)
 
 
 func _revive_visuals() -> void:

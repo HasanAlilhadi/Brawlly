@@ -20,6 +20,12 @@ const DOWNED_PANEL_WIDTH: float = 380.0
 const DOWNED_PANEL_MARGIN: float = 48.0
 ## Touch layouts lift the card above the sticks.
 const DOWNED_PANEL_TOUCH_LIFT: float = 300.0
+## Touch control skins (Kenney Mobile Controls, style A).
+const TOUCH_PAD := preload("res://assets/ui/touch/joystick_circle_pad_a.png")
+const TOUCH_NUB := preload("res://assets/ui/touch/joystick_circle_nub_a.png")
+const TOUCH_NUB_HELD := preload("res://assets/ui/touch/highlights/joystick_circle_nub_highlight.png")
+const TOUCH_BUTTON := preload("res://assets/ui/touch/button_circle.png")
+const TOUCH_BUTTON_HELD := preload("res://assets/ui/touch/highlights/button_circle_highlight.png")
 
 @onready var root: Control = $Root
 @onready var joystick: TouchJoystick = %Joystick
@@ -79,6 +85,13 @@ func _ready() -> void:
 	if not Platform.mobile_layout:
 		pause_button.tooltip_text = "Pause (Esc)"
 		shop_button.tooltip_text = "Shop (B)"
+	joystick.pad_texture = TOUCH_PAD
+	joystick.knob_texture = TOUCH_NUB
+	joystick.knob_held_texture = TOUCH_NUB_HELD
+	for stick: TouchAimStick in [melee_button, bow_stick]:
+		stick.button_texture = TOUCH_BUTTON
+		stick.held_texture = TOUCH_BUTTON_HELD
+		stick.knob_texture = TOUCH_NUB
 	Platform.touch_mode_changed.connect(_show_touch_controls)
 	_show_touch_controls(Platform.touch_mode)
 	_build_extras()

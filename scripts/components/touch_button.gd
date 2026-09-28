@@ -11,6 +11,9 @@ signal released
 @export var color: Color = Color(0.1, 0.1, 0.15, 0.45)
 @export var held_color: Color = Color(1, 1, 1, 0.45)
 @export var ring_color: Color = Color(1, 1, 1, 0.6)
+## Optional skin (e.g. Kenney Mobile Controls): drawn instead of the flat circle; `held_texture` on top while held.
+@export var button_texture: Texture2D
+@export var held_texture: Texture2D
 ## Small text drawn under the icon (e.g. ammo count).
 @export var badge: String = "":
 	set(value):
@@ -66,8 +69,14 @@ func _draw() -> void:
 	var fill := held_color if is_held else color
 	if disabled:
 		fill = Color(fill, fill.a * 0.5)
-	draw_circle(center, r, fill)
-	draw_arc(center, r - 2.0, 0.0, TAU, 48, Color(ring_color, ring_color.a * (0.4 if disabled else 1.0)), 4.0, true)
+	if button_texture:
+		var rect := Rect2(center - Vector2(r, r), Vector2(r, r) * 2.0)
+		draw_texture_rect(button_texture, rect, false, Color(1, 1, 1, 0.5 if disabled else 1.0))
+		if is_held and held_texture:
+			draw_texture_rect(held_texture, rect, false)
+	else:
+		draw_circle(center, r, fill)
+		draw_arc(center, r - 2.0, 0.0, TAU, 48, Color(ring_color, ring_color.a * (0.4 if disabled else 1.0)), 4.0, true)
 	if icon:
 		var icon_size := icon.get_size() * icon_scale
 		var mod := Color(1, 1, 1, 0.45) if disabled else Color.WHITE

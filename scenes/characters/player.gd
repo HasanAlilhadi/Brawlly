@@ -40,6 +40,7 @@ const DOWNED_SPEED: float = 0.3
 ## "crawl" (moving) and "downed" (lying still) clips, made in Blender on the archer's armature.
 const DOWNED_ANIMS := preload("res://assets/characters/animations/archer_downed.glb")
 const DOWNED_CLIPS: Array[String] = ["crawl", "downed"]
+const REVIVE_RING_TEXTURE := preload("res://assets/vfx/light_masks/ring_a.png")
 ## Downed archer: the revive bar sits just above the lying body; "HELP!" and the name stack above it
 ## in screen space (Label3D offsets, pixels), so they never overlap however steep the camera is.
 const DOWNED_LABEL_HEIGHT: float = 1.05
@@ -126,6 +127,8 @@ var _bleed_left: float = 0.0
 var _revive_raw: float = 0.0
 var _downed_label: Label3D
 var _revive_bar: HealthBar3D
+var _revive_ring: Decal
+var _was_downed: bool = false
 
 
 func _ready() -> void:
@@ -657,6 +660,10 @@ func _apply_downed() -> void:
 	var show_world_label := _shows_downed_label()
 	_downed_label.visible = show_world_label
 	_revive_bar.visible = _shows_revive_bar()
+	_revive_ring.visible = show_world_label
+	if _was_downed and not is_downed and not is_dead:
+		HitFx.flash(global_position + Vector3(0, 0.6, 0), HitFx.REVIVE_SPARKLE, Color(0.55, 1.0, 0.6), 2.2, 0.6, Vector2(0.5, 1.4))
+	_was_downed = is_downed
 	_name_label.position.y = DOWNED_LABEL_HEIGHT if is_downed else health_bar_height + 0.28
 	_name_label.offset.y = DOWNED_NAME_OFFSET if is_downed else 0.0
 	_health_bar.visible = false
@@ -711,6 +718,13 @@ func _build_downed_visuals() -> void:
 	add_child(_revive_bar)
 	_revive_bar.set_ratio(0.0)
 	_revive_bar.visible = false
+	# Where teammates must stand to revive (Kenney light mask on the ground).
+	_revive_ring = Decal.new()
+	_revive_ring.texture_albedo = REVIVE_RING_TEXTURE
+	_revive_ring.modulate = Color(0.45, 1.0, 0.5, 0.5)
+	_revive_ring.size = Vector3(REVIVE_RANGE * 2.0, 2.0, REVIVE_RANGE * 2.0)
+	_revive_ring.visible = false
+	add_child(_revive_ring)
 
 
 # --- Army orders (server) ------------------------------------------------------------

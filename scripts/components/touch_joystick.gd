@@ -12,6 +12,10 @@ extends Control
 @export var base_color: Color = Color(1, 1, 1, 0.14)
 @export var knob_color: Color = Color(1, 1, 1, 0.55)
 @export var ring_color: Color = Color(1, 1, 1, 0.3)
+## Optional skin: drawn instead of the flat circles (the knob highlight shows while dragging).
+@export var pad_texture: Texture2D
+@export var knob_texture: Texture2D
+@export var knob_held_texture: Texture2D
 
 var output: Vector2 = Vector2.ZERO
 
@@ -73,6 +77,13 @@ func _draw() -> void:
 	else:
 		base = to_local * _center
 		knob = to_local * _knob
+	if pad_texture and knob_texture:
+		draw_texture_rect(pad_texture, Rect2(base - Vector2(radius, radius), Vector2(radius, radius) * 2.0), false)
+		var knob_rect := Rect2(knob - Vector2(knob_radius, knob_radius), Vector2(knob_radius, knob_radius) * 2.0)
+		draw_texture_rect(knob_texture, knob_rect, false)
+		if _touch_index != -1 and knob_held_texture:
+			draw_texture_rect(knob_held_texture, knob_rect, false)
+		return
 	draw_circle(base, radius, base_color)
 	draw_arc(base, radius, 0.0, TAU, 48, ring_color, 3.0, true)
 	draw_circle(knob, knob_radius, knob_color)

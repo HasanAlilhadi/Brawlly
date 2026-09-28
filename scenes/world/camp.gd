@@ -320,6 +320,7 @@ func _net_destroyed(by_peer: int) -> void:
 	collision_layer = 0
 	_health_bar.hide()
 	_strength_label.hide()
+	HitFx.flash(global_position + Vector3(0, 1.0, 0), HitFx.BIG_SMOKE, Color(0.9, 0.85, 0.75, 0.9), 3.5 * scale.x, 0.9, Vector2(0.4, 1.5), false)
 	_strength_icon.hide()
 	var tween := create_tween()
 	tween.tween_property(_house, "scale", Vector3(1.2, 0.05, 1.2), 0.35).set_ease(Tween.EASE_IN)

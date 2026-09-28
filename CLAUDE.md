@@ -88,6 +88,9 @@ by touch index so the joystick and buttons work together with multi-touch.
   menus (Project Settings), gold sword in matches (main.gd).
 - Flow: `main_menu.tscn` (run scene) → `main.tscn`; `PauseMenu` in `main.tscn`, disabled on game over.
 - Anything damageable implements `take_damage(amount, attacker = null, is_melee = true)`.
+- **VFX**: `HitFx.flash(at, texture, color, size, …)` pops a billboard sprite from `assets/vfx/particles/` (Kenney Particle Pack;
+  additive, or `additive = false` for smoke). Used for hit sparks, death / camp smoke, combo ring, revive sparkle. Ground
+  decals use `assets/vfx/light_masks/` (revive range ring). Touch controls are skinned from `assets/ui/touch/` (set in `hud.gd`).
 - **Combo hits**: `Enemy.take_damage` — a player hit within `combo_window` (1 s) of a teammate's hit on the same orc deals
   `combo_damage_multiplier` (1.5×) and pops "COMBO!" for everyone (`HitFx.report_combo` → `main._net_combo`). Soldiers don't count.
 - Economy: `Player.coins`, `Player.upgrade_levels`, `buy_upgrade(def)`; shop items are `UpgradeDef` resources in
