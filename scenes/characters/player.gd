@@ -651,6 +651,9 @@ func _apply_downed() -> void:
 	_downed_label.visible = is_downed
 	_revive_bar.visible = is_downed
 	_health_bar.visible = false
+	for item in [_right_item, _left_item]:
+		if item:
+			item.visible = not is_downed
 	if is_downed:
 		_aim_indicator.visible = false
 		_melee_indicator.visible = false
