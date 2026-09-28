@@ -31,7 +31,6 @@ const AIM_LINE_WIDTH: float = 0.2
 ## Aim line length on the ground (arrows fly farther: speed × lifetime of the arrow scene).
 const AIM_LINE_LENGTH: float = 5.0
 const AIM_LOCK_TEXTURE := preload("res://assets/vfx/light_masks/circle_rings_b.png")
-const SLASH_TEXTURE := preload("res://assets/vfx/particles/slash_03.png")
 ## Aimed sword swings snap to an enemy within this angle / distance.
 const MELEE_ASSIST_DEGREES: float = 35.0
 const MELEE_ASSIST_RANGE: float = 2.4
@@ -222,19 +221,19 @@ func _add_downed_anims() -> void:
 	source.free()
 
 
-## Sword swings (every peer): a slash arc sweeps in front on the strike frame.
+## Sword swings (every peer): a swing trail sweeps through the hit wedge around the strike frame.
 func _play_action_local(anim_name: String, duration: float, release_arms: int) -> void:
 	super(anim_name, duration, release_arms)
 	if anim_name.begins_with("attack-melee"):
-		get_tree().create_timer(attack_hit_delay / anim_speed * 0.8).timeout.connect(_slash_fx)
+		get_tree().create_timer(attack_hit_delay / anim_speed * 0.55).timeout.connect(_slash_fx)
 
 
 func _slash_fx() -> void:
 	if is_dead or not is_inside_tree():
 		return
 	var forward := facing()
-	HitFx.slash(global_position + forward * 0.75 + Vector3(0, 0.55, 0), atan2(forward.x, forward.z),
-			SLASH_TEXTURE, Color(1.6, 1.45, 1.1), melee_range * 2.4, 0.24)
+	HitFx.swing_arc(global_position + Vector3(0, 0.5, 0), atan2(forward.x, forward.z), melee_range * 1.25 + 0.3,
+			Color(1.0, 0.96, 0.85))
 
 
 ## Only the arm with the weapon in hand holds it; downed archers crawl with both arms.

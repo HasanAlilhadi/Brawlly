@@ -23,6 +23,7 @@ static var camera: FollowCamera3D
 
 static var _burst_meshes: Dictionary = {}
 static var _flash_materials: Dictionary = {}
+static var _arc_material: StandardMaterial3D
 static var _stop_until_ms: int = 0
 static var _kick_frame: int = -1
 
@@ -119,34 +120,53 @@ static func flash(at: Vector3, texture: Texture2D, color: Color, size: float, li
 	tween.chain().tween_callback(sprite.queue_free)
 
 
-## A flat additive sprite lying in the swing plane (yaw = facing, like `atan2(x, z)`), sweeping and fading out.
-static func slash(at: Vector3, yaw: float, texture: Texture2D, color: Color, size: float, lifetime: float = 0.2) -> void:
-	if not is_instance_valid(world) or texture == null:
+## Sword swing trail: a curved ribbon around `center` (flat, at its height) that sweeps across
+## `arc_degrees` in front of `yaw` (like `atan2(x, z)`), bright at the blade and fading behind it.
+static func swing_arc(center: Vector3, yaw: float, radius: float, color: Color, arc_degrees: float = 120.0,
+		lifetime: float = 0.26) -> void:
+	if not is_instance_valid(world):
 		return
-	if not _flash_materials.has(texture):
-		var material := StandardMaterial3D.new()
-		material.albedo_texture = texture
-		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		material.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-		material.cull_mode = BaseMaterial3D.CULL_DISABLED
-		material.albedo_color = color
-		_flash_materials[texture] = material
-	var quad := PlaneMesh.new()
-	quad.size = Vector2.ONE
-	var sprite := MeshInstance3D.new()
-	sprite.mesh = quad
-	sprite.material_override = _flash_materials[texture]
-	sprite.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	world.add_child(sprite)
-	sprite.global_position = at
-	sprite.rotation.y = yaw + PI
-	sprite.scale = Vector3.ONE * size * 0.75
-	var tween := sprite.create_tween().set_parallel(true)
-	tween.tween_property(sprite, "scale", Vector3.ONE * size, lifetime).set_ease(Tween.EASE_OUT)
-	tween.tween_property(sprite, "rotation:y", yaw + PI - 0.5, lifetime).from(yaw + PI + 0.5).set_ease(Tween.EASE_OUT)
-	tween.tween_property(sprite, "transparency", 1.0, lifetime).from(0.0).set_ease(Tween.EASE_IN)
-	tween.chain().tween_callback(sprite.queue_free)
+	if _arc_material == null:
+		_arc_material = StandardMaterial3D.new()
+		_arc_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		_arc_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		_arc_material.vertex_color_use_as_albedo = true
+		_arc_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var mesh := ImmediateMesh.new()
+	var ribbon := MeshInstance3D.new()
+	ribbon.mesh = mesh
+	ribbon.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	world.add_child(ribbon)
+	ribbon.global_position = center
+	var half := deg_to_rad(arc_degrees) * 0.5
+	var tween := ribbon.create_tween()
+	tween.tween_method(func(t: float) -> void: _draw_arc(mesh, yaw, half, radius, color, t), 0.0, 1.0, lifetime)
+	tween.tween_callback(ribbon.queue_free)
+
+
+static func _draw_arc(mesh: ImmediateMesh, yaw: float, half: float, radius: float, color: Color, t: float) -> void:
+	mesh.clear_surfaces()
+	# The blade sweeps from +half to -half (eased); the trail behind it is ~70% of the arc, and the
+	# whole ribbon fades over the last part.
+	var head := lerpf(half, -half, 1.0 - pow(1.0 - minf(t * 1.4, 1.0), 2.0))
+	var tail := minf(head + half * 2.0 * 0.7, half)
+	if tail - head < 0.02:
+		return
+	var fade := clampf((1.0 - t) / 0.35, 0.0, 1.0)
+	var steps := 14
+	var inner := radius * 0.4
+	mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLE_STRIP, _arc_material)
+	for i in steps + 1:
+		var k := float(i) / steps  # 0 at the blade, 1 at the end of the trail
+		var a := yaw + lerpf(head, tail, k)
+		var dir := Vector3(sin(a), 0.0, cos(a))
+		var alpha := pow(1.0 - k, 1.6) * fade
+		var width := lerpf(1.0, 0.45, k)
+		mesh.surface_set_color(Color(color, alpha * 0.3))
+		mesh.surface_add_vertex(dir * lerpf(radius, inner, width))
+		mesh.surface_set_color(Color(color, minf(alpha * 1.3, 1.0)))
+		mesh.surface_add_vertex(dir * radius)
+	mesh.surface_end()
 
 
 static func _flash_material(texture: Texture2D, additive: bool) -> StandardMaterial3D:
