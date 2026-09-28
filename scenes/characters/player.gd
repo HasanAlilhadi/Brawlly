@@ -40,6 +40,11 @@ const DOWNED_SPEED: float = 0.3
 ## "crawl" (moving) and "downed" (lying still) clips, made in Blender on the archer's armature.
 const DOWNED_ANIMS := preload("res://assets/characters/animations/archer_downed.glb")
 const DOWNED_CLIPS: Array[String] = ["crawl", "downed"]
+## Downed archer: the revive bar sits just above the lying body; "HELP!" and the name stack above it
+## in screen space (Label3D offsets, pixels), so they never overlap however steep the camera is.
+const DOWNED_LABEL_HEIGHT: float = 1.05
+const DOWNED_HELP_OFFSET: float = 46.0
+const DOWNED_NAME_OFFSET: float = 104.0
 ## Charge orders reach at most this far from the player.
 const MAX_ORDER_DISTANCE: float = 25.0
 
@@ -92,6 +97,7 @@ var revive_progress: float = 0.0:
 		revive_progress = value
 		if _revive_bar:
 			_revive_bar.set_ratio(value)
+			_revive_bar.visible = _shows_downed_label()
 ## Whole seconds left before a downed archer bleeds out (replicated for the HUD / label).
 var bleed_seconds: int = 0:
 	set(value):
@@ -648,8 +654,11 @@ func _get_up(helpers: Array) -> void:
 ## Every peer: crawl speed, "HELP!" label + revive bar, off-screen marker for teammates.
 func _apply_downed() -> void:
 	move_speed = _base_move_speed * (DOWNED_SPEED if is_downed else 1.0)
-	_downed_label.visible = is_downed
-	_revive_bar.visible = is_downed
+	var show_world_label := _shows_downed_label()
+	_downed_label.visible = show_world_label
+	_revive_bar.visible = show_world_label
+	_name_label.position.y = DOWNED_LABEL_HEIGHT if is_downed else health_bar_height + 0.28
+	_name_label.offset.y = DOWNED_NAME_OFFSET if is_downed else 0.0
 	_health_bar.visible = false
 	for item in [_right_item, _left_item]:
 		if item:
@@ -669,17 +678,23 @@ func _apply_downed() -> void:
 	downed_changed.emit(is_downed)
 
 
+## The downed player sees the HUD card instead of floating labels over their own body.
+func _shows_downed_label() -> bool:
+	return is_downed and not is_local()
+
+
 func _build_downed_visuals() -> void:
 	_downed_label = Label3D.new()
 	_downed_label.text = "HELP!"
-	_downed_label.font_size = 64
+	_downed_label.font_size = 52
 	_downed_label.outline_size = 14
 	_downed_label.pixel_size = 0.006
 	_downed_label.modulate = Color(0.55, 1.0, 0.55)
 	_downed_label.outline_modulate = Color(0.05, 0.15, 0.05, 0.95)
 	_downed_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	_downed_label.no_depth_test = true
-	_downed_label.position = Vector3(0, 1.45, 0)
+	_downed_label.position = Vector3(0, DOWNED_LABEL_HEIGHT, 0)
+	_downed_label.offset = Vector2(0, DOWNED_HELP_OFFSET)
 	_downed_label.visible = false
 	add_child(_downed_label)
 	_revive_bar = HealthBar3D.new()
@@ -687,7 +702,7 @@ func _build_downed_visuals() -> void:
 	_revive_bar.hide_when_full = false
 	_revive_bar.width = 0.8
 	_revive_bar.height = 0.1
-	_revive_bar.position = Vector3(0, 1.2, 0)
+	_revive_bar.position = Vector3(0, DOWNED_LABEL_HEIGHT, 0)
 	add_child(_revive_bar)
 	_revive_bar.set_ratio(0.0)
 	_revive_bar.visible = false

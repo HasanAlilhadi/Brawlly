@@ -26,7 +26,7 @@ func _process(delta: float) -> void:
 	if me.is_downed and not was_downed:
 		was_downed = true
 		await get_tree().create_timer(0.5).timeout
-		_log("downed on this device: bleed=%ds, 'You're down' shown=%s, speed=%.2f" % [me.bleed_seconds, hud._downed_label.visible, me.move_speed])
+		_log("downed on this device: bleed=%ds, 'You're down' shown=%s, speed=%.2f" % [me.bleed_seconds, hud._downed_panel.visible, me.move_speed])
 	elif not me.is_downed and was_downed and not me.is_dead:
 		was_downed = false
-		_log("back up: health %.0f/%.0f, label hidden=%s" % [me.health, me.max_health, not hud._downed_label.visible])
+		_log("back up: health %.0f/%.0f, label hidden=%s" % [me.health, me.max_health, not hud._downed_panel.visible])

@@ -16,6 +16,10 @@ const ARMY_ORDERS: PackedStringArray = ["Follow", "Charge", "Hold"]
 const ARMY_KEYS: PackedStringArray = ["1", "2", "3"]
 ## The Warlord's bar shows while it is this close to you.
 const BOSS_BAR_RANGE: float = 40.0
+const DOWNED_PANEL_WIDTH: float = 380.0
+const DOWNED_PANEL_MARGIN: float = 48.0
+## Touch layouts lift the card above the sticks.
+const DOWNED_PANEL_TOUCH_LIFT: float = 300.0
 
 @onready var root: Control = $Root
 @onready var joystick: TouchJoystick = %Joystick
@@ -52,7 +56,12 @@ var _boss_bar: ProgressBar
 var _army_row: VBoxContainer
 var _army_buttons: Array[Button] = []
 var _ping_button: Button
-var _downed_label: Label
+var _downed_panel: PanelContainer
+var _downed_title: Label
+var _downed_seconds: Label
+var _downed_hint: Label
+var _bleed_bar: ProgressBar
+var _revive_progress_bar: ProgressBar
 var _revive_label: Label
 var _awards_box: GridContainer
 var _awards_header: Label
@@ -120,7 +129,7 @@ func show_end(title: String, subtitle: String, restart_label: String = "Play aga
 	restart_button.text = restart_label
 	restart_button.visible = restart_label != ""
 	respawn_label.hide()
-	_downed_label.hide()
+	_downed_panel.hide()
 	_revive_label.hide()
 	_boss_panel.hide()
 	_army_row.hide()
@@ -308,16 +317,7 @@ func _build_extras() -> void:
 	_ping_button.visible = Net.is_online()
 	root.add_child(_ping_button)
 
-	_downed_label = _small_label("", 34)
-	_downed_label.set_anchors_preset(Control.PRESET_CENTER)
-	_downed_label.offset_left = -330.0
-	_downed_label.offset_right = 330.0
-	_downed_label.offset_top = -150.0
-	_downed_label.offset_bottom = -40.0
-	_downed_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_downed_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_downed_label.hide()
-	root.add_child(_downed_label)
+	_build_downed_panel()
 
 	_revive_label = _small_label("", 26)
 	_revive_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
@@ -330,6 +330,57 @@ func _build_extras() -> void:
 	root.add_child(_revive_label)
 
 	_build_end_screen()
+
+
+## "You're down" card (bottom center, clear of the player): skull badge, bleed-out bar with seconds,
+## revive bar while a teammate helps, and a hint.
+func _build_downed_panel() -> void:
+	_downed_panel = PanelContainer.new()
+	_downed_panel.theme_type_variation = &"PanelCompact"
+	_downed_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_downed_panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_downed_panel.offset_left = -DOWNED_PANEL_WIDTH * 0.5
+	_downed_panel.offset_right = DOWNED_PANEL_WIDTH * 0.5
+	_downed_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_downed_panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	var row := HBoxContainer.new()
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_theme_constant_override("separation", 10)
+	_downed_panel.add_child(row)
+	row.add_child(UiKit.medal("skull", 52.0))
+	var column := VBoxContainer.new()
+	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	column.add_theme_constant_override("separation", 4)
+	row.add_child(column)
+	var title_row := HBoxContainer.new()
+	title_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	column.add_child(title_row)
+	_downed_title = _small_label("You're down!", 22)
+	_downed_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_row.add_child(_downed_title)
+	_downed_seconds = _small_label("", 22)
+	_downed_seconds.text_direction = Control.TEXT_DIRECTION_LTR
+	title_row.add_child(_downed_seconds)
+	_bleed_bar = _downed_bar(&"ProgressBar")
+	column.add_child(_bleed_bar)
+	_revive_progress_bar = _downed_bar(&"ProgressBarGreen")
+	column.add_child(_revive_progress_bar)
+	_downed_hint = _small_label("", 15)
+	_downed_hint.modulate = Color(1, 1, 1, 0.8)
+	column.add_child(_downed_hint)
+	_downed_panel.hide()
+	root.add_child(_downed_panel)
+
+
+func _downed_bar(variation: StringName) -> ProgressBar:
+	var bar := ProgressBar.new()
+	bar.theme_type_variation = variation
+	bar.custom_minimum_size = Vector2(0, 12)
+	bar.show_percentage = false
+	bar.max_value = 1.0
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return bar
 
 
 ## End screen: the result on a wood ribbon, the subtitle, award cards, and the buttons (side by side
@@ -409,9 +460,15 @@ func _update_boss_bar() -> void:
 
 ## "You're down" for us; "reviving…" / "stand close" when a downed teammate is near.
 func _update_downed() -> void:
-	_downed_label.visible = _player.is_downed
+	_downed_panel.visible = _player.is_downed
 	if _player.is_downed:
-		_downed_label.text = "You're down!  %d\nA teammate can revive you — stay close to them." % _player.bleed_seconds
+		var reviving := _player.revive_progress > 0.0
+		_downed_panel.offset_bottom = -(DOWNED_PANEL_TOUCH_LIFT if Platform.touch_mode else DOWNED_PANEL_MARGIN)
+		_downed_seconds.text = "%ds" % _player.bleed_seconds
+		_bleed_bar.value = _player.bleed_seconds / Player.BLEED_TIME
+		_revive_progress_bar.visible = reviving
+		_revive_progress_bar.value = _player.revive_progress
+		_downed_hint.text = "Being revived — stay still" if reviving else "Crawl to a teammate to get revived"
 	var nearest: Player = null
 	var nearest_dist := 6.0
 	if not _player.is_downed and not _player.is_dead:
