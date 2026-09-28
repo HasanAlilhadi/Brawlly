@@ -37,6 +37,9 @@ const REVIVE_RANGE: float = 1.8
 const REVIVE_HEALTH: float = 0.4
 ## Crawl speed while downed (fraction of move_speed).
 const DOWNED_SPEED: float = 0.3
+## "crawl" (moving) and "downed" (lying still) clips, made in Blender on the archer's armature.
+const DOWNED_ANIMS := preload("res://assets/characters/animations/archer_downed.glb")
+const DOWNED_CLIPS: Array[String] = ["crawl", "downed"]
 ## Charge orders reach at most this far from the player.
 const MAX_ORDER_DISTANCE: float = 25.0
 
@@ -130,6 +133,7 @@ func _ready() -> void:
 	for looping in ["holding-left", "sit", "crouch"]:
 		if anim.has_animation(looping):
 			anim.get_animation(looping).loop_mode = Animation.LOOP_LINEAR
+	_add_downed_anims()
 	_build_aim_indicator()
 	_build_melee_indicator()
 	_build_name_label()
@@ -163,14 +167,36 @@ func _roll_melee_damage() -> Array:
 	return [melee_damage * (crit_multiplier if crit else 1.0), crit]
 
 
+## Copies the crawl clips into the archer's animation library (shared by every archer, so once).
+func _add_downed_anims() -> void:
+	var library := anim.get_animation_library(&"")
+	if library == null or library.has_animation(DOWNED_CLIPS[0]):
+		return
+	var source := DOWNED_ANIMS.instantiate()
+	var source_anim := source.find_child("AnimationPlayer", true, false) as AnimationPlayer
+	for clip_name in DOWNED_CLIPS:
+		if source_anim and source_anim.has_animation(clip_name):
+			var clip := source_anim.get_animation(clip_name).duplicate() as Animation
+			clip.loop_mode = Animation.LOOP_LINEAR
+			library.add_animation(clip_name, clip)
+	source.free()
+
+
+## Downed archers crawl with both arms, so the weapon-holding pose stays off.
+func _hold_arms(instant: bool = false) -> void:
+	super(instant)
+	if is_downed:
+		_release_arms(ARM_BOTH)
+
+
 func _idle_anim() -> String:
 	if is_downed:
-		return "sit"
+		return "downed"
 	return "holding-left" if is_aiming() else "idle"
 
 
 func _move_anim(strength: float) -> String:
-	return "crouch" if is_downed else super(strength)
+	return "crawl" if is_downed else super(strength)
 
 
 func _can_hit(target: Object) -> bool:
@@ -628,8 +654,8 @@ func _apply_downed() -> void:
 	if is_downed:
 		_aim_indicator.visible = false
 		_melee_indicator.visible = false
-		_hold_arms(true)
-		play_anim("sit")
+		play_anim("downed")
+	_hold_arms(true)
 	var teammate := not is_local() and Net.team_of(Net.my_id()) == team_id
 	if is_downed and teammate:
 		set_meta(&"marker_color", Color(0.4, 1.0, 0.45))
