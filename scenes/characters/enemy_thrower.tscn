@@ -1,0 +1,70 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scenes/characters/enemy.gd" id="1_script"]
+[ext_resource type="PackedScene" path="res://assets/characters/orc.glb" id="2_model"]
+[ext_resource type="PackedScene" path="res://assets/items/dungeon/spear.glb" id="3_spear"]
+[ext_resource type="PackedScene" path="res://scenes/combat/spear_projectile.tscn" id="4_projectile"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
+radius = 0.27
+height = 1.0
+
+[sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_sync"]
+properties/0/path = NodePath(".:net_position")
+properties/0/spawn = true
+properties/0/replication_mode = 1
+properties/1/path = NodePath(".:net_yaw")
+properties/1/spawn = true
+properties/1/replication_mode = 1
+properties/2/path = NodePath(".:health")
+properties/2/spawn = true
+properties/2/replication_mode = 2
+properties/3/path = NodePath(".:max_health")
+properties/3/spawn = true
+properties/3/replication_mode = 2
+properties/4/path = NodePath(".:anim_state")
+properties/4/spawn = true
+properties/4/replication_mode = 2
+properties/5/path = NodePath(".:action_token")
+properties/5/spawn = true
+properties/5/replication_mode = 2
+properties/6/path = NodePath(".:is_dead")
+properties/6/spawn = true
+properties/6/replication_mode = 2
+properties/7/path = NodePath(".:alert_seq")
+properties/7/spawn = true
+properties/7/replication_mode = 2
+
+[node name="OrcThrower" type="CharacterBody3D"]
+collision_layer = 4
+collision_mask = 15
+motion_mode = 1
+script = ExtResource("1_script")
+max_health = 55.0
+move_speed = 2.9
+melee_damage = 6.0
+melee_cooldown = 1.2
+melee_mask = 15
+right_hand_item = ExtResource("3_spear")
+right_hand_offset = Vector3(-0.27, -0.2, 0)
+right_swing_offset = Vector3(-0.1, 0, 0)
+health_bar_color = Color(0.9, 0.22, 0.2, 1)
+aggro_range = 9.0
+projectile_scene = ExtResource("4_projectile")
+throw_range = 8.0
+throw_cooldown = 2.8
+throw_damage = 10.0
+arrow_drop_chance = 0.6
+coin_drop_min = 3
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
+shape = SubResource("CapsuleShape3D_body")
+
+[node name="Model" parent="." instance=ExtResource("2_model")]
+transform = Transform3D(1.15, 0, 0, 0, 1.15, 0, 0, 0, 1.15, 0, 0, 0)
+
+[node name="Sync" type="MultiplayerSynchronizer" parent="."]
+replication_interval = 0.05
+delta_interval = 0.05
+replication_config = SubResource("SceneReplicationConfig_sync")

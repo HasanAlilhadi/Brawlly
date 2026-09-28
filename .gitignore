@@ -1,0 +1,18 @@
+# Godot
+.godot/
+/android/
+/builds/*
+!/builds/.gdignore
+
+# Signing keys & secrets (never commit these)
+*.keystore
+*.jks
+export_credentials.cfg
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.tmp
+
+# Raw downloaded asset packs (the game uses the copies in assets/)
+/pre-assets/

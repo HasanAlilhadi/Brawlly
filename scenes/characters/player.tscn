@@ -1,0 +1,106 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scenes/characters/player.gd" id="1_script"]
+[ext_resource type="PackedScene" path="res://assets/characters/archer.glb" id="2_model"]
+[ext_resource type="PackedScene" path="res://assets/items/dungeon/sword.glb" id="3_sword"]
+[ext_resource type="PackedScene" path="res://assets/items/forest/bow.glb" id="4_bow"]
+[ext_resource type="PackedScene" path="res://scenes/combat/arrow_projectile.tscn" id="5_arrow"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
+radius = 0.27
+height = 1.0
+
+[sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_sync"]
+properties/0/path = NodePath(".:net_position")
+properties/0/spawn = true
+properties/0/replication_mode = 1
+properties/1/path = NodePath(".:net_yaw")
+properties/1/spawn = true
+properties/1/replication_mode = 1
+properties/2/path = NodePath(".:health")
+properties/2/spawn = true
+properties/2/replication_mode = 2
+properties/3/path = NodePath(".:max_health")
+properties/3/spawn = true
+properties/3/replication_mode = 2
+properties/4/path = NodePath(".:anim_state")
+properties/4/spawn = true
+properties/4/replication_mode = 2
+properties/5/path = NodePath(".:action_token")
+properties/5/spawn = true
+properties/5/replication_mode = 2
+properties/6/path = NodePath(".:is_dead")
+properties/6/spawn = true
+properties/6/replication_mode = 2
+properties/7/path = NodePath(".:arrows")
+properties/7/spawn = true
+properties/7/replication_mode = 2
+properties/8/path = NodePath(".:max_arrows")
+properties/8/spawn = true
+properties/8/replication_mode = 2
+properties/9/path = NodePath(".:coins")
+properties/9/spawn = true
+properties/9/replication_mode = 2
+properties/10/path = NodePath(".:reserve_soldiers")
+properties/10/spawn = true
+properties/10/replication_mode = 2
+properties/11/path = NodePath(".:follower_cap")
+properties/11/spawn = true
+properties/11/replication_mode = 2
+properties/12/path = NodePath(".:upgrade_levels")
+properties/12/spawn = true
+properties/12/replication_mode = 2
+properties/13/path = NodePath(".:is_downed")
+properties/13/spawn = true
+properties/13/replication_mode = 2
+properties/14/path = NodePath(".:revive_progress")
+properties/14/spawn = true
+properties/14/replication_mode = 2
+properties/15/path = NodePath(".:bleed_seconds")
+properties/15/spawn = true
+properties/15/replication_mode = 2
+properties/16/path = NodePath(".:army_order")
+properties/16/spawn = true
+properties/16/replication_mode = 2
+properties/17/path = NodePath(".:army_point")
+properties/17/spawn = true
+properties/17/replication_mode = 2
+
+[node name="Player" type="CharacterBody3D"]
+collision_layer = 2
+collision_mask = 5
+motion_mode = 1
+script = ExtResource("1_script")
+arrow_scene = ExtResource("5_arrow")
+arrows = 20
+arrow_damage = 40.0
+max_health = 150.0
+move_speed = 3.8
+melee_damage = 30.0
+melee_cooldown = 0.5
+melee_cleave = true
+regen_per_second = 6.0
+knockback_taken = 0.0
+melee_mask = 15
+right_hand_item = ExtResource("3_sword")
+left_hand_item = ExtResource("4_bow")
+left_hand_offset = Vector3(0.27, -0.24, 0)
+hold_left_arm = true
+health_bar_color = Color(0.3, 0.85, 0.35, 1)
+recolor_key_hue = 0.38
+recolor_hue_range = 0.08
+recolor_min_saturation = 0.25
+recolor_reference_value = 0.75
+free_on_death = false
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
+shape = SubResource("CapsuleShape3D_body")
+
+[node name="Model" parent="." instance=ExtResource("2_model")]
+transform = Transform3D(1.25, 0, 0, 0, 1.25, 0, 0, 0, 1.25, 0, 0, 0)
+
+[node name="Sync" type="MultiplayerSynchronizer" parent="."]
+replication_interval = 0.05
+delta_interval = 0.05
+replication_config = SubResource("SceneReplicationConfig_sync")

@@ -1,0 +1,77 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scenes/ui/shop_menu.gd" id="1_script"]
+[ext_resource type="Resource" path="res://resources/data/upgrade_catalog.tres" id="2_catalog"]
+[ext_resource type="Texture2D" path="res://assets/ui/icons/coin.png" id="3_coin"]
+[ext_resource type="Script" path="res://scripts/components/max_width.gd" id="mw_1"]
+
+[node name="ShopMenu" type="CanvasLayer"]
+process_mode = 3
+layer = 11
+script = ExtResource("1_script")
+catalog = ExtResource("2_catalog")
+
+[node name="Dim" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.55)
+
+[node name="Panel" type="PanelContainer" parent="."]
+script = ExtResource("mw_1")
+max_width = 1100.0
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 28.0
+offset_top = 90.0
+offset_right = -28.0
+offset_bottom = -90.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Box" type="VBoxContainer" parent="Panel"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="Header" type="HBoxContainer" parent="Panel/Box"]
+layout_mode = 2
+
+[node name="Title" type="Label" parent="Panel/Box/Header"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 52
+text = "Shop"
+
+[node name="CoinIcon" type="TextureRect" parent="Panel/Box/Header"]
+custom_minimum_size = Vector2(52, 52)
+layout_mode = 2
+texture = ExtResource("3_coin")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="CoinsLabel" type="Label" parent="Panel/Box/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 40
+text = "0"
+
+[node name="Scroll" type="ScrollContainer" parent="Panel/Box"]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="List" type="VBoxContainer" parent="Panel/Box/Scroll"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 10
+
+[node name="CloseButton" type="Button" parent="Panel/Box"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(320, 92)
+layout_mode = 2
+size_flags_horizontal = 4
+text = "Close"

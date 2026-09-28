@@ -1,0 +1,389 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scenes/ui/hud.gd" id="1_hud"]
+[ext_resource type="Script" path="res://scripts/components/touch_joystick.gd" id="2_joystick"]
+[ext_resource type="Script" path="res://scripts/components/touch_button.gd" id="3_button"]
+[ext_resource type="Script" path="res://scenes/ui/minimap.gd" id="4_minimap"]
+[ext_resource type="Texture2D" path="res://assets/ui/icons/potion.png" id="5_potion"]
+[ext_resource type="Texture2D" path="res://assets/ui/icons/arrow.png" id="6_arrow"]
+[ext_resource type="Texture2D" path="res://assets/ui/icons/soldier.png" id="7_soldier"]
+[ext_resource type="Texture2D" path="res://assets/ui/icons/camp.png" id="8_camp"]
+[ext_resource type="Texture2D" path="res://assets/ui/icons/bow.png" id="9_bow"]
+[ext_resource type="Texture2D" path="res://assets/ui/icons/sword.png" id="10_sword"]
+[ext_resource type="Script" path="res://scripts/components/touch_aim_stick.gd" id="11_aim"]
+[ext_resource type="Texture2D" path="res://assets/ui/icons/coin.png" id="12_coin"]
+
+[node name="HUD" type="CanvasLayer"]
+script = ExtResource("1_hud")
+
+[node name="Root" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Joystick" type="Control" parent="Root"]
+unique_name_in_owner = true
+layout_mode = 1
+anchor_top = 0.35
+anchor_right = 0.55
+anchor_bottom = 1.0
+mouse_filter = 2
+script = ExtResource("2_joystick")
+radius = 88.0
+knob_radius = 36.0
+idle_anchor = Vector2(0.38, 0.76)
+base_color = Color(0.36, 0.22, 0.11, 0.35)
+knob_color = Color(0.96, 0.86, 0.62, 0.8)
+ring_color = Color(0.96, 0.86, 0.62, 0.55)
+
+[node name="BowStick" type="Control" parent="Root"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -186.0
+offset_top = -206.0
+offset_right = -36.0
+offset_bottom = -56.0
+grow_horizontal = 0
+grow_vertical = 0
+mouse_filter = 2
+script = ExtResource("11_aim")
+drag_radius = 110.0
+aim_ring_color = Color(0.96, 0.86, 0.62, 0.3)
+knob_color = Color(0.96, 0.86, 0.62, 0.85)
+icon = ExtResource("9_bow")
+icon_scale = 1.3
+color = Color(0.36, 0.22, 0.11, 0.7)
+held_color = Color(0.9, 0.78, 0.55, 0.7)
+ring_color = Color(0.96, 0.86, 0.62, 0.95)
+
+[node name="MeleeButton" type="Control" parent="Root"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -170.0
+offset_top = -350.0
+offset_right = -52.0
+offset_bottom = -232.0
+grow_horizontal = 0
+grow_vertical = 0
+mouse_filter = 2
+script = ExtResource("11_aim")
+drag_radius = 90.0
+aim_ring_color = Color(0.96, 0.86, 0.62, 0.3)
+knob_color = Color(0.96, 0.86, 0.62, 0.85)
+icon = ExtResource("10_sword")
+icon_scale = 1.15
+color = Color(0.36, 0.22, 0.11, 0.7)
+held_color = Color(0.9, 0.78, 0.55, 0.7)
+ring_color = Color(0.96, 0.86, 0.62, 0.95)
+
+[node name="TopLeft" type="PanelContainer" parent="Root"]
+layout_mode = 1
+offset_left = 12.0
+offset_top = 12.0
+offset_right = 262.0
+offset_bottom = 96.0
+mouse_filter = 2
+theme_type_variation = &"PanelCompact"
+
+[node name="Rows" type="VBoxContainer" parent="Root/TopLeft"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 4
+
+[node name="HealthRow" type="HBoxContainer" parent="Root/TopLeft/Rows"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 6
+
+[node name="Icon" type="TextureRect" parent="Root/TopLeft/Rows/HealthRow"]
+custom_minimum_size = Vector2(30, 30)
+layout_mode = 2
+mouse_filter = 2
+texture = ExtResource("5_potion")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="HealthBar" type="ProgressBar" parent="Root/TopLeft/Rows/HealthRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 20)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+mouse_filter = 2
+value = 100.0
+show_percentage = false
+
+[node name="InfoRow" type="HBoxContainer" parent="Root/TopLeft/Rows"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 6
+
+[node name="ArrowIcon" type="TextureRect" parent="Root/TopLeft/Rows/InfoRow"]
+custom_minimum_size = Vector2(30, 30)
+layout_mode = 2
+mouse_filter = 2
+texture = ExtResource("6_arrow")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="ArrowsLabel" type="Label" parent="Root/TopLeft/Rows/InfoRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(64, 0)
+layout_mode = 2
+theme_type_variation = &"LabelLight"
+theme_override_constants/outline_size = 6
+theme_override_font_sizes/font_size = 24
+text = "15"
+
+[node name="CoinIcon" type="TextureRect" parent="Root/TopLeft/Rows/InfoRow"]
+custom_minimum_size = Vector2(30, 30)
+layout_mode = 2
+mouse_filter = 2
+texture = ExtResource("12_coin")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="CoinsLabel" type="Label" parent="Root/TopLeft/Rows/InfoRow"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"LabelLight"
+theme_override_constants/outline_size = 6
+theme_override_font_sizes/font_size = 24
+text = "0"
+
+[node name="PauseButton" type="Button" parent="Root"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(60, 60)
+layout_mode = 1
+offset_left = 12.0
+offset_top = 104.0
+offset_right = 72.0
+offset_bottom = 164.0
+theme_type_variation = &"ButtonSquare"
+theme_override_font_sizes/font_size = 24
+text = "II"
+
+[node name="ShopButton" type="Button" parent="Root"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(60, 60)
+layout_mode = 1
+offset_left = 80.0
+offset_top = 104.0
+offset_right = 140.0
+offset_bottom = 164.0
+theme_type_variation = &"ButtonSquare"
+icon = ExtResource("12_coin")
+icon_alignment = 1
+expand_icon = true
+
+[node name="MinimapFrame" type="PanelContainer" parent="Root"]
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -172.0
+offset_top = 12.0
+offset_right = -12.0
+offset_bottom = 172.0
+grow_horizontal = 0
+mouse_filter = 2
+theme_type_variation = &"PanelCompact"
+
+[node name="Minimap" type="Control" parent="Root/MinimapFrame"]
+unique_name_in_owner = true
+layout_mode = 2
+mouse_filter = 2
+script = ExtResource("4_minimap")
+
+[node name="Stats" type="PanelContainer" parent="Root"]
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -172.0
+offset_top = 178.0
+offset_right = -12.0
+offset_bottom = 214.0
+grow_horizontal = 0
+mouse_filter = 2
+theme_type_variation = &"PanelInsetCompact"
+
+[node name="Row" type="HBoxContainer" parent="Root/Stats"]
+layout_mode = 2
+mouse_filter = 2
+alignment = 1
+theme_override_constants/separation = 4
+
+[node name="AlliesIcon" type="TextureRect" parent="Root/Stats/Row"]
+custom_minimum_size = Vector2(26, 26)
+layout_mode = 2
+mouse_filter = 2
+texture = ExtResource("7_soldier")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="AlliesLabel" type="Label" parent="Root/Stats/Row"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"LabelLight"
+theme_override_constants/outline_size = 5
+theme_override_font_sizes/font_size = 19
+text = "0"
+
+[node name="CampsIcon" type="TextureRect" parent="Root/Stats/Row"]
+custom_minimum_size = Vector2(26, 26)
+layout_mode = 2
+mouse_filter = 2
+texture = ExtResource("8_camp")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="CampsLabel" type="Label" parent="Root/Stats/Row"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"LabelLight"
+theme_override_constants/outline_size = 5
+theme_override_font_sizes/font_size = 19
+text = "0/0"
+
+[node name="ScorePanel" type="PanelContainer" parent="Root"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -150.0
+offset_top = 104.0
+offset_right = 150.0
+offset_bottom = 142.0
+grow_horizontal = 2
+mouse_filter = 2
+theme_type_variation = &"PanelInsetCompact"
+
+[node name="ScoreLabel" type="Label" parent="Root/ScorePanel"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"LabelLight"
+theme_override_constants/outline_size = 5
+theme_override_font_sizes/font_size = 19
+text = "Red 0   Blue 0   10:00"
+horizontal_alignment = 1
+text_overrun_behavior = 3
+
+[node name="RespawnLabel" type="Label" parent="Root"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 14
+anchor_top = 0.5
+anchor_right = 1.0
+anchor_bottom = 0.5
+offset_top = -50.0
+offset_bottom = 50.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_type_variation = &"TitleLabel"
+theme_override_font_sizes/font_size = 44
+text = "Respawning in 5"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Toast" type="PanelContainer" parent="Root"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -210.0
+offset_top = 222.0
+offset_right = 210.0
+offset_bottom = 262.0
+grow_horizontal = 2
+mouse_filter = 2
+theme_type_variation = &"PanelInsetCompact"
+
+[node name="ToastLabel" type="Label" parent="Root/Toast"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"LabelLight"
+theme_override_constants/outline_size = 5
+theme_override_font_sizes/font_size = 21
+text = ""
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="EndPanel" type="ColorRect" parent="Root"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.6)
+
+[node name="Panel" type="PanelContainer" parent="Root/EndPanel"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -270.0
+offset_top = -250.0
+offset_right = 270.0
+offset_bottom = 250.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Box" type="VBoxContainer" parent="Root/EndPanel/Panel"]
+layout_mode = 2
+alignment = 1
+theme_override_constants/separation = 20
+
+[node name="EndTitle" type="Label" parent="Root/EndPanel/Panel/Box"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 64
+text = "Victory!"
+horizontal_alignment = 1
+
+[node name="EndSubtitle" type="Label" parent="Root/EndPanel/Panel/Box"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 28
+text = "Every orc camp has fallen."
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="RestartButton" type="Button" parent="Root/EndPanel/Panel/Box"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(340, 96)
+layout_mode = 2
+size_flags_horizontal = 4
+text = "Play again"
+
+[node name="MenuButton" type="Button" parent="Root/EndPanel/Panel/Box"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(340, 90)
+layout_mode = 2
+size_flags_horizontal = 4
+theme_type_variation = &"ButtonBeige"
+text = "Main Menu"

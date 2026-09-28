@@ -1,0 +1,66 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scenes/characters/ally.gd" id="1_script"]
+[ext_resource type="PackedScene" path="res://assets/characters/soldier.glb" id="2_model"]
+[ext_resource type="PackedScene" path="res://assets/items/arena/sword.glb" id="3_sword"]
+[ext_resource type="PackedScene" path="res://assets/items/dungeon/shield_round.glb" id="4_shield"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
+radius = 0.27
+height = 1.0
+
+[sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_sync"]
+properties/0/path = NodePath(".:net_position")
+properties/0/spawn = true
+properties/0/replication_mode = 1
+properties/1/path = NodePath(".:net_yaw")
+properties/1/spawn = true
+properties/1/replication_mode = 1
+properties/2/path = NodePath(".:health")
+properties/2/spawn = true
+properties/2/replication_mode = 2
+properties/3/path = NodePath(".:max_health")
+properties/3/spawn = true
+properties/3/replication_mode = 2
+properties/4/path = NodePath(".:anim_state")
+properties/4/spawn = true
+properties/4/replication_mode = 2
+properties/5/path = NodePath(".:action_token")
+properties/5/spawn = true
+properties/5/replication_mode = 2
+properties/6/path = NodePath(".:is_dead")
+properties/6/spawn = true
+properties/6/replication_mode = 2
+
+[node name="Ally" type="CharacterBody3D"]
+collision_layer = 8
+collision_mask = 13
+motion_mode = 1
+script = ExtResource("1_script")
+max_health = 80.0
+move_speed = 4.2
+melee_damage = 12.0
+melee_cooldown = 1.0
+regen_per_second = 2.0
+melee_mask = 15
+right_hand_item = ExtResource("3_sword")
+right_hand_rotation = Vector3(0, 0, 180)
+right_swing_rotation = Vector3(0, 0, -90)
+left_hand_item = ExtResource("4_shield")
+health_bar_color = Color(0.3, 0.6, 1, 1)
+health_bar_width = 0.5
+recolor_key_hue = 0.015
+recolor_hue_range = 0.028
+recolor_min_saturation = 0.66
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
+shape = SubResource("CapsuleShape3D_body")
+
+[node name="Model" parent="." instance=ExtResource("2_model")]
+transform = Transform3D(1.25, 0, 0, 0, 1.25, 0, 0, 0, 1.25, 0, 0, 0)
+
+[node name="Sync" type="MultiplayerSynchronizer" parent="."]
+replication_interval = 0.05
+delta_interval = 0.05
+replication_config = SubResource("SceneReplicationConfig_sync")

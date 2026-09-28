@@ -1,0 +1,96 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scenes/characters/warlord.gd" id="1_script"]
+[ext_resource type="PackedScene" path="res://assets/characters/orc.glb" id="2_model"]
+[ext_resource type="PackedScene" path="res://assets/items/arena/sword.glb" id="3_sword"]
+[ext_resource type="PackedScene" path="res://assets/items/dungeon/shield_round.glb" id="4_shield"]
+[ext_resource type="PackedScene" path="res://scenes/characters/enemy.tscn" id="5_spearman"]
+[ext_resource type="PackedScene" path="res://scenes/characters/enemy_swordsman.tscn" id="6_swordsman"]
+[ext_resource type="PackedScene" path="res://scenes/characters/enemy_thrower.tscn" id="7_thrower"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
+radius = 0.7
+height = 2.3
+
+[sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_sync"]
+properties/0/path = NodePath(".:net_position")
+properties/0/spawn = true
+properties/0/replication_mode = 1
+properties/1/path = NodePath(".:net_yaw")
+properties/1/spawn = true
+properties/1/replication_mode = 1
+properties/2/path = NodePath(".:health")
+properties/2/spawn = true
+properties/2/replication_mode = 2
+properties/3/path = NodePath(".:max_health")
+properties/3/spawn = true
+properties/3/replication_mode = 2
+properties/4/path = NodePath(".:anim_state")
+properties/4/spawn = true
+properties/4/replication_mode = 2
+properties/5/path = NodePath(".:action_token")
+properties/5/spawn = true
+properties/5/replication_mode = 2
+properties/6/path = NodePath(".:is_dead")
+properties/6/spawn = true
+properties/6/replication_mode = 2
+properties/7/path = NodePath(".:alert_seq")
+properties/7/spawn = true
+properties/7/replication_mode = 2
+properties/8/path = NodePath(".:stomp_seq")
+properties/8/spawn = true
+properties/8/replication_mode = 2
+properties/9/path = NodePath(".:roar_seq")
+properties/9/spawn = true
+properties/9/replication_mode = 2
+
+[node name="Warlord" type="CharacterBody3D"]
+collision_layer = 4
+collision_mask = 15
+motion_mode = 1
+script = ExtResource("1_script")
+warband_scenes = Array[PackedScene]([ExtResource("5_spearman"), ExtResource("5_spearman"), ExtResource("6_swordsman"), ExtResource("7_thrower")])
+max_health = 1800.0
+move_speed = 2.3
+melee_damage = 36.0
+melee_range = 2.5
+melee_cooldown = 1.7
+melee_mask = 15
+melee_cleave = true
+knockback_taken = 0.05
+radius = 0.8
+anim_speed = 0.75
+right_hand_item = ExtResource("3_sword")
+left_hand_item = ExtResource("4_shield")
+health_bar_color = Color(0.85, 0.12, 0.1, 1)
+health_bar_height = 3.3
+health_bar_width = 1.8
+health_bar_hide_delay = 0.0
+recolor_key_hue = 0.42
+recolor_hue_range = 0.06
+recolor_min_saturation = 0.2
+recolor_reference_value = 0.7
+steer_lookahead = 2.2
+separation_radius = 1.6
+aggro_range = 9.0
+provoked_leash = 1000.0
+provoked_sight_range = 14.0
+arrow_drop_chance = 1.0
+arrow_drop_min = 8
+arrow_drop_max = 12
+health_drop_chance = 1.0
+health_drop_amount = 60
+coin_drop_min = 30
+coin_drop_max = 40
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.15, 0)
+shape = SubResource("CapsuleShape3D_body")
+
+[node name="Model" parent="." instance=ExtResource("2_model")]
+transform = Transform3D(2.9, 0, 0, 0, 2.9, 0, 0, 0, 2.9, 0, 0, 0)
+
+[node name="Sync" type="MultiplayerSynchronizer" parent="."]
+replication_interval = 0.05
+delta_interval = 0.05
+replication_config = SubResource("SceneReplicationConfig_sync")
