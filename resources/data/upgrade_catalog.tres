@@ -9,6 +9,7 @@
 [ext_resource type="Texture2D" uid="uid://87gmfgn5duiw" path="res://assets/ui/icons/shield.png" id="icon_shield"]
 [ext_resource type="Texture2D" uid="uid://nlolsqkgsmsa" path="res://assets/ui/icons/soldier.png" id="icon_soldier"]
 [ext_resource type="Texture2D" uid="uid://ib1w2l0ncgy6" path="res://assets/ui/icons/sword.png" id="icon_sword"]
+[ext_resource type="Texture2D" path="res://assets/ui/icons/spear.svg" id="icon_spear"]
 
 [sub_resource type="Resource" id="Upgrade_vitality"]
 script = ExtResource("2_def")
@@ -34,8 +35,8 @@ amount = 0.2
 [sub_resource type="Resource" id="Upgrade_archery"]
 script = ExtResource("2_def")
 id = &"archery"
-title = "Keen Arrows"
-description = "+20% arrow damage"
+title = "Keen Points"
+description = "+20% bow and spear damage"
 icon = ExtResource("icon_bow")
 base_cost = 40
 max_level = 8
@@ -104,6 +105,26 @@ cost_growth = 1.05
 max_level = 0
 amount = 20.0
 
+[sub_resource type="Resource" id="Upgrade_weapon_bow"]
+script = ExtResource("2_def")
+id = &"weapon_bow"
+title = "Bow"
+description = "Second weapon: fast arrow shots (uses arrows). Replaces the spear."
+icon = ExtResource("icon_bow")
+base_cost = 500
+cost_growth = 1.0
+max_level = 0
+
+[sub_resource type="Resource" id="Upgrade_weapon_spear"]
+script = ExtResource("2_def")
+id = &"weapon_spear"
+title = "Spear"
+description = "Second weapon: slower, harder-hitting throws, no ammo. Replaces the bow."
+icon = ExtResource("icon_spear")
+base_cost = 500
+cost_growth = 1.0
+max_level = 0
+
 [resource]
 script = ExtResource("1_catalog")
-upgrades = Array[ExtResource("2_def")]([SubResource("Upgrade_vitality"), SubResource("Upgrade_blade"), SubResource("Upgrade_archery"), SubResource("Upgrade_quiver"), SubResource("Upgrade_drill"), SubResource("Upgrade_command"), SubResource("Upgrade_recruit"), SubResource("Upgrade_potion"), SubResource("Upgrade_arrows")])
+upgrades = Array[ExtResource("2_def")]([SubResource("Upgrade_weapon_bow"), SubResource("Upgrade_weapon_spear"), SubResource("Upgrade_vitality"), SubResource("Upgrade_blade"), SubResource("Upgrade_archery"), SubResource("Upgrade_quiver"), SubResource("Upgrade_drill"), SubResource("Upgrade_command"), SubResource("Upgrade_recruit"), SubResource("Upgrade_potion"), SubResource("Upgrade_arrows")])

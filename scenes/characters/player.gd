@@ -48,12 +48,16 @@ const DOWNED_CLIPS: Array[String] = ["crawl", "downed"]
 const REVIVE_RING_TEXTURE := preload("res://assets/vfx/light_masks/ring_a.png")
 ## One weapon in hand at a time, at most this many carried (Q / Y / the HUD button switches).
 const MAX_WEAPONS: int = 2
-## Weapon id -> how it works. `melee` weapons swing (sword stick / left mouse); the others shoot
-## arrows (bow stick / aim). `icon` is a Game Icon Pack glyph. New weapon = a row here + its item.
+## Weapon id -> how it works. `melee` weapons swing (sword stick / left mouse); the others are aimed
+## and fired (bow stick / aim): the bow shoots arrows (ammo), the spear is thrown (no ammo, slower).
+## `hand` holds the model; `icon` is a Game Icon Pack glyph. New weapon = a row here + its model in
+## `_weapon_items` + a shop item (see `buy_weapon`).
 const WEAPONS: Dictionary = {
-	"sword": {"melee": true, "icon": "sword", "name": "Sword"},
-	"bow": {"melee": false, "icon": "bow", "name": "Bow"},
+	"sword": {"melee": true, "hand": ARM_RIGHT, "icon": "sword", "name": "Sword"},
+	"bow": {"melee": false, "hand": ARM_LEFT, "icon": "bow", "name": "Bow"},
+	"spear": {"melee": false, "hand": ARM_RIGHT, "icon": "spear", "name": "Spear"},
 }
+const SPEAR_SCENE := preload("res://assets/items/dungeon/spear.glb")
 ## Downed archer: the revive bar sits just above the lying body; "HELP!" and the name stack above it
 ## in screen space (Label3D offsets, pixels), so they never overlap however steep the camera is.
 const DOWNED_LABEL_HEIGHT: float = 1.05
@@ -63,8 +67,11 @@ const DOWNED_NAME_OFFSET: float = 104.0
 const MAX_ORDER_DISTANCE: float = 25.0
 
 @export var max_arrows: int = 99
-@export var arrow_damage: float = 34.0
+@export var arrow_damage: float = 25.0
 @export var shoot_cooldown: float = 0.4
+## Thrown spear: hits harder than an arrow, needs no ammo, but throws and flies slower.
+@export var spear_damage: float = 35.0
+@export var spear_cooldown: float = 1.0
 @export var aim_range: float = 12.0
 ## Aimed shots snap to an enemy within this angle of the aim direction.
 @export var aim_assist_degrees: float = 10.0
@@ -127,7 +134,7 @@ var army_order: int = Order.FOLLOW:
 var army_point: Vector3 = Vector3.ZERO
 ## Carried weapon ids (at most MAX_WEAPONS, see WEAPONS) and which one is in hand. Always replaced,
 ## not mutated, so replication notices changes.
-var weapons: PackedStringArray = PackedStringArray(["sword", "bow"]):
+var weapons: PackedStringArray = PackedStringArray(["sword"]):
 	set(value):
 		weapons = value
 		if is_node_ready():
@@ -141,6 +148,7 @@ var weapon_index: int = 0:
 
 var _base_melee_damage: float
 var _base_arrow_damage: float
+var _base_spear_damage: float
 var _shoot_timer: float = 0.0
 var _pending_shot: Vector3 = Vector3.ZERO  # aimed shot released during cooldown
 var _aim_indicator: Node3D
@@ -166,6 +174,7 @@ func _ready() -> void:
 	add_to_group(&"player_units")
 	_base_melee_damage = melee_damage
 	_base_arrow_damage = arrow_damage
+	_base_spear_damage = spear_damage
 	_base_move_speed = move_speed
 	for looping in ["holding-left", "sit", "crouch"]:
 		if anim.has_animation(looping):
@@ -175,7 +184,7 @@ func _ready() -> void:
 	_build_melee_indicator()
 	_build_name_label()
 	_build_downed_visuals()
-	_weapon_items = {"sword": _right_item, "bow": _left_item}
+	_weapon_items = {"sword": _right_item, "bow": _left_item, "spear": _attach_spear()}
 	_apply_weapon()
 	if is_downed:
 		_apply_downed()
@@ -221,11 +230,23 @@ func _add_downed_anims() -> void:
 	source.free()
 
 
-## Sword swings (every peer): a swing trail sweeps through the hit wedge around the strike frame.
+## Every peer: sword swings get a swing trail through the hit wedge; spear throws empty the hand briefly.
 func _play_action_local(anim_name: String, duration: float, release_arms: int) -> void:
 	super(anim_name, duration, release_arms)
-	if anim_name.begins_with("attack-melee"):
+	if not anim_name.begins_with("attack-melee"):
+		return
+	if holds_melee():
 		get_tree().create_timer(attack_hit_delay / anim_speed * 0.55).timeout.connect(_slash_fx)
+	elif current_weapon() == "spear":
+		# The spear in hand leaves with the throw and a new one is drawn a moment later.
+		get_tree().create_timer(0.15).timeout.connect(_show_spear.bind(false))
+		get_tree().create_timer(0.75).timeout.connect(_show_spear.bind(true))
+
+
+func _show_spear(shown: bool) -> void:
+	var spear := _weapon_items.get("spear") as Node3D
+	if spear:
+		spear.visible = shown and current_weapon() == "spear" and not is_downed
 
 
 func _slash_fx() -> void:
@@ -241,10 +262,8 @@ func _hold_arms(instant: bool = false) -> void:
 	super(instant)
 	if is_downed:
 		_release_arms(ARM_BOTH)
-	elif holds_melee():
-		_release_arms(ARM_LEFT)
 	else:
-		_release_arms(ARM_RIGHT)
+		_release_arms(ARM_LEFT if _weapon_hand() == ARM_RIGHT else ARM_RIGHT)
 
 
 # --- Weapons ------------------------------------------------------------------
@@ -260,6 +279,38 @@ func holds_melee() -> bool:
 
 func holds_ranged() -> bool:
 	return WEAPONS.has(current_weapon()) and not holds_melee()
+
+
+## Arm that holds the weapon in hand.
+func _weapon_hand() -> int:
+	return int(WEAPONS.get(current_weapon(), {}).get("hand", ARM_RIGHT))
+
+
+## False only for the bow without arrows (the sword and spear never run out).
+func has_ammo() -> bool:
+	return current_weapon() != "bow" or arrows > 0
+
+
+## Server: shop purchase of a second weapon (bow or spear). You keep the sword and carry one of the
+## two: buying the other replaces it. The new weapon goes straight into your hand.
+func buy_weapon(weapon: String) -> void:
+	if not WEAPONS.has(weapon) or weapon == "sword":
+		return
+	weapons = PackedStringArray(["sword", weapon])
+	weapon_index = 1
+	_apply_weapon()
+
+
+## The spear model in the right hand (carried like the orc spearmen), hidden until it's the weapon in hand.
+func _attach_spear() -> Node3D:
+	var skeleton := model.find_child("Skeleton3D", true, false) as Skeleton3D
+	if skeleton == null:
+		return null
+	var spear := _attach_item(skeleton, SPEAR_SCENE, "arm-right")
+	if spear:
+		spear.position = Vector3(-0.27, -0.2, 0.0)
+		spear.visible = false
+	return spear
 
 
 ## The carried weapon that isn't in hand ("" with a single weapon).
@@ -444,7 +495,7 @@ func set_aim(direction: Vector3) -> void:
 	direction = direction.normalized()
 	look_override = direction
 	_aim_indicator.rotation.y = atan2(direction.x, direction.z)
-	_aim_material.albedo_color = Color.WHITE if arrows > 0 else Color(1, 0.35, 0.3)
+	_aim_material.albedo_color = Color.WHITE if has_ammo() else Color(1, 0.35, 0.3)
 	_aim_indicator.visible = is_local()
 	if is_local():
 		_update_aim_lock(direction)
@@ -461,16 +512,19 @@ func is_aiming() -> bool:
 	return look_override != Vector3.ZERO
 
 
-## Shoots toward `direction`, or at the nearest enemy when no direction is given. Server only.
+## Fires the ranged weapon in hand (arrow, or a thrown spear) toward `direction`, or at the nearest
+## enemy when no direction is given. Server only.
 func shoot(direction: Vector3 = Vector3.ZERO) -> void:
-	if is_dead or is_downed or arrows <= 0 or not holds_ranged():
+	if is_dead or is_downed or not has_ammo() or not holds_ranged():
 		return
 	if _shoot_timer > 0.0:
 		if direction != Vector3.ZERO:
 			_pending_shot = direction
 		return
-	_shoot_timer = shoot_cooldown
-	arrows -= 1
+	var spear := current_weapon() == "spear"
+	_shoot_timer = spear_cooldown if spear else shoot_cooldown
+	if not spear:
+		arrows -= 1
 	if direction == Vector3.ZERO:
 		var target := find_nearest(TARGET_GROUPS, aim_range, global_position, {&"camps": 3.0})
 		direction = _flat_dir_to(target) if target else facing()
@@ -478,10 +532,15 @@ func shoot(direction: Vector3 = Vector3.ZERO) -> void:
 		direction.y = 0.0
 		direction = _assisted(direction.normalized())
 	face_now(direction)
-	play_action("holding-left-shoot", 0.25, ARM_LEFT)
 	var crit := randf() < crit_chance
-	NetSpawn.projectile(&"arrow", global_position + Vector3(0, 0.55, 0) + direction * 0.4, direction,
-			arrow_damage * (crit_multiplier if crit else 1.0), self, crit)
+	var multiplier := crit_multiplier if crit else 1.0
+	var from := global_position + Vector3(0, 0.55, 0) + direction * 0.4
+	if spear:
+		play_action("attack-melee-right", 0.4, ARM_RIGHT)
+		NetSpawn.projectile(&"player_spear", from + Vector3(0, 0.15, 0), direction, spear_damage * multiplier, self, crit)
+	else:
+		play_action("holding-left-shoot", 0.25, ARM_LEFT)
+		NetSpawn.projectile(&"arrow", from, direction, arrow_damage * multiplier, self, crit)
 
 
 ## Nudges an aimed direction onto an enemy that is almost in line with it.
@@ -687,6 +746,10 @@ func is_upgrade_maxed(def: UpgradeDef) -> bool:
 ## False when buying would be wasted (e.g. potion at full health).
 func is_upgrade_useful(def: UpgradeDef) -> bool:
 	match def.id:
+		&"weapon_bow":
+			return not weapons.has("bow")
+		&"weapon_spear":
+			return not weapons.has("spear")
 		&"potion":
 			return health < max_health
 		&"arrows":
@@ -726,6 +789,11 @@ func _apply_upgrade(def: UpgradeDef) -> void:
 			melee_damage += _base_melee_damage * def.amount
 		&"archery":
 			arrow_damage += _base_arrow_damage * def.amount
+			spear_damage += _base_spear_damage * def.amount
+		&"weapon_bow":
+			buy_weapon("bow")
+		&"weapon_spear":
+			buy_weapon("spear")
 		&"quiver":
 			max_arrows += int(def.amount)
 			arrows = mini(arrows + 15, max_arrows)

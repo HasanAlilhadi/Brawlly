@@ -1,0 +1,12 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scenes/combat/arrow_projectile.gd" id="1_script"]
+[ext_resource type="PackedScene" path="res://assets/items/dungeon/spear.glb" id="2_model"]
+
+[node name="PlayerSpearProjectile" type="Node3D"]
+script = ExtResource("1_script")
+speed = 13.0
+lifetime = 1.0
+
+[node name="Model" parent="." instance=ExtResource("2_model")]
+transform = Transform3D(1.3, 0, 0, 0, 0, 1.3, 0, -1.3, 0, 0, 0, 0.39)

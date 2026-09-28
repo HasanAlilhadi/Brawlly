@@ -78,6 +78,9 @@ func _process(delta: float) -> void:
 				return
 			player.max_health = 1e6
 			player.health = 1e6
+			_check(player.weapons == PackedStringArray(["sword"]), "starts with the sword only")
+			player.buy_weapon("bow")  # as if bought in the shop
+			player.switch_weapon()  # back to the sword
 			_check(not Platform.mobile_layout, "desktop layout")
 			_check(not hud.joystick.visible and not hud.bow_stick.visible, "touch controls hidden")
 			start_pos = player.global_position

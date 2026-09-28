@@ -27,6 +27,7 @@ const TOUCH_NUB := preload("res://assets/ui/touch/joystick_circle_nub_a.png")
 const TOUCH_NUB_HELD := preload("res://assets/ui/touch/highlights/joystick_circle_nub_highlight.png")
 const TOUCH_BUTTON := preload("res://assets/ui/touch/button_circle.png")
 const TOUCH_BUTTON_HELD := preload("res://assets/ui/touch/highlights/button_circle_highlight.png")
+const SPEAR_ICON := preload("res://assets/ui/icons/game/spear.svg")
 
 @onready var root: Control = $Root
 @onready var joystick: TouchJoystick = %Joystick
@@ -251,8 +252,9 @@ func _on_health_changed(current: float, maximum: float) -> void:
 
 func _on_arrows_changed(count: int) -> void:
 	arrows_label.text = str(count)
-	bow_stick.badge = str(count)
-	bow_stick.disabled = count <= 0
+	var bow := _player == null or _player.current_weapon() == "bow"
+	bow_stick.badge = str(count) if bow else ""
+	bow_stick.disabled = bow and count <= 0
 
 
 ## Keeps UI away from notches / rounded corners on phones.
@@ -559,7 +561,10 @@ func _award_card(award: Dictionary) -> Control:
 ## Touch: the stick of the weapon in hand sits in the big slot, a small button above it switches.
 ## Desktop: a weapon bar at the bottom right (both slots, the one in hand lit, Q to switch).
 func _build_weapon_controls() -> void:
-	_weapon_icons = {"sword": melee_button.icon, "bow": bow_stick.icon}
+	# The glyph is tight (no padding like the 64 px RPG icons), so the touch stick gets a 44 px copy.
+	var spear_image := SPEAR_ICON.get_image()
+	spear_image.resize(44, 44, Image.INTERPOLATE_LANCZOS)
+	_weapon_icons = {"sword": melee_button.icon, "bow": bow_stick.icon, "spear": ImageTexture.create_from_image(spear_image)}
 	for side in [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]:
 		melee_button.set_offset(side, bow_stick.get_offset(side))
 	melee_button.drag_radius = bow_stick.drag_radius
@@ -602,6 +607,10 @@ func _update_weapon_controls() -> void:
 	var melee := _player == null or _player.holds_melee()
 	melee_button.visible = touch and melee
 	bow_stick.visible = touch and not melee
+	# The aim stick serves every ranged weapon: its icon, and the arrow count only for the bow.
+	if _player:
+		bow_stick.icon = _weapon_icons.get(_player.current_weapon(), bow_stick.icon)
+		_on_arrows_changed(_player.arrows)
 	var other := _player.other_weapon() if _player else ""
 	_switch_button.visible = touch and other != ""
 	_switch_button.icon = _weapon_icons.get(other)

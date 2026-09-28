@@ -17,6 +17,7 @@ const AIM_CURSOR := preload("res://assets/ui/cursors/cursor_target_round_b.png")
 const PROJECTILE_SCENES := {
 	&"arrow": preload("res://scenes/combat/arrow_projectile.tscn"),
 	&"spear": preload("res://scenes/combat/spear_projectile.tscn"),
+	&"player_spear": preload("res://scenes/combat/player_spear_projectile.tscn"),
 }
 ## Reserve soldiers appear this far from their player (off-screen, also on wide desktop screens) and run in.
 const REINFORCE_DISTANCE: float = 15.0

@@ -33,7 +33,7 @@ static func pickup(kind: int, amount: int, position: Vector3) -> void:
 			"name": _name(&"pickup")})
 
 
-## kind: &"arrow" or &"spear".
+## kind: &"arrow", &"spear" (orc throwers) or &"player_spear" (hits orcs).
 static func projectile(kind: StringName, from: Vector3, direction: Vector3, damage: float, shooter: Node,
 		crit: bool = false) -> void:
 	if not _is_server():

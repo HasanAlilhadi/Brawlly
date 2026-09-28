@@ -91,7 +91,10 @@ by touch index so the joystick and buttons work together with multi-touch.
   menus (Project Settings), gold sword in matches (main.gd).
 - Flow: `main_menu.tscn` (run scene) → `main.tscn`; `PauseMenu` in `main.tscn`, disabled on game over.
 - Anything damageable implements `take_damage(amount, attacker = null, is_melee = true)`.
-- **Weapons**: the player carries `Player.weapons` (≤ `MAX_WEAPONS` = 2, ids from `Player.WEAPONS`) and holds one
+- **Weapons**: the player starts with the sword and can buy ONE second weapon, bow or spear (shop items `weapon_bow` /
+  `weapon_spear`, 500 coins, `Player.buy_weapon()` replaces the other). Base damage: sword 40, bow 25 (arrows),
+  spear 35 (thrown `player_spear` projectile, no ammo, `spear_cooldown` 1 s vs bow 0.4 s). Sharp Blade boosts the
+  sword, Keen Points the bow and spear. The player carries `Player.weapons` (≤ `MAX_WEAPONS` = 2, ids from `Player.WEAPONS`) and holds one
   (`weapon_index`, replicated); `switch_weapon()` (server; Q / Y / HUD button via `request_switch_weapon`), `give_weapon(id)`
   for pickups. Melee / shoot functions refuse the weapon not in hand; attack keys and left mouse use the one in hand.
   New weapon (e.g. spear) = a `WEAPONS` row + its model in `_weapon_items` + an icon in `Hud._weapon_icons`.
@@ -125,7 +128,7 @@ by touch index so the joystick and buttons work together with multi-touch.
   come from `Unit.die()`, damage from `HitFx.report_hit`). New award = a row in `MatchStats.AWARDS`.
 - **Pings**: `main._ping()` → server `_on_ping()` (rate-limited) → teammates' `PingMarker`. Things that should get a
   screen-edge arrow + minimap diamond join group `tracked` with metas `marker_color` / `marker_label`.
-- Balance reference (base stats, before camp tier 0.75–1.35×): player 150hp, sword 30 (cleaves), arrow 40, regen 6/s;
+- Balance reference (base stats, before camp tier 0.75–1.35×): player 150hp, sword 40 (cleaves), arrow 25, spear 35, regen 6/s;
   soldier 80hp/12; spearman 80/10; swordsman 95/11; thrower 55hp, spear 10; giant 500/26.
 - Use `GameConfig.is_gone(node)` for target checks (handles freed nodes).
 - AI targeting is sticky: pick targets with `Unit.choose_target(current, candidate, keep_range)` (keeps the current

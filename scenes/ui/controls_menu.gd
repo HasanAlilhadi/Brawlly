@@ -14,9 +14,9 @@ const TWO_COLUMNS_WIDTH: float = 1150.0
 ## key caps with that text. Icons are Game Icon Pack glyphs (assets/ui/icons/game/).
 const KEYBOARD: Array = [
 	["cursor_move", "Move", "", [["keyboard/w", "keyboard/a", "keyboard/s", "keyboard/d"], ["keyboard/arrows"]]],
-	["broadsword", "Switch weapon", "One weapon in hand at a time (you carry two)", [["keyboard/q"]]],
+	["broadsword", "Switch weapon", "Sword ⇄ the bow or spear you bought in the shop", [["keyboard/q"]]],
 	["sword", "Sword", "Swings toward the cursor", [["mouse/left"]]],
-	["bow", "Bow", "Hold to aim at the cursor, release to shoot", [["mouse/left"], ["mouse/right"]]],
+	["bow", "Bow / spear", "Hold to aim at the cursor, release to shoot or throw", [["mouse/left"], ["mouse/right"]]],
 	["arrow", "Quick attack", "Weapon in hand on the nearest enemy", [["keyboard/space"], ["keyboard/j"], ["keyboard/k"]]],
 	["user_group", "Soldiers: follow", "They walk with you in formation", [["keyboard/1"]]],
 	["flag", "Soldiers: charge", "They run to the cursor and fight there", [["keyboard/2"]]],
@@ -29,7 +29,7 @@ const KEYBOARD: Array = [
 ]
 const GAMEPAD: Array = [
 	["cursor_move", "Move", "", [["xbox/stick_l"]]],
-	["broadsword", "Switch weapon", "Sword ⇄ bow", [["Y"]]],
+	["broadsword", "Switch weapon", "Sword ⇄ bow or spear", [["Y"]]],
 	["bow", "Aim the bow", "Then shoot with RT", [["xbox/stick_r"]]],
 	["arrow", "Attack", "Weapon in hand · the nearest enemy when not aiming", [["xbox/rt"], ["xbox/a"], ["xbox/rb"], ["xbox/x"]]],
 	["user_group", "Soldiers: follow", "", [["xbox/dpad_up"]]],
