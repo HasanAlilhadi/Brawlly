@@ -72,7 +72,7 @@ by touch index so the joystick and buttons work together with multi-touch.
   are scaled 1.25 in their scenes.
 - One-arm actions (sword swing, bow shot) play on that arm only while the unit moves (`BonePoseOverride3D.start_live`),
   full-body when standing still. The player's sword slash uses no clip (Kenney's melee clip twists the arm so the blade
-  points at the ground): `Player._sword_slash` keeps the arm held and sweeps it with `BonePoseOverride3D.pose_offset`
+  points at the ground): `Player._sword_slash` keeps the arm held and sweeps it (left to right) with `BonePoseOverride3D.pose_offset`
   (`SLASH_*` constants). Player colors: `recolor_*` exports + `assets/shaders/palette_recolor.gdshader`
   replace one palette hue (soldier crest h≈0.015, archer hat h≈0.38); new unit types need their own key hue.
 - In-game HUD is deliberately compact (PanelCompact / PanelInsetCompact styles) and follows the **HUD design system**:
