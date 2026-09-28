@@ -5,6 +5,7 @@ extends Node
 ## 2. Obstacles: the Warlord walks around a camp house that stands between it and the player, and
 ##    never stays stuck.
 ## 3. Small squads live in tents, big ones in houses.
+## 0. First, going down next to that camp: its orcs keep running (a downed player still keeps it awake).
 ##   "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/ai_test.gd
 
 const WATCH_TIME := 10.0
@@ -70,10 +71,30 @@ func _process(delta: float) -> void:
 					best_dist = d
 					camp = c
 			player.global_position = camp.global_position + Vector3(0, 0, camp.radius + 7.0)
+			phase = 8
+			pt = 0.0
+		8:
+			if pt > 1.0 and not player.is_downed:
+				GameConfig.downed_enabled = true
+				player.take_damage(player.health * 2.0, camp)
+			if pt < 4.0:
+				return
+			var paused := 0
+			var orcs := 0
+			for orc in camp._squad:
+				if orc and is_instance_valid(orc) and not orc.is_dead:
+					orcs += 1
+					if orc.process_mode == Node.PROCESS_MODE_DISABLED:
+						paused += 1
+			_check(player.is_downed and orcs > 0 and paused == 0, "orcs next to a downed player keep running (%d of %d paused)" % [paused, orcs])
+			GameConfig.downed_enabled = false
+			player.revive(player.global_position)
+			player.health = player.max_health
 			for i in 10:
 				NetSpawn.unit(&"ally", player.global_position + Vector3(randf_range(-2, 2), 0, randf_range(-1, 1)),
 						{"team": player.team_id, "owner": player.peer_id, "color": player.unit_color})
-			_next()
+			phase = 1
+			pt = 0.0
 		1:
 			# The player keeps shooting the camp from range while the soldiers brawl with the squad.
 			shot_timer -= delta

@@ -124,7 +124,7 @@ by touch index so the joystick and buttons work together with multi-touch.
   same-side units). Use these for new AI.
 - Soldiers: max `GameConfig.MAX_FOLLOWERS` (25) follow in a compact spiral formation (group `followers`); extra freed
   soldiers go to `Player.reserve_soldiers` and `main.gd` spawns them off-screen as slots free up (no idle soldiers in the world).
-- Far-away camps pause their orcs (`Camp.activation_range`) — keep this for mobile performance. Orcs that are
+- Far-away camps pause their orcs (`Camp.activation_range`; downed players still count as near, only dead ones don't) — keep this for mobile performance. Orcs that are
   provoked or walking home (`Enemy.is_busy()`) stay awake. Damage calls `Unit._on_damaged(attacker)`; orcs forward it
   to `Camp.alert(attacker)`, which provokes the whole squad (tuning in `enemy.gd` → "Provoked" exports).
 

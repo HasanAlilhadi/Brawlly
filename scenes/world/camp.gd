@@ -202,9 +202,11 @@ func _update_alive() -> void:
 	_update_strength()
 
 
+## Downed players still count (only `is_dead` doesn't), or their orcs would freeze mid-fight.
 func _is_player_near() -> bool:
-	for player in get_tree().get_nodes_in_group(&"players"):
-		if not GameConfig.is_gone(player) and global_position.distance_to((player as Node3D).global_position) < activation_range:
+	for node in get_tree().get_nodes_in_group(&"players"):
+		var player := node as Player
+		if is_instance_valid(player) and not player.is_dead and global_position.distance_to(player.global_position) < activation_range:
 			return true
 	return false
 
