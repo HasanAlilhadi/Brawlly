@@ -317,6 +317,11 @@ func _build_extras() -> void:
 		button.add_theme_font_size_override("font_size", 17)
 		if not Platform.mobile_layout:
 			button.tooltip_text = "%s (%s)" % [ARMY_ORDERS[order], ARMY_KEYS[order]]
+			# Key prompt (1 / 2 / 3) at the left of the label.
+			button.icon = load("res://assets/ui/prompts/keyboard/%s.png" % ARMY_KEYS[order])
+			button.add_theme_constant_override("icon_max_width", 32)
+			button.add_theme_constant_override("h_separation", 6)
+			button.custom_minimum_size.x = 138.0
 		button.pressed.connect(func() -> void:
 			_on_army_order_changed(_player.army_order if _player else 0)  # the server confirms the change
 			army_command_requested.emit(order))
