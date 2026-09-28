@@ -21,6 +21,8 @@ signal revived(player: Player, helpers: Array)
 ## Every peer: the downed state changed (visuals, HUD).
 signal downed_changed(downed: bool)
 signal army_order_changed(order: int)
+## Every peer: the weapon in hand changed (id from WEAPONS).
+signal weapon_changed(weapon: String)
 
 enum Order { FOLLOW, CHARGE, HOLD }
 
@@ -41,6 +43,14 @@ const DOWNED_SPEED: float = 0.3
 const DOWNED_ANIMS := preload("res://assets/characters/animations/archer_downed.glb")
 const DOWNED_CLIPS: Array[String] = ["crawl", "downed"]
 const REVIVE_RING_TEXTURE := preload("res://assets/vfx/light_masks/ring_a.png")
+## One weapon in hand at a time, at most this many carried (Q / Y / the HUD button switches).
+const MAX_WEAPONS: int = 2
+## Weapon id -> how it works. `melee` weapons swing (sword stick / left mouse); the others shoot
+## arrows (bow stick / aim). `icon` is a Game Icon Pack glyph. New weapon = a row here + its item.
+const WEAPONS: Dictionary = {
+	"sword": {"melee": true, "icon": "sword", "name": "Sword"},
+	"bow": {"melee": false, "icon": "bow", "name": "Bow"},
+}
 ## Downed archer: the revive bar sits just above the lying body; "HELP!" and the name stack above it
 ## in screen space (Label3D offsets, pixels), so they never overlap however steep the camera is.
 const DOWNED_LABEL_HEIGHT: float = 1.05
@@ -112,6 +122,19 @@ var army_order: int = Order.FOLLOW:
 			army_order_changed.emit(value)
 ## Where soldiers charge to / hold (valid for CHARGE and HOLD).
 var army_point: Vector3 = Vector3.ZERO
+## Carried weapon ids (at most MAX_WEAPONS, see WEAPONS) and which one is in hand. Always replaced,
+## not mutated, so replication notices changes.
+var weapons: PackedStringArray = PackedStringArray(["sword", "bow"]):
+	set(value):
+		weapons = value
+		if is_node_ready():
+			_apply_weapon()
+var weapon_index: int = 0:
+	set(value):
+		if value != weapon_index:
+			weapon_index = value
+			if is_node_ready():
+				_apply_weapon()
 
 var _base_melee_damage: float
 var _base_arrow_damage: float
@@ -129,6 +152,7 @@ var _downed_label: Label3D
 var _revive_bar: HealthBar3D
 var _revive_ring: Decal
 var _was_downed: bool = false
+var _weapon_items: Dictionary = {}  # weapon id -> the model in hand
 
 
 func _ready() -> void:
@@ -147,6 +171,8 @@ func _ready() -> void:
 	_build_melee_indicator()
 	_build_name_label()
 	_build_downed_visuals()
+	_weapon_items = {"sword": _right_item, "bow": _left_item}
+	_apply_weapon()
 	if is_downed:
 		_apply_downed()
 
@@ -191,11 +217,91 @@ func _add_downed_anims() -> void:
 	source.free()
 
 
-## Downed archers crawl with both arms, so the weapon-holding pose stays off.
+## Only the arm with the weapon in hand holds it; downed archers crawl with both arms.
 func _hold_arms(instant: bool = false) -> void:
 	super(instant)
 	if is_downed:
 		_release_arms(ARM_BOTH)
+	elif holds_melee():
+		_release_arms(ARM_LEFT)
+	else:
+		_release_arms(ARM_RIGHT)
+
+
+# --- Weapons ------------------------------------------------------------------
+
+## Id of the weapon in hand ("" if none).
+func current_weapon() -> String:
+	return weapons[weapon_index] if weapon_index < weapons.size() else ""
+
+
+func holds_melee() -> bool:
+	return bool(WEAPONS.get(current_weapon(), {}).get("melee", false))
+
+
+func holds_ranged() -> bool:
+	return WEAPONS.has(current_weapon()) and not holds_melee()
+
+
+## The carried weapon that isn't in hand ("" with a single weapon).
+func other_weapon() -> String:
+	return weapons[(weapon_index + 1) % weapons.size()] if weapons.size() > 1 else ""
+
+
+## Server: next carried weapon in hand. Cancels aiming / swinging with the old one.
+func switch_weapon() -> void:
+	if is_dead or is_downed or weapons.size() < 2:
+		return
+	weapon_index = (weapon_index + 1) % weapons.size()
+
+
+## Server: pick up `weapon` — take it in hand if already carried, else carry it (replacing the one in
+## hand when both slots are full).
+func give_weapon(weapon: String) -> void:
+	if not WEAPONS.has(weapon):
+		return
+	var carried := weapons.duplicate()
+	var slot := carried.find(weapon)
+	if slot == -1:
+		if carried.size() < MAX_WEAPONS:
+			carried.append(weapon)
+			slot = carried.size() - 1
+		else:
+			slot = weapon_index
+			carried[slot] = weapon
+	weapons = carried
+	weapon_index = slot
+	_apply_weapon()
+
+
+## Local input: switch now on the server / host, or ask the server.
+func request_switch_weapon() -> void:
+	if multiplayer.is_server():
+		switch_weapon()
+	else:
+		net_switch_weapon.rpc_id(1)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func net_switch_weapon() -> void:
+	if _from_owner():
+		switch_weapon()
+
+
+## Every peer: only the weapon in hand is visible (none while downed), its arm holds it.
+func _apply_weapon() -> void:
+	for weapon in _weapon_items:
+		var item := _weapon_items[weapon] as Node3D
+		if item:
+			item.visible = weapon == current_weapon() and not is_downed
+	if not holds_ranged():
+		clear_aim()
+		_pending_shot = Vector3.ZERO
+	if not holds_melee():
+		set_melee_aim(Vector3.ZERO)
+	if _right_hold or _left_hold:
+		_hold_arms(true)
+	weapon_changed.emit(current_weapon())
 
 
 func _idle_anim() -> String:
@@ -262,7 +368,7 @@ func _from_owner() -> bool:
 # --- Melee --------------------------------------------------------------------
 
 func attack_melee() -> void:
-	if is_dead or is_downed or _melee_timer > 0.0:
+	if is_dead or is_downed or _melee_timer > 0.0 or not holds_melee():
 		return
 	var target := find_nearest(TARGET_GROUPS, 1.8, global_position, {&"camps": -0.8})
 	if target:
@@ -272,7 +378,7 @@ func attack_melee() -> void:
 
 ## Swing toward `direction` (sword stick), with a little aim assist. Movement is independent.
 func attack_melee_toward(direction: Vector3) -> void:
-	if is_dead or is_downed or _melee_timer > 0.0:
+	if is_dead or is_downed or _melee_timer > 0.0 or not holds_melee():
 		return
 	direction.y = 0.0
 	var best := direction.normalized()
@@ -296,7 +402,7 @@ func attack_melee_toward(direction: Vector3) -> void:
 ## Sword stick aim: face `direction` (shows a short wedge for the local player). ZERO = released.
 func set_melee_aim(direction: Vector3) -> void:
 	direction.y = 0.0
-	if direction.length_squared() < 0.0001 or is_dead or is_downed:
+	if direction.length_squared() < 0.0001 or is_dead or is_downed or not holds_melee():
 		if _melee_aim != Vector3.ZERO:
 			_melee_aim = Vector3.ZERO
 			_melee_indicator.visible = false
@@ -313,7 +419,7 @@ func set_melee_aim(direction: Vector3) -> void:
 
 ## Shows the aim line (local player) and turns the archer toward `direction` (XZ plane).
 func set_aim(direction: Vector3) -> void:
-	if is_dead or is_downed or direction.length_squared() < 0.0001:
+	if is_dead or is_downed or direction.length_squared() < 0.0001 or not holds_ranged():
 		return
 	direction.y = 0.0
 	direction = direction.normalized()
@@ -334,7 +440,7 @@ func is_aiming() -> bool:
 
 ## Shoots toward `direction`, or at the nearest enemy when no direction is given. Server only.
 func shoot(direction: Vector3 = Vector3.ZERO) -> void:
-	if is_dead or is_downed or arrows <= 0:
+	if is_dead or is_downed or arrows <= 0 or not holds_ranged():
 		return
 	if _shoot_timer > 0.0:
 		if direction != Vector3.ZERO:
@@ -667,9 +773,7 @@ func _apply_downed() -> void:
 	_name_label.position.y = DOWNED_LABEL_HEIGHT if is_downed else health_bar_height + 0.28
 	_name_label.offset.y = DOWNED_NAME_OFFSET if is_downed else 0.0
 	_health_bar.visible = false
-	for item in [_right_item, _left_item]:
-		if item:
-			item.visible = not is_downed
+	_apply_weapon()
 	if is_downed:
 		_aim_indicator.visible = false
 		_melee_indicator.visible = false

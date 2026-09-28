@@ -49,7 +49,7 @@ by touch index so the joystick and buttons work together with multi-touch.
 - **Desktop first**: design for 1920×1080 landscape with keyboard + mouse (and gamepad); phones must keep working
   (720×1280 portrait UI, touch controls). `Platform` (autoload) picks the layout: `Platform.mobile_layout`,
   `Platform.touch_mode` (+ `touch_mode_changed`). Test the phone layout on a PC with `-- --mobile`.
-- Input goes through Input Map actions (`move_*`, `aim_*`, `attack`, `aim_bow`, `shoot`, `shop`, `pause`,
+- Input goes through Input Map actions (`move_*`, `aim_*`, `attack`, `aim_bow`, `shoot`, `switch_weapon`, `shop`, `pause`,
   `toggle_fullscreen`, `army_*`, `ping*`) — add new bindings there, not as hard-coded keys, and list them on the
   Controls page (`scenes/ui/controls_menu.gd`, main menu → Controls). Mouse clicks for gameplay are taken in
   `_unhandled_input` (so clicks on HUD buttons don't attack); ignore events with `device == DEVICE_ID_EMULATION`.
@@ -88,6 +88,10 @@ by touch index so the joystick and buttons work together with multi-touch.
   menus (Project Settings), gold sword in matches (main.gd).
 - Flow: `main_menu.tscn` (run scene) → `main.tscn`; `PauseMenu` in `main.tscn`, disabled on game over.
 - Anything damageable implements `take_damage(amount, attacker = null, is_melee = true)`.
+- **Weapons**: the player carries `Player.weapons` (≤ `MAX_WEAPONS` = 2, ids from `Player.WEAPONS`) and holds one
+  (`weapon_index`, replicated); `switch_weapon()` (server; Q / Y / HUD button via `request_switch_weapon`), `give_weapon(id)`
+  for pickups. Melee / shoot functions refuse the weapon not in hand; attack keys and left mouse use the one in hand.
+  New weapon (e.g. spear) = a `WEAPONS` row + its model in `_weapon_items` + an icon in `Hud._weapon_icons`.
 - **VFX**: `HitFx.flash(at, texture, color, size, …)` pops a billboard sprite from `assets/vfx/particles/` (Kenney Particle Pack;
   additive, or `additive = false` for smoke). Used for hit sparks, death / camp smoke, combo ring, revive sparkle. Ground
   decals use `assets/vfx/light_masks/` (revive range ring). Touch controls are skinned from `assets/ui/touch/` (set in `hud.gd`).

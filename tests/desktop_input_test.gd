@@ -1,10 +1,11 @@
 extends Node
-## Desktop controls: WASD moves, left mouse swings toward the cursor, right mouse aims + shoots on release,
+## Desktop controls: WASD moves, left mouse swings toward the cursor, Q switches to the bow, right mouse aims + shoots on release,
 ## Space shoots at the nearest enemy, B opens / closes the shop, and touch controls stay hidden.
 ##   "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/desktop_input_test.gd
 
 var t := 0.0
 var phase := 0
+var switched := false
 var pt := 0.0
 var main: Node
 var player: Player
@@ -92,11 +93,20 @@ func _process(delta: float) -> void:
 			if pt > 0.1:
 				_check(player.facing().x > 0.8, "left mouse swings toward the cursor (facing %s)" % player.facing())
 				_mouse(MOUSE_BUTTON_LEFT, false, _right_of_player())
-				arrows_before = player.arrows
-				_mouse(MOUSE_BUTTON_RIGHT, true, _right_of_player())
+				_check(player.holds_melee() and player._right_item.visible and not player._left_item.visible,
+						"starts with the sword in hand, bow put away")
+				_key(KEY_Q, true)
+				_key(KEY_Q, false)
 				_next()
 		3:
-			if pt > 0.3:
+			if pt > 0.15 and not switched:
+				switched = true
+				_check(player.holds_ranged() and player._left_item.visible and not player._right_item.visible,
+						"Q switches to the bow (sword put away)")
+				arrows_before = player.arrows
+				_mouse(MOUSE_BUTTON_RIGHT, true, _right_of_player())
+				pt = 0.0
+			elif switched and pt > 0.3:
 				_check(player.is_aiming(), "right mouse aims the bow")
 				_mouse(MOUSE_BUTTON_RIGHT, false, _right_of_player())
 				_next()

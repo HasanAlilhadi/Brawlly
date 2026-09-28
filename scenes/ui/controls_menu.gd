@@ -14,13 +14,14 @@ const TWO_COLUMNS_WIDTH: float = 1150.0
 ## key caps with that text. Icons are Game Icon Pack glyphs (assets/ui/icons/game/).
 const KEYBOARD: Array = [
 	["cursor_move", "Move", "", [["keyboard/w", "keyboard/a", "keyboard/s", "keyboard/d"], ["keyboard/arrows"]]],
-	["sword", "Sword", "Swings toward the cursor · J hits the nearest enemy", [["mouse/left"], ["keyboard/j"]]],
-	["bow", "Bow", "Hold to aim at the cursor, release to shoot", [["mouse/right"]]],
-	["arrow", "Quick shot", "Fires at the nearest enemy", [["keyboard/space"], ["keyboard/k"]]],
+	["broadsword", "Switch weapon", "One weapon in hand at a time (you carry two)", [["keyboard/q"]]],
+	["sword", "Sword", "Swings toward the cursor", [["mouse/left"]]],
+	["bow", "Bow", "Hold to aim at the cursor, release to shoot", [["mouse/left"], ["mouse/right"]]],
+	["arrow", "Quick attack", "Weapon in hand on the nearest enemy", [["keyboard/space"], ["keyboard/j"], ["keyboard/k"]]],
 	["user_group", "Soldiers: follow", "They walk with you in formation", [["keyboard/1"]]],
 	["flag", "Soldiers: charge", "They run to the cursor and fight there", [["keyboard/2"]]],
 	["shield", "Soldiers: hold", "They guard the spot under the cursor", [["keyboard/3"]]],
-	["location", "Ping", "Attack! · Loot! · Here! for your team", [["keyboard/q"], ["mouse/scroll"]]],
+	["location", "Ping", "Attack! · Loot! · Here! for your team", [["G"], ["mouse/scroll"]]],
 	["heart", "Call for help", "", [["keyboard/h"]]],
 	["shop", "Shop", "", [["keyboard/b"], ["keyboard/tab"]]],
 	["pause", "Pause", "", [["keyboard/escape"], ["keyboard/p"]]],
@@ -28,9 +29,9 @@ const KEYBOARD: Array = [
 ]
 const GAMEPAD: Array = [
 	["cursor_move", "Move", "", [["xbox/stick_l"]]],
+	["broadsword", "Switch weapon", "Sword ⇄ bow", [["Y"]]],
 	["bow", "Aim the bow", "Then shoot with RT", [["xbox/stick_r"]]],
-	["arrow", "Shoot", "At the nearest enemy when not aiming", [["xbox/rt"], ["xbox/a"]]],
-	["sword", "Sword", "Hits the nearest enemy", [["xbox/rb"], ["xbox/x"]]],
+	["arrow", "Attack", "Weapon in hand · the nearest enemy when not aiming", [["xbox/rt"], ["xbox/a"], ["xbox/rb"], ["xbox/x"]]],
 	["user_group", "Soldiers: follow", "", [["xbox/dpad_up"]]],
 	["flag", "Soldiers: charge", "In front of you", [["xbox/dpad_right"]]],
 	["shield", "Soldiers: hold", "In front of you", [["xbox/dpad_down"]]],
@@ -40,6 +41,7 @@ const GAMEPAD: Array = [
 ]
 const TOUCH: Array = [
 	["cursor_move", "Move", "Drag anywhere on the left side", [["touch/swipe_move"]]],
+	["broadsword", "Switch weapon", "The small button above the weapon stick", [["touch/tap"]]],
 	["sword", "Sword", "Sword stick: drag to swing that way · tap hits the nearest enemy", [["touch/swipe_move"], ["touch/tap"]]],
 	["bow", "Bow", "Bow stick: drag to aim, release to shoot · tap auto-aims", [["touch/swipe_move"], ["touch/tap"]]],
 	["user_group", "Soldier orders", "The buttons under your soldier count", [["Follow"], ["Charge"], ["Hold"]]],

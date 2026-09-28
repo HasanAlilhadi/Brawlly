@@ -62,6 +62,7 @@ var _respawn_left: float = 0.0
 var _mouse_attack: bool = false
 var _mouse_bow: bool = false
 var _bow_cursor: bool = false
+var _mouse_bow_button: int = MOUSE_BUTTON_RIGHT
 var _mouse_click_left: float = 0.0
 var _last_ping_ms: Dictionary = {}  # peer -> time of their last ping (server)
 
@@ -110,6 +111,7 @@ func _ready() -> void:
 	hud.bow_stick.aim_released.connect(_on_bow_released)
 	hud.bow_stick.tapped.connect(func() -> void: _fire(Vector3.ZERO))
 	hud.melee_button.tapped.connect(_melee_once)
+	hud.weapon_switch_requested.connect(_switch_weapon)
 	hud.army_command_requested.connect(func(order: int) -> void: _command_army(order))
 	hud.ping_requested.connect(func() -> void: _ping(_ahead_point(0.0)))
 	hud.set_mode_label(game_mode.score_text())
@@ -298,9 +300,10 @@ func _on_peer_left(peer: int) -> void:
 
 
 # --- Input ---------------------------------------------------------------------
-# Desktop: WASD / arrows / left stick move. Left mouse swings the sword toward the cursor, right mouse
-# aims the bow at the cursor (release to shoot). Space / K / RT shoot (at the right-stick direction or the
-# nearest enemy), J / RB swing at the nearest enemy. Touch: HUD joystick + aim sticks.
+# Desktop: WASD / arrows / left stick move. One weapon in hand (Q / Y switch): left mouse swings the sword
+# toward the cursor, or with the bow aims at the cursor (left or right mouse, release to shoot). J / RB and
+# Space / K / RT use the weapon on the nearest enemy (the bow at the right-stick direction when aiming).
+# Touch: HUD joystick + the stick of the weapon in hand + a switch button.
 
 func _physics_process(delta: float) -> void:
 	if _game_over or local_player == null or not is_instance_valid(local_player):
@@ -320,15 +323,17 @@ func _physics_process(delta: float) -> void:
 	if _mouse_bow:
 		aim = _cursor_direction()
 	_show_bow_cursor(_mouse_bow and not local_player.is_dead)
+	var melee := local_player.holds_melee()
 	var melee_aim := Vector3.ZERO
 	if hud.melee_button.is_aiming:
 		melee_aim = Vector3(hud.melee_button.output.x, 0.0, hud.melee_button.output.y)
-	if _mouse_attack or _mouse_click_left > 0.0:
+	if melee and (_mouse_attack or _mouse_click_left > 0.0):
 		melee_aim = _cursor_direction()
-	# Holding the sword button without dragging (or J / RB) keeps auto-attacking the nearest enemy.
-	var melee_held := (hud.melee_button.is_held and melee_aim == Vector3.ZERO) \
-			or (_attack_key_held() and melee_aim == Vector3.ZERO)
-	var shoot_held := Input.is_action_pressed(&"shoot")
+	# Holding the sword button without dragging (or an attack key) keeps auto-attacking the nearest enemy;
+	# with the bow in hand the same keys shoot.
+	var use_held := _attack_key_held() or Input.is_action_pressed(&"shoot")
+	var melee_held := melee and melee_aim == Vector3.ZERO and (hud.melee_button.is_held or use_held)
+	var shoot_held := not melee and use_held
 	if multiplayer.is_server():
 		local_player.set_input(move, aim, melee_aim)
 		if melee_held:
@@ -362,11 +367,14 @@ func _unhandled_input(event: InputEvent) -> void:
 	var button := event as InputEventMouseButton
 	var real_click := button != null and button.pressed and button.device != InputEvent.DEVICE_ID_EMULATION \
 			and not Platform.mobile_layout
-	if real_click and button.is_action(&"attack"):
+	if real_click and local_player.holds_ranged() and (button.is_action(&"attack") or button.is_action(&"aim_bow")):
+		_mouse_bow = true
+		_mouse_bow_button = button.button_index
+	elif real_click and button.is_action(&"attack"):
 		_mouse_attack = true
 		_mouse_click_left = MOUSE_CLICK_HOLD
-	elif real_click and button.is_action(&"aim_bow"):
-		_mouse_bow = true
+	elif event.is_action_pressed(&"switch_weapon") and not event.is_echo():
+		_switch_weapon()
 	elif event.is_action_pressed(&"shop") and not event.is_echo():
 		shop_menu.open()
 		get_viewport().set_input_as_handled()
@@ -387,7 +395,7 @@ func _input(event: InputEvent) -> void:
 		return
 	if button.is_action(&"attack"):
 		_mouse_attack = false
-	elif button.is_action(&"aim_bow") and _mouse_bow:
+	if _mouse_bow and button.button_index == _mouse_bow_button:
 		_mouse_bow = false
 		_fire(_cursor_direction())
 		if local_player:
@@ -427,6 +435,16 @@ func _cursor_direction() -> Vector3:
 	var direction: Vector3 = hit - local_player.global_position
 	direction.y = 0.0
 	return direction.normalized() if direction.length() > 0.15 else local_player.facing()
+
+
+## Q / Y / the HUD switch button: next weapon in hand (drops any aim in progress).
+func _switch_weapon() -> void:
+	if local_player == null or _game_over or local_player.is_dead:
+		return
+	_mouse_bow = false
+	_mouse_attack = false
+	hud.reset_touch_controls()
+	local_player.request_switch_weapon()
 
 
 func _melee_once() -> void:

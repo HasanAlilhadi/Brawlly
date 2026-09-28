@@ -11,6 +11,7 @@ signal pause_requested
 signal shop_requested
 signal army_command_requested(order: int)
 signal ping_requested
+signal weapon_switch_requested
 
 const ARMY_ORDERS: PackedStringArray = ["Follow", "Charge", "Hold"]
 const ARMY_KEYS: PackedStringArray = ["1", "2", "3"]
@@ -62,6 +63,10 @@ var _boss_bar: ProgressBar
 var _army_row: VBoxContainer
 var _army_buttons: Array[Button] = []
 var _ping_button: Button
+var _switch_button: TouchButton
+var _weapon_bar: PanelContainer
+var _weapon_slots: HBoxContainer
+var _weapon_icons: Dictionary = {}  # weapon id -> texture for the touch buttons
 var _downed_panel: PanelContainer
 var _downed_title: Label
 var _downed_seconds: Label
@@ -103,12 +108,13 @@ func _show_touch_controls(enabled: bool) -> void:
 	if not enabled:
 		reset_touch_controls()
 	joystick.visible = enabled
-	melee_button.visible = enabled
-	bow_stick.visible = enabled
+	_update_weapon_controls()
 
 
 func setup(player: Player, camps: Array[Camp]) -> void:
 	_player = player
+	player.weapon_changed.connect(func(_weapon: String) -> void: _update_weapon_controls())
+	_update_weapon_controls()
 	player.health_changed.connect(_on_health_changed)
 	player.arrows_changed.connect(_on_arrows_changed)
 	player.coins_changed.connect(_on_coins_changed)
@@ -152,6 +158,8 @@ func show_end(title: String, subtitle: String, restart_label: String = "Play aga
 	joystick.hide()
 	melee_button.hide()
 	bow_stick.hide()
+	_switch_button.hide()
+	_weapon_bar.hide()
 	pause_button.hide()
 	shop_button.hide()
 	end_title.text = title
@@ -166,6 +174,8 @@ func reset_touch_controls() -> void:
 	joystick.release()
 	melee_button.reset()
 	bow_stick.reset()
+	if _switch_button:
+		_switch_button.reset()
 
 
 func _process(delta: float) -> void:
@@ -325,12 +335,13 @@ func _build_extras() -> void:
 	_ping_button.size = Vector2(60, 60)
 	_ping_button.custom_minimum_size = Vector2(60, 60)
 	if not Platform.mobile_layout:
-		_ping_button.tooltip_text = "Ping (Q / middle mouse) · Help (H)"
+		_ping_button.tooltip_text = "Ping (G / middle mouse) · Help (H)"
 	_ping_button.pressed.connect(ping_requested.emit)
 	_ping_button.visible = Net.is_online()
 	root.add_child(_ping_button)
 
 	_build_downed_panel()
+	_build_weapon_controls()
 
 	_revive_label = _small_label("", 26)
 	_revive_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
@@ -535,3 +546,74 @@ func _award_card(award: Dictionary) -> Control:
 	detail.theme_type_variation = &"HintLabel"
 	text.add_child(detail)
 	return card
+
+
+# --- Weapons ------------------------------------------------------------------------
+
+## Touch: the stick of the weapon in hand sits in the big slot, a small button above it switches.
+## Desktop: a weapon bar at the bottom right (both slots, the one in hand lit, Q to switch).
+func _build_weapon_controls() -> void:
+	_weapon_icons = {"sword": melee_button.icon, "bow": bow_stick.icon}
+	for side in [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]:
+		melee_button.set_offset(side, bow_stick.get_offset(side))
+	melee_button.drag_radius = bow_stick.drag_radius
+	_switch_button = TouchButton.new()
+	_switch_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	_switch_button.offset_left = -158.0
+	_switch_button.offset_top = -330.0
+	_switch_button.offset_right = -64.0
+	_switch_button.offset_bottom = -236.0
+	_switch_button.color = bow_stick.color
+	_switch_button.held_color = bow_stick.held_color
+	_switch_button.ring_color = bow_stick.ring_color
+	_switch_button.button_texture = TOUCH_BUTTON
+	_switch_button.held_texture = TOUCH_BUTTON_HELD
+	_switch_button.icon_scale = 0.9
+	_switch_button.badge = "switch"
+	_switch_button.pressed.connect(weapon_switch_requested.emit)
+	root.add_child(_switch_button)
+
+	_weapon_bar = PanelContainer.new()
+	_weapon_bar.theme_type_variation = &"PanelCompact"
+	_weapon_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_weapon_bar.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	_weapon_bar.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	_weapon_bar.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	_weapon_bar.offset_right = -16.0
+	_weapon_bar.offset_bottom = -16.0
+	_weapon_slots = HBoxContainer.new()
+	_weapon_slots.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_weapon_slots.add_theme_constant_override("separation", 8)
+	_weapon_bar.add_child(_weapon_slots)
+	root.add_child(_weapon_bar)
+	_update_weapon_controls()
+
+
+func _update_weapon_controls() -> void:
+	if _switch_button == null:
+		return
+	var touch := Platform.touch_mode and not _ended
+	var melee := _player == null or _player.holds_melee()
+	melee_button.visible = touch and melee
+	bow_stick.visible = touch and not melee
+	var other := _player.other_weapon() if _player else ""
+	_switch_button.visible = touch and other != ""
+	_switch_button.icon = _weapon_icons.get(other)
+	_weapon_bar.visible = not touch and not _ended and _player != null
+	if _player == null:
+		return
+	for child in _weapon_slots.get_children():
+		child.queue_free()
+	for i in _player.weapons.size():
+		var weapon := _player.weapons[i]
+		var badge := UiKit.medal(Player.WEAPONS[weapon]["icon"], 52.0 if i == _player.weapon_index else 40.0)
+		badge.modulate = Color.WHITE if i == _player.weapon_index else Color(1, 1, 1, 0.45)
+		badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		for part in badge.find_children("*", "Control", true, false):
+			(part as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_weapon_slots.add_child(badge)
+	if _player.weapons.size() > 1:
+		var key := UiKit.prompt("keyboard/q", 34.0)
+		key.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		key.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		_weapon_slots.add_child(key)

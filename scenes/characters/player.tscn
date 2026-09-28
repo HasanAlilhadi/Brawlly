@@ -65,6 +65,12 @@ properties/16/replication_mode = 2
 properties/17/path = NodePath(".:army_point")
 properties/17/spawn = true
 properties/17/replication_mode = 2
+properties/18/path = NodePath(".:weapons")
+properties/18/spawn = true
+properties/18/replication_mode = 2
+properties/19/path = NodePath(".:weapon_index")
+properties/19/spawn = true
+properties/19/replication_mode = 2
 
 [node name="Player" type="CharacterBody3D"]
 collision_layer = 2
