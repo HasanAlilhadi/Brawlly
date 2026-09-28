@@ -322,7 +322,7 @@ func _physics_process(delta: float) -> void:
 		aim = Vector3(stick.x, 0.0, stick.y)
 	if _mouse_bow:
 		aim = _cursor_direction()
-	_show_bow_cursor(_mouse_bow and not local_player.is_dead)
+	_show_bow_cursor(local_player.holds_ranged() and not local_player.is_dead and not local_player.is_downed)
 	var melee := local_player.holds_melee()
 	var melee_aim := Vector3.ZERO
 	if hud.melee_button.is_aiming:
@@ -684,7 +684,7 @@ func _on_local_health_changed(current: float, maximum: float) -> void:
 		Input.vibrate_handheld(int(lerpf(35.0, 110.0, strength)), lerpf(0.4, 1.0, strength))
 
 
-## PC: a crosshair while the right mouse button aims the bow, the gold sword otherwise.
+## PC: a crosshair while the bow is in hand, the gold sword otherwise.
 func _show_bow_cursor(aiming: bool) -> void:
 	if aiming == _bow_cursor or Platform.mobile_layout:
 		return
