@@ -60,6 +60,11 @@ const WEAPONS: Dictionary = {
 	"spear": {"melee": false, "hand": ARM_RIGHT, "icon": "spear", "name": "Spear"},
 }
 const SPEAR_SCENE := preload("res://assets/items/dungeon/spear.glb")
+## Procedural sword slash (`_sword_slash`): arm sweep around the shoulder from the holding pose
+## (degrees, + = across to the left) and the blade grip while slashing (out along the arm, a bit raised).
+const SLASH_WIND_UP: float = -70.0
+const SLASH_FOLLOW: float = 85.0
+const SLASH_GRIP: Vector3 = Vector3(0, 0, 80)
 ## Downed archer: the revive bar sits just above the lying body; "HELP!" and the name stack above it
 ## in screen space (Label3D offsets, pixels), so they never overlap however steep the camera is.
 const DOWNED_LABEL_HEIGHT: float = 1.05
@@ -175,6 +180,7 @@ var _revive_bar: HealthBar3D
 var _revive_ring: Decal
 var _was_downed: bool = false
 var _weapon_items: Dictionary = {}  # weapon id -> the model in hand
+var _slash_tween: Tween
 
 
 func _ready() -> void:
@@ -242,10 +248,14 @@ func _add_downed_anims() -> void:
 
 ## Every peer: sword swings get a swing trail through the hit wedge; spear throws empty the hand briefly.
 func _play_action_local(anim_name: String, duration: float, release_arms: int) -> void:
-	super(anim_name, duration, release_arms)
+	var sword := anim_name.begins_with("attack-melee") and holds_melee()
+	if sword and _right_hold and _right_item and not is_downed:
+		_sword_slash(duration)
+	else:
+		super(anim_name, duration, release_arms)
 	if not anim_name.begins_with("attack-melee"):
 		return
-	if holds_melee():
+	if sword:
 		get_tree().create_timer(attack_hit_delay / anim_speed * 0.55).timeout.connect(_slash_fx)
 	elif current_weapon() == "spear":
 		# The spear in hand leaves with the throw and a new one is drawn a moment later.
@@ -267,8 +277,44 @@ func _slash_fx() -> void:
 			Color(1.0, 0.96, 0.85))
 
 
+## Sword attack, standing or running: no clip (Kenney's melee clip twists the arm, so the blade pointed
+## at the ground or the camera). The arm stays in the holding pose (arm forward, level) and sweeps
+## around the shoulder — wind up out to the right, slash across the front, back — while the blade turns
+## out along the arm. Damage lands mid-sweep (`attack_hit_delay`).
+func _sword_slash(duration: float) -> void:
+	_action_time = duration
+	_was_acting = true
+	_full_body_action = false
+	if _arm_tween:
+		_arm_tween.kill()
+	if _slash_tween:
+		_slash_tween.kill()
+	_right_hold.influence = 1.0
+	_right_item.position = right_hand_offset
+	var hit := attack_hit_delay / anim_speed
+	var wind := hit * 0.33
+	var strike := hit * 0.6
+	var back := maxf(duration * 0.95 - wind - strike, 0.05)
+	_slash_tween = create_tween()
+	_slash_tween.tween_method(_set_slash_yaw, 0.0, SLASH_WIND_UP, wind).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	_slash_tween.parallel().tween_property(_right_item, "rotation_degrees", SLASH_GRIP, wind)
+	_slash_tween.tween_method(_set_slash_yaw, SLASH_WIND_UP, SLASH_FOLLOW, strike).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	_slash_tween.tween_method(_set_slash_yaw, SLASH_FOLLOW, 0.0, back).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_slash_tween.parallel().tween_property(_right_item, "rotation_degrees", right_hand_rotation, back)
+
+
+## Arm sweep in degrees around the torso's up axis, relative to the holding pose (+ = toward the left).
+func _set_slash_yaw(degrees: float) -> void:
+	if _right_hold:
+		_right_hold.pose_offset = Quaternion(Vector3.UP, deg_to_rad(degrees))
+
+
 ## Only the arm with the weapon in hand holds it; downed archers crawl with both arms.
 func _hold_arms(instant: bool = false) -> void:
+	if _slash_tween:
+		_slash_tween.kill()
+		_slash_tween = null
+	_set_slash_yaw(0.0)
 	super(instant)
 	if is_downed:
 		_release_arms(ARM_BOTH)

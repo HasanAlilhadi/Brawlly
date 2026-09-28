@@ -9,6 +9,9 @@ extends SkeletonModifier3D
 
 ## Time into the live animation (set by the owner every frame while live).
 var live_time: float = 0.0
+## Extra rotation on top of the held / live pose, in the parent bone's space (pivots at the joint), e.g.
+## sweep a held arm around the shoulder for a procedural swing. Identity = the pose as sampled.
+var pose_offset: Quaternion = Quaternion.IDENTITY
 
 var _bone_indices: PackedInt32Array = PackedInt32Array()
 var _positions: Array[Vector3] = []
@@ -85,4 +88,4 @@ func _process_modification_with_delta(_delta: float) -> void:
 			if tracks.y >= 0:
 				rotation = _live_animation.rotation_track_interpolate(tracks.y, live_time)
 		skeleton.set_bone_pose_position(_bone_indices[i], position)
-		skeleton.set_bone_pose_rotation(_bone_indices[i], rotation)
+		skeleton.set_bone_pose_rotation(_bone_indices[i], pose_offset * rotation)
