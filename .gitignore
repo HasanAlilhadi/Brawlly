@@ -15,4 +15,5 @@ Thumbs.db
 *.tmp
 
 # Raw downloaded asset packs (the game uses the copies in assets/)
-/pre-assets/
+/pre-assets/*
+!/pre-assets/.gdignore
