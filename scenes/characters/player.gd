@@ -27,7 +27,11 @@ signal weapon_changed(weapon: String)
 enum Order { FOLLOW, CHARGE, HOLD }
 
 const TARGET_GROUPS: Array[StringName] = [&"active_enemies", &"player_units", &"camps"]
-const AIM_LINE_WIDTH: float = 0.18
+const AIM_LINE_WIDTH: float = 0.2
+## Aim line length on the ground (arrows fly farther: speed × lifetime of the arrow scene).
+const AIM_LINE_LENGTH: float = 5.0
+const AIM_LOCK_TEXTURE := preload("res://assets/vfx/light_masks/circle_rings_b.png")
+const SLASH_TEXTURE := preload("res://assets/vfx/particles/slash_03.png")
 ## Aimed sword swings snap to an enemy within this angle / distance.
 const MELEE_ASSIST_DEGREES: float = 35.0
 const MELEE_ASSIST_RANGE: float = 2.4
@@ -142,6 +146,7 @@ var _shoot_timer: float = 0.0
 var _pending_shot: Vector3 = Vector3.ZERO  # aimed shot released during cooldown
 var _aim_indicator: Node3D
 var _aim_material: StandardMaterial3D
+var _aim_lock: MeshInstance3D
 var _melee_aim: Vector3 = Vector3.ZERO
 var _melee_indicator: Node3D
 var _name_label: Label3D
@@ -215,6 +220,21 @@ func _add_downed_anims() -> void:
 			clip.loop_mode = Animation.LOOP_LINEAR
 			library.add_animation(clip_name, clip)
 	source.free()
+
+
+## Sword swings (every peer): a slash arc sweeps in front on the strike frame.
+func _play_action_local(anim_name: String, duration: float, release_arms: int) -> void:
+	super(anim_name, duration, release_arms)
+	if anim_name.begins_with("attack-melee"):
+		get_tree().create_timer(attack_hit_delay / anim_speed * 0.8).timeout.connect(_slash_fx)
+
+
+func _slash_fx() -> void:
+	if is_dead or not is_inside_tree():
+		return
+	var forward := facing()
+	HitFx.slash(global_position + forward * 0.75 + Vector3(0, 0.55, 0), atan2(forward.x, forward.z),
+			SLASH_TEXTURE, Color(1.6, 1.45, 1.1), melee_range * 2.4, 0.24)
 
 
 ## Only the arm with the weapon in hand holds it; downed archers crawl with both arms.
@@ -425,13 +445,17 @@ func set_aim(direction: Vector3) -> void:
 	direction = direction.normalized()
 	look_override = direction
 	_aim_indicator.rotation.y = atan2(direction.x, direction.z)
-	_aim_material.albedo_color = Color(1, 1, 1, 0.5) if arrows > 0 else Color(1, 0.3, 0.3, 0.5)
+	_aim_material.albedo_color = Color.WHITE if arrows > 0 else Color(1, 0.35, 0.3)
 	_aim_indicator.visible = is_local()
+	if is_local():
+		_update_aim_lock(direction)
 
 
 func clear_aim() -> void:
 	look_override = Vector3.ZERO
 	_aim_indicator.visible = false
+	if _aim_lock:
+		_aim_lock.visible = false
 
 
 func is_aiming() -> bool:
@@ -463,7 +487,17 @@ func shoot(direction: Vector3 = Vector3.ZERO) -> void:
 
 ## Nudges an aimed direction onto an enemy that is almost in line with it.
 func _assisted(direction: Vector3) -> Vector3:
-	var best := direction
+	var target := _assist_target(direction)
+	if target == null:
+		return direction
+	var to := target.global_position - global_position
+	to.y = 0.0
+	return to.normalized()
+
+
+## The enemy an aimed shot toward `direction` snaps to (null if none).
+func _assist_target(direction: Vector3) -> Node3D:
+	var best: Node3D = null
 	var best_angle := deg_to_rad(aim_assist_degrees)
 	for group in TARGET_GROUPS:
 		for node in get_tree().get_nodes_in_group(group):
@@ -476,39 +510,85 @@ func _assisted(direction: Vector3) -> Vector3:
 			var angle := direction.angle_to(to)
 			if angle < best_angle:
 				best_angle = angle
-				best = to.normalized()
+				best = node
 	return best
 
 
+## Short tapered aim line that fades out, with an arrowhead (the arrow flies farther), plus a ring that
+## locks onto the enemy the aim assist will hit. Local player only.
 func _build_aim_indicator() -> void:
-	var probe := arrow_scene.instantiate() as ArrowProjectile
-	var arrow_range := probe.speed * probe.lifetime
-	probe.free()
 	_aim_material = StandardMaterial3D.new()
 	_aim_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	_aim_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	_aim_material.albedo_color = Color(1, 1, 1, 0.5)
+	_aim_material.vertex_color_use_as_albedo = true
+	_aim_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_aim_material.albedo_color = Color.WHITE
 	_aim_indicator = Node3D.new()
 	_aim_indicator.visible = false
 	add_child(_aim_indicator)
-	# Line along +Z (models face +Z, so rotation.y uses the same atan2(x, z) as facing).
-	var line := PlaneMesh.new()
-	line.size = Vector2(AIM_LINE_WIDTH, arrow_range - 0.6)
-	_add_indicator_part(line, Vector3(0, 0.05, 0.6 + (arrow_range - 0.6) * 0.5), 0.0)
-	# Diamond tip at the end of the range.
-	var tip := PlaneMesh.new()
-	tip.size = Vector2(0.45, 0.45)
-	_add_indicator_part(tip, Vector3(0, 0.05, arrow_range), PI * 0.25)
+	# Along +Z (models face +Z, so rotation.y uses the same atan2(x, z) as facing).
+	var mesh := ImmediateMesh.new()
+	mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES, _aim_material)
+	var start := 0.55
+	var head := AIM_LINE_LENGTH - 0.5
+	var steps := 10
+	for i in steps:
+		var z0 := lerpf(start, head, float(i) / steps)
+		var z1 := lerpf(start, head, float(i + 1) / steps)
+		var w0 := lerpf(AIM_LINE_WIDTH, AIM_LINE_WIDTH * 0.35, float(i) / steps) * 0.5
+		var w1 := lerpf(AIM_LINE_WIDTH, AIM_LINE_WIDTH * 0.35, float(i + 1) / steps) * 0.5
+		var c0 := Color(1, 1, 1, lerpf(0.6, 0.18, float(i) / steps))
+		var c1 := Color(1, 1, 1, lerpf(0.6, 0.18, float(i + 1) / steps))
+		_aim_quad(mesh, Vector3(-w0, 0.05, z0), Vector3(w0, 0.05, z0), Vector3(w1, 0.05, z1), Vector3(-w1, 0.05, z1), c0, c1)
+	# Arrowhead (chevron) at the end.
+	var tip_color := Color(1, 1, 1, 0.75)
+	for side in [-1.0, 1.0]:
+		var outer := Vector3(side * 0.32, 0.05, head - 0.05)
+		var inner := Vector3(side * 0.2, 0.05, head - 0.12)
+		mesh.surface_set_color(tip_color)
+		mesh.surface_add_vertex(Vector3(0, 0.05, AIM_LINE_LENGTH))
+		mesh.surface_add_vertex(outer)
+		mesh.surface_add_vertex(inner)
+		mesh.surface_add_vertex(Vector3(0, 0.05, AIM_LINE_LENGTH))
+		mesh.surface_add_vertex(inner)
+		mesh.surface_add_vertex(Vector3(0, 0.05, AIM_LINE_LENGTH - 0.14))
+	mesh.surface_end()
+	var line := MeshInstance3D.new()
+	line.mesh = mesh
+	line.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_aim_indicator.add_child(line)
+	# Target lock ring (top level: sits under the target, not on the rotating line).
+	var ring_material := StandardMaterial3D.new()
+	ring_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	ring_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	ring_material.albedo_texture = AIM_LOCK_TEXTURE
+	ring_material.albedo_color = Color(1.0, 0.85, 0.4, 0.9)
+	var quad := PlaneMesh.new()
+	quad.size = Vector2.ONE
+	quad.material = ring_material
+	_aim_lock = MeshInstance3D.new()
+	_aim_lock.mesh = quad
+	_aim_lock.top_level = true
+	_aim_lock.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_aim_lock.visible = false
+	add_child(_aim_lock)
 
 
-func _add_indicator_part(mesh: PlaneMesh, at: Vector3, yaw: float) -> void:
-	mesh.material = _aim_material
-	var part := MeshInstance3D.new()
-	part.mesh = mesh
-	part.position = at
-	part.rotation.y = yaw
-	part.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	_aim_indicator.add_child(part)
+func _aim_quad(mesh: ImmediateMesh, a: Vector3, b: Vector3, c: Vector3, d: Vector3, near: Color, far: Color) -> void:
+	for vertex in [[a, near], [b, near], [c, far], [a, near], [c, far], [d, far]]:
+		mesh.surface_set_color(vertex[1])
+		mesh.surface_add_vertex(vertex[0])
+
+
+## Local aim visuals: lock ring under the assisted target (spins slowly), or hidden.
+func _update_aim_lock(direction: Vector3) -> void:
+	var target := _assist_target(direction)
+	_aim_lock.visible = target != null
+	if target:
+		var size := 1.2 * sqrt(maxf(Unit.target_radius(target), 0.35) / 0.35)
+		_aim_lock.global_position = target.global_position + Vector3(0, 0.06, 0)
+		_aim_lock.scale = Vector3(size, 1.0, size)
+		_aim_lock.rotation.y = Time.get_ticks_msec() * 0.002
 
 
 ## Short orange wedge in front of the archer while aiming the sword.

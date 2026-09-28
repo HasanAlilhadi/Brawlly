@@ -119,6 +119,36 @@ static func flash(at: Vector3, texture: Texture2D, color: Color, size: float, li
 	tween.chain().tween_callback(sprite.queue_free)
 
 
+## A flat additive sprite lying in the swing plane (yaw = facing, like `atan2(x, z)`), sweeping and fading out.
+static func slash(at: Vector3, yaw: float, texture: Texture2D, color: Color, size: float, lifetime: float = 0.2) -> void:
+	if not is_instance_valid(world) or texture == null:
+		return
+	if not _flash_materials.has(texture):
+		var material := StandardMaterial3D.new()
+		material.albedo_texture = texture
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		material.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		material.cull_mode = BaseMaterial3D.CULL_DISABLED
+		material.albedo_color = color
+		_flash_materials[texture] = material
+	var quad := PlaneMesh.new()
+	quad.size = Vector2.ONE
+	var sprite := MeshInstance3D.new()
+	sprite.mesh = quad
+	sprite.material_override = _flash_materials[texture]
+	sprite.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	world.add_child(sprite)
+	sprite.global_position = at
+	sprite.rotation.y = yaw + PI
+	sprite.scale = Vector3.ONE * size * 0.75
+	var tween := sprite.create_tween().set_parallel(true)
+	tween.tween_property(sprite, "scale", Vector3.ONE * size, lifetime).set_ease(Tween.EASE_OUT)
+	tween.tween_property(sprite, "rotation:y", yaw + PI - 0.5, lifetime).from(yaw + PI + 0.5).set_ease(Tween.EASE_OUT)
+	tween.tween_property(sprite, "transparency", 1.0, lifetime).from(0.0).set_ease(Tween.EASE_IN)
+	tween.chain().tween_callback(sprite.queue_free)
+
+
 static func _flash_material(texture: Texture2D, additive: bool) -> StandardMaterial3D:
 	var key := [texture, additive]
 	if _flash_materials.has(key):
