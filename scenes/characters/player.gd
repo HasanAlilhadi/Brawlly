@@ -97,7 +97,7 @@ var revive_progress: float = 0.0:
 		revive_progress = value
 		if _revive_bar:
 			_revive_bar.set_ratio(value)
-			_revive_bar.visible = _shows_downed_label()
+			_revive_bar.visible = _shows_revive_bar()
 ## Whole seconds left before a downed archer bleeds out (replicated for the HUD / label).
 var bleed_seconds: int = 0:
 	set(value):
@@ -656,7 +656,7 @@ func _apply_downed() -> void:
 	move_speed = _base_move_speed * (DOWNED_SPEED if is_downed else 1.0)
 	var show_world_label := _shows_downed_label()
 	_downed_label.visible = show_world_label
-	_revive_bar.visible = show_world_label
+	_revive_bar.visible = _shows_revive_bar()
 	_name_label.position.y = DOWNED_LABEL_HEIGHT if is_downed else health_bar_height + 0.28
 	_name_label.offset.y = DOWNED_NAME_OFFSET if is_downed else 0.0
 	_health_bar.visible = false
@@ -681,6 +681,11 @@ func _apply_downed() -> void:
 ## The downed player sees the HUD card instead of floating labels over their own body.
 func _shows_downed_label() -> bool:
 	return is_downed and not is_local()
+
+
+## Only while someone is reviving: an empty bar is just a dark strip.
+func _shows_revive_bar() -> bool:
+	return _shows_downed_label() and revive_progress > 0.0
 
 
 func _build_downed_visuals() -> void:
