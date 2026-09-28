@@ -47,8 +47,9 @@ const DOWNED_SPEED: float = 0.3
 const DOWNED_ANIMS := preload("res://assets/characters/animations/archer_downed.glb")
 const DOWNED_CLIPS: Array[String] = ["crawl", "downed"]
 const REVIVE_RING_TEXTURE := preload("res://assets/vfx/light_masks/ring_a.png")
-## One weapon in hand at a time, at most this many carried (Q / Y / the HUD button switches).
-const MAX_WEAPONS: int = 2
+## One weapon in hand at a time, at most this many carried (Q / Y / the HUD button cycles them):
+## the sword plus the bow and the spear once both are bought.
+const MAX_WEAPONS: int = 3
 ## Weapon id -> how it works. `melee` weapons swing (sword stick / left mouse); the others are aimed
 ## and fired (bow stick / aim): the bow shoots arrows (ammo), the spear is thrown (no ammo, slower).
 ## `hand` holds the model; `icon` is a Game Icon Pack glyph. New weapon = a row here + its model in
@@ -305,13 +306,17 @@ func has_ammo() -> bool:
 	return true
 
 
-## Server: shop purchase of a second weapon (bow or spear). You keep the sword and carry one of the
-## two: buying the other replaces it. The new weapon goes straight into your hand.
+## Server: shop purchase of the bow or the spear. Bought weapons stay unlocked: buy both and Q cycles
+## sword, bow and spear (kept in WEAPONS order). The new weapon goes straight into your hand.
 func buy_weapon(weapon: String) -> void:
-	if not WEAPONS.has(weapon) or weapon == "sword":
+	if not WEAPONS.has(weapon) or weapon == "sword" or weapons.has(weapon):
 		return
-	weapons = PackedStringArray(["sword", weapon])
-	weapon_index = 1
+	var carried := PackedStringArray()
+	for id: String in WEAPONS:
+		if weapons.has(id) or id == weapon:
+			carried.append(id)
+	weapons = carried
+	weapon_index = carried.find(weapon)
 	if weapon == "spear":
 		spears = maxi(spears, spear_start)
 	_apply_weapon()

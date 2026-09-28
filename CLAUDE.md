@@ -91,13 +91,13 @@ by touch index so the joystick and buttons work together with multi-touch.
   menus (Project Settings), gold sword in matches (main.gd).
 - Flow: `main_menu.tscn` (run scene) → `main.tscn`; `PauseMenu` in `main.tscn`, disabled on game over.
 - Anything damageable implements `take_damage(amount, attacker = null, is_melee = true)`.
-- **Weapons**: the player starts with the sword and can buy ONE second weapon, bow or spear (shop items `weapon_bow` /
-  `weapon_spear`, 500 coins, `Player.buy_weapon()` replaces the other). Base damage: sword 40, bow 25 (arrows),
+- **Weapons**: the player starts with the sword and can buy the bow and the spear (shop items `weapon_bow` /
+  `weapon_spear`, 500 coins each; `Player.buy_weapon()` keeps what was bought, so Q cycles all of them). Base damage: sword 40, bow 25 (arrows),
   spear 35 (thrown `player_spear` projectile, no ammo, `spear_cooldown` 1 s vs bow 0.4 s). Sharp Blade boosts the
   sword, Keen Points the bow and spear. Ammo: arrows (bow) and `spears` (max 8, 6 when bought); ammo pickups
   (`Pickup.Kind.ARROWS` / `SPEARS`) only go to players carrying that weapon (`Player.can_collect`). Chests are
   broken open by any weapon (group `breakable`, 60 hp), not opened by walking up. Shots fly at 0.55–0.7 m, so
-  anything hittable needs collision up to `GameConfig.HIT_HEIGHT` (1 m); aim assist falls back to breakables. The player carries `Player.weapons` (≤ `MAX_WEAPONS` = 2, ids from `Player.WEAPONS`) and holds one
+  anything hittable needs collision up to `GameConfig.HIT_HEIGHT` (1 m); aim assist falls back to breakables. The player carries `Player.weapons` (≤ `MAX_WEAPONS` = 3, ids from `Player.WEAPONS`) and holds one
   (`weapon_index`, replicated); `switch_weapon()` (server; Q / Y / HUD button via `request_switch_weapon`), `give_weapon(id)`
   for pickups. Melee / shoot functions refuse the weapon not in hand; attack keys and left mouse use the one in hand.
   New weapon (e.g. spear) = a `WEAPONS` row + its model in `_weapon_items` + an icon in `Hud._weapon_icons`.

@@ -260,9 +260,11 @@ func _on_health_changed(current: float, maximum: float) -> void:
 func _on_arrows_changed(_count: int = 0) -> void:
 	if _player == null:
 		return
-	var spear := _player.weapons.has("spear")
+	# Ammo of the ranged weapon in hand; with the sword in hand, of the carried one (bow first).
+	var held := _player.current_weapon()
+	var spear := held == "spear" or (held != "bow" and not _player.weapons.has("bow") and _player.weapons.has("spear"))
 	var ammo := _player.spears if spear else _player.arrows
-	var ranged := spear or _player.weapons.has("bow")
+	var ranged := _player.weapons.has("spear") or _player.weapons.has("bow")
 	arrows_label.text = str(ammo)
 	arrows_label.visible = ranged
 	_arrow_icon.visible = ranged
