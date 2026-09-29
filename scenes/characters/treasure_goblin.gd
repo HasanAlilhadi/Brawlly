@@ -49,6 +49,7 @@ func _ready() -> void:
 	add_to_group(&"active_enemies")
 	set_meta(&"marker_color", Color(1.0, 0.82, 0.2))
 	set_meta(&"marker_label", "Treasure Goblin")
+	set_meta(&"marker_icon", preload("res://assets/ui/icons/game/coin.svg"))
 	add_to_group(&"tracked")
 	_stamina = sprint_time
 	_wander_point = global_position

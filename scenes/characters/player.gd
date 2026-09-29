@@ -22,22 +22,26 @@ signal revived(player: Player, helpers: Array)
 ## Every peer: the downed state changed (visuals, HUD).
 signal downed_changed(downed: bool)
 signal army_order_changed(order: int)
+## Every peer: a trained soldier is waiting in the barracks pen.
+signal soldier_ready
 ## Every peer: the weapon in hand changed (id from WEAPONS).
 signal weapon_changed(weapon: String)
 
-enum Order { FOLLOW, CHARGE, HOLD }
+## KILL: every soldier hunts `army_target` down (then they charge where it fell).
+enum Order { FOLLOW, CHARGE, HOLD, KILL }
 
 const TARGET_GROUPS: Array[StringName] = [&"active_enemies", &"player_units", &"camps"]
 const AIM_LINE_WIDTH: float = 0.2
 ## Aim line length on the ground (arrows fly farther: speed × lifetime of the arrow scene).
 const AIM_LINE_LENGTH: float = 5.0
-const AIM_LOCK_TEXTURE := preload("res://assets/vfx/light_masks/circle_rings_b.png")
 ## Aimed sword swings snap to an enemy within this angle / distance.
 const MELEE_ASSIST_DEGREES: float = 35.0
 const MELEE_ASSIST_RANGE: float = 2.4
 const CATALOG := preload("res://resources/data/upgrade_catalog.tres")
 const BLEED_TIME: float = 15.0
 const REVIVE_TIME: float = 3.0
+## Seconds between soldiers filing out of a barracks pen.
+const EXIT_INTERVAL: float = 0.2
 const REVIVE_RANGE: float = 1.8
 ## Health fraction after a revive.
 const REVIVE_HEALTH: float = 0.4
@@ -72,6 +76,10 @@ const DOWNED_HELP_OFFSET: float = 46.0
 const DOWNED_NAME_OFFSET: float = 104.0
 ## Charge orders reach at most this far from the player.
 const MAX_ORDER_DISTANCE: float = 25.0
+## A kill order takes the enemy within this distance of the ordered point (the client sends the enemy's position).
+const KILL_PICK_RADIUS: float = 2.0
+## What a kill order can target (hostile ones only).
+const KILL_GROUPS: Array[StringName] = [&"active_enemies", &"enemies", &"player_units", &"camps"]
 
 @export var max_arrows: int = 99
 @export var arrow_damage: float = 25.0
@@ -83,8 +91,6 @@ const MAX_ORDER_DISTANCE: float = 25.0
 ## Spears in hand when you buy the spear.
 @export var spear_start: int = 6
 @export var aim_range: float = 12.0
-## Aimed shots snap to an enemy within this angle of the aim direction.
-@export var aim_assist_degrees: float = 10.0
 @export var arrow_scene: PackedScene
 ## Chance and multiplier for critical hits (sword and arrows).
 @export_range(0.0, 1.0) var crit_chance: float = 0.15
@@ -112,9 +118,18 @@ var coins: int = 0:
 	set(value):
 		coins = value
 		coins_changed.emit(coins)
-## Freed soldiers waiting to replace fallen followers (over the follower cap).
-var reserve_soldiers: int = 0
-## Max soldiers following at once (raised by the "command" upgrade).
+## Soldiers bought at the barracks that are still training (replicated). They train one after another,
+## GameConfig.SOLDIER_TRAIN_TIME seconds each, then wait in the pen until the player takes them (collect_soldiers).
+var soldiers_training: int = 0:
+	set(value):
+		value = maxi(value, 0)
+		# Every peer keeps a copy of the countdowns for the barracks sign / shop (server: the real ones).
+		while _training_left.size() < value:
+			_training_left.append(GameConfig.SOLDIER_TRAIN_TIME)
+		while _training_left.size() > value:
+			_training_left.remove_at(0)
+		soldiers_training = value
+## Max army size: following + in the pen + in training (raised by the "command" upgrade).
 var follower_cap: int = GameConfig.BASE_FOLLOWER_CAP
 ## Upgrade id -> times bought. Always replaced (not mutated) so replication notices changes.
 var upgrade_levels: Dictionary = {}:
@@ -140,13 +155,23 @@ var bleed_seconds: int = 0:
 		bleed_seconds = value
 		if _downed_label:
 			_downed_label.text = "HELP!  %d" % value
+## Seconds left for each soldier in training, oldest first (only the first one counts down).
+var _training_left: Array[float] = []
+## Server: the barracks each soldier in training was bought at (its pen), same order.
+var _training_stalls: Array[ShopStation] = []
 var army_order: int = Order.FOLLOW:
 	set(value):
 		if value != army_order:
 			army_order = value
 			army_order_changed.emit(value)
-## Where soldiers charge to / hold (valid for CHARGE and HOLD).
+## Where soldiers charge to / hold (valid for CHARGE and HOLD; KILL: where the target was when ordered).
 var army_point: Vector3 = Vector3.ZERO
+## Server: the enemy (unit or camp) a KILL order hunts.
+var army_target: Node3D
+## Replicated: path of `army_target` (empty unless KILL), so the owner sees a mark over it.
+var army_target_path: NodePath = NodePath()
+## Server: +1 on every order (also the same one again), so soldiers drop what they're doing and obey.
+var order_serial: int = 0
 ## Carried weapon ids (at most MAX_WEAPONS, see WEAPONS) and which one is in hand. Always replaced,
 ## not mutated, so replication notices changes.
 var weapons: PackedStringArray = PackedStringArray(["sword"]):
@@ -168,7 +193,6 @@ var _shoot_timer: float = 0.0
 var _pending_shot: Vector3 = Vector3.ZERO  # aimed shot released during cooldown
 var _aim_indicator: Node3D
 var _aim_material: StandardMaterial3D
-var _aim_lock: MeshInstance3D
 var _melee_aim: Vector3 = Vector3.ZERO
 var _melee_indicator: Node3D
 var _name_label: Label3D
@@ -352,19 +376,25 @@ func has_ammo() -> bool:
 	return true
 
 
-## Server: shop purchase of the bow or the spear. Bought weapons stay unlocked: buy both and Q cycles
+## Server: purchase of the bow or the spear (Bows & Spears stall). Bought weapons stay unlocked: buy both and Q cycles
 ## sword, bow and spear (kept in WEAPONS order). The new weapon goes straight into your hand.
 func buy_weapon(weapon: String) -> void:
 	if not WEAPONS.has(weapon) or weapon == "sword" or weapons.has(weapon):
 		return
+	_carry_weapon(weapon, true)
+	if weapon == "spear":
+		spears = maxi(spears, spear_start)
+
+
+## Server: adds `weapon` to the carried ones (kept in WEAPONS order), optionally straight into your hand.
+func _carry_weapon(weapon: String, take_in_hand: bool) -> void:
+	var in_hand := weapon if take_in_hand else current_weapon()
 	var carried := PackedStringArray()
 	for id: String in WEAPONS:
 		if weapons.has(id) or id == weapon:
 			carried.append(id)
 	weapons = carried
-	weapon_index = carried.find(weapon)
-	if weapon == "spear":
-		spears = maxi(spears, spear_start)
+	weapon_index = maxi(carried.find(in_hand), 0)
 	_apply_weapon()
 
 
@@ -564,15 +594,11 @@ func set_aim(direction: Vector3) -> void:
 	_aim_indicator.rotation.y = atan2(direction.x, direction.z)
 	_aim_material.albedo_color = Color.WHITE if has_ammo() else Color(1, 0.35, 0.3)
 	_aim_indicator.visible = is_local()
-	if is_local():
-		_update_aim_lock(direction)
 
 
 func clear_aim() -> void:
 	look_override = Vector3.ZERO
 	_aim_indicator.visible = false
-	if _aim_lock:
-		_aim_lock.visible = false
 
 
 func is_aiming() -> bool:
@@ -598,8 +624,9 @@ func shoot(direction: Vector3 = Vector3.ZERO) -> void:
 		var target := find_nearest(TARGET_GROUPS, aim_range, global_position, {&"camps": 3.0})
 		direction = _flat_dir_to(target) if target else facing()
 	else:
+		# Aimed: exactly where the player aims (no snapping onto a target).
 		direction.y = 0.0
-		direction = _assisted(direction.normalized())
+		direction = direction.normalized()
 	face_now(direction)
 	var crit := randf() < crit_chance
 	var multiplier := crit_multiplier if crit else 1.0
@@ -612,47 +639,7 @@ func shoot(direction: Vector3 = Vector3.ZERO) -> void:
 		NetSpawn.projectile(&"arrow", from, direction, arrow_damage * multiplier, self, crit)
 
 
-## Nudges an aimed direction onto an enemy that is almost in line with it.
-func _assisted(direction: Vector3) -> Vector3:
-	var target := _assist_target(direction)
-	if target == null:
-		return direction
-	var to := target.global_position - global_position
-	to.y = 0.0
-	return to.normalized()
-
-
-## The enemy an aimed shot toward `direction` snaps to — or, with no enemy in line, a chest (or
-## other breakable) — null if none.
-func _assist_target(direction: Vector3) -> Node3D:
-	var best: Node3D = null
-	var best_angle := deg_to_rad(aim_assist_degrees)
-	for group in TARGET_GROUPS:
-		for node in get_tree().get_nodes_in_group(group):
-			if node != self and GameConfig.is_hostile(self, node) and _assist_angle(direction, node) < best_angle:
-				best_angle = _assist_angle(direction, node)
-				best = node
-	if best == null:
-		for node in get_tree().get_nodes_in_group(&"breakable"):
-			if _assist_angle(direction, node) < best_angle:
-				best_angle = _assist_angle(direction, node)
-				best = node
-	return best
-
-
-## Angle between `direction` and a live `node` within aim range (INF if gone or out of range).
-func _assist_angle(direction: Vector3, node: Node) -> float:
-	if GameConfig.is_gone(node):
-		return INF
-	var to := (node as Node3D).global_position - global_position
-	to.y = 0.0
-	if to.length() > aim_range or to.length() < 0.1:
-		return INF
-	return direction.angle_to(to)
-
-
-## Short tapered aim line that fades out, with an arrowhead (the arrow flies farther), plus a ring that
-## locks onto the enemy the aim assist will hit. Local player only.
+## Short tapered aim line that fades out, with an arrowhead (the arrow flies farther). Local player only.
 func _build_aim_indicator() -> void:
 	_aim_material = StandardMaterial3D.new()
 	_aim_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -694,38 +681,12 @@ func _build_aim_indicator() -> void:
 	line.mesh = mesh
 	line.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_aim_indicator.add_child(line)
-	# Target lock ring (top level: sits under the target, not on the rotating line).
-	var ring_material := StandardMaterial3D.new()
-	ring_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	ring_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	ring_material.albedo_texture = AIM_LOCK_TEXTURE
-	ring_material.albedo_color = Color(1.0, 0.85, 0.4, 0.9)
-	var quad := PlaneMesh.new()
-	quad.size = Vector2.ONE
-	quad.material = ring_material
-	_aim_lock = MeshInstance3D.new()
-	_aim_lock.mesh = quad
-	_aim_lock.top_level = true
-	_aim_lock.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	_aim_lock.visible = false
-	add_child(_aim_lock)
 
 
 func _aim_quad(mesh: ImmediateMesh, a: Vector3, b: Vector3, c: Vector3, d: Vector3, near: Color, far: Color) -> void:
 	for vertex in [[a, near], [b, near], [c, far], [a, near], [c, far], [d, far]]:
 		mesh.surface_set_color(vertex[1])
 		mesh.surface_add_vertex(vertex[0])
-
-
-## Local aim visuals: lock ring under the assisted target (spins slowly), or hidden.
-func _update_aim_lock(direction: Vector3) -> void:
-	var target := _assist_target(direction)
-	_aim_lock.visible = target != null
-	if target:
-		var size := 1.2 * sqrt(maxf(Unit.target_radius(target), 0.35) / 0.35)
-		_aim_lock.global_position = target.global_position + Vector3(0, 0.06, 0)
-		_aim_lock.scale = Vector3(size, 1.0, size)
-		_aim_lock.rotation.y = Time.get_ticks_msec() * 0.002
 
 
 ## Short orange wedge in front of the archer while aiming the sword.
@@ -785,6 +746,8 @@ func can_collect(kind: Pickup.Kind) -> bool:
 			return health < max_health
 		Pickup.Kind.COIN:
 			return true
+		Pickup.Kind.WEAPON_BOW, Pickup.Kind.WEAPON_SPEAR:
+			return not weapons.has(Pickup.weapon_of(kind))
 	return false
 
 
@@ -801,15 +764,112 @@ func collect(kind: Pickup.Kind, amount: int) -> bool:
 		Pickup.Kind.COIN:
 			coins += amount
 			MatchStats.add(peer_id, &"coins", amount)
+		Pickup.Kind.WEAPON_BOW, Pickup.Kind.WEAPON_SPEAR:
+			_carry_weapon(Pickup.weapon_of(kind), false)
 	return true
+
+
+## Server, online: a real death (not downed) drops the bow / spear you carry and their ammo for anyone
+## to pick up. Coins and the sword stay with you.
+func _drop_items() -> void:
+	var at := global_position
+	if weapons.has("bow"):
+		Pickup.drop(null, at, Pickup.Kind.WEAPON_BOW, 1)
+		Pickup.drop(null, at, Pickup.Kind.ARROWS, arrows)
+		arrows = 0
+	if weapons.has("spear"):
+		Pickup.drop(null, at, Pickup.Kind.WEAPON_SPEAR, 1)
+		Pickup.drop(null, at, Pickup.Kind.SPEARS, spears)
+		spears = 0
+	weapons = PackedStringArray(["sword"])
+	weapon_index = 0
 
 
 # --- Army ---------------------------------------------------------------------
 
 ## This player's soldiers currently in the world.
+## Soldiers following this player (not the ones still waiting in a barracks pen).
 func followers() -> Array[Node]:
 	return get_tree().get_nodes_in_group(&"allies").filter(
+			func(ally: Node) -> bool: return ally.get("owner_peer") == peer_id and not ally.get("is_dead") \
+					and not ally.get("penned"))
+
+
+## Trained soldiers waiting in a barracks pen for this player.
+func penned_soldiers() -> Array[Node]:
+	return get_tree().get_nodes_in_group(&"penned").filter(
 			func(ally: Node) -> bool: return ally.get("owner_peer") == peer_id and not ally.get("is_dead"))
+
+
+## Everything that counts toward follower_cap: following + waiting in the pen + in training.
+func army_size() -> int:
+	return followers().size() + penned_soldiers().size() + soldiers_training
+
+
+## Seconds until the next soldier in training is ready (0 = none training).
+func next_soldier_in() -> float:
+	return _training_left[0] if not _training_left.is_empty() else 0.0
+
+
+# --- Barracks (server) ----------------------------------------------------------------
+
+func _physics_process(delta: float) -> void:
+	super(delta)
+	# A queue: the next soldier starts training when the one before it is ready.
+	if not _training_left.is_empty():
+		_training_left[0] = maxf(_training_left[0] - delta, 0.0)
+	if multiplayer.is_server() and not _training_left.is_empty() and _training_left[0] <= 0.0:
+		_finish_training()
+	if multiplayer.is_server() and army_order == Order.KILL:
+		_update_kill_order()
+
+
+## The oldest soldier in training is ready: it appears in the pen of the barracks it was bought at.
+func _finish_training() -> void:
+	var stall: ShopStation = _training_stalls.pop_front() if not _training_stalls.is_empty() else null
+	soldiers_training -= 1
+	if not is_instance_valid(stall):
+		return
+	NetSpawn.unit(&"ally", stall.pen_spot(), {"team": team_id, "owner": peer_id, "color": unit_color,
+			"pen": stall.get_path()})
+	_net_soldier_ready.rpc()
+
+
+@rpc("authority", "call_local", "reliable")
+func _net_soldier_ready() -> void:
+	soldier_ready.emit()
+
+
+## Server: every soldier waiting in a pen joins this player (they must stand at a barracks: its front
+## or its pen gate).
+func collect_soldiers() -> int:
+	if is_dead or is_downed:
+		return 0
+	var reach := ShopStation.INTERACT_RANGE + ShopStation.SERVER_SLACK
+	if ShopStation.nearest(self, reach, ShopStation.BARRACKS) == null and ShopStation.nearest_gate(self, reach) == null:
+		return 0
+	var soldiers := penned_soldiers()
+	# They file out one after another, closest to the gate first, spread over three lanes.
+	soldiers.sort_custom(func(a: Ally, b: Ally) -> bool:
+		return a.global_position.distance_to(a.pen.gate_inside()) < b.global_position.distance_to(b.pen.gate_inside()) \
+				if is_instance_valid(a.pen) and is_instance_valid(b.pen) else false)
+	for i in soldiers.size():
+		(soldiers[i] as Ally).release(i * EXIT_INTERVAL, [0.0, -0.7, 0.7][i % 3])
+	return soldiers.size()
+
+
+## Takes the soldiers waiting in the pen (server; clients ask it).
+func request_collect_soldiers() -> void:
+	if multiplayer.is_server():
+		collect_soldiers()
+	else:
+		net_collect_soldiers.rpc_id(1)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func net_collect_soldiers() -> void:
+	if _from_owner():
+		collect_soldiers()
 
 
 # --- Economy ------------------------------------------------------------------
@@ -835,6 +895,8 @@ func is_upgrade_useful(def: UpgradeDef) -> bool:
 			return not weapons.has("spear")
 		&"potion":
 			return health < max_health
+		&"recruit":
+			return army_size() < follower_cap
 		&"arrows":
 			return weapons.has("bow") and arrows < max_arrows
 		&"quiver":
@@ -846,8 +908,10 @@ func is_upgrade_useful(def: UpgradeDef) -> bool:
 	return true
 
 
+## Only at a trading post stall that sells `def` (checked on the server too).
 func can_buy(def: UpgradeDef) -> bool:
-	return not is_dead and not is_downed and not is_upgrade_maxed(def) and is_upgrade_useful(def) and coins >= upgrade_cost(def)
+	return not is_dead and not is_downed and not is_upgrade_maxed(def) and is_upgrade_useful(def) \
+			and coins >= upgrade_cost(def) and ShopStation.can_buy_here(self, def)
 
 
 ## Buys on the server; on clients sends the request to the server.
@@ -893,7 +957,10 @@ func _apply_upgrade(def: UpgradeDef) -> void:
 		&"command":
 			follower_cap += int(def.amount)
 		&"recruit":
-			reserve_soldiers += int(def.amount)
+			for i in int(def.amount):
+				_training_stalls.append(ShopStation.nearest(self, ShopStation.INTERACT_RANGE + ShopStation.SERVER_SLACK,
+						ShopStation.BARRACKS))
+				soldiers_training += 1
 		&"potion":
 			heal(def.amount)
 		&"arrows":
@@ -920,6 +987,8 @@ func die() -> void:
 	clear_aim()
 	set_melee_aim(Vector3.ZERO)
 	joystick_vector = Vector2.ZERO
+	if Net.is_online() and multiplayer.is_server():
+		_drop_items()
 	super()
 
 
@@ -927,6 +996,9 @@ func die() -> void:
 func revive(at: Vector3) -> void:
 	is_downed = false
 	army_order = Order.FOLLOW
+	army_target = null
+	army_target_path = NodePath()
+	order_serial += 1
 	add_to_group(&"player_units")
 	super(at)
 
@@ -1021,6 +1093,7 @@ func _apply_downed() -> void:
 	if is_downed and teammate:
 		set_meta(&"marker_color", Color(0.4, 1.0, 0.45))
 		set_meta(&"marker_label", "%s down!" % display_name)
+		set_meta(&"marker_icon", preload("res://assets/ui/icons/game/medical_kit.svg"))
 		add_to_group(&"tracked")
 	else:
 		remove_from_group(&"tracked")
@@ -1072,14 +1145,54 @@ func _build_downed_visuals() -> void:
 # --- Army orders (server) ------------------------------------------------------------
 
 ## FOLLOW: formation around the player. CHARGE: run to `point` and fight everything there.
-## HOLD: guard `point`.
+## HOLD: guard `point`. KILL: hunt the enemy at `point` (none there → CHARGE `point`).
+## Every order is obeyed at once: soldiers drop their fight and go (see Ally._obey).
 func command_army(order: int, point: Vector3) -> void:
 	if is_dead:
 		return
+	order = clampi(order, Order.FOLLOW, Order.KILL)
 	var offset := point - global_position
 	offset.y = 0.0
 	army_point = GameConfig.clamp_to_world(global_position + offset.limit_length(MAX_ORDER_DISTANCE))
-	army_order = clampi(order, Order.FOLLOW, Order.HOLD)
+	army_target = null
+	if order == Order.KILL:
+		army_target = kill_target_near(point)
+		if army_target:
+			army_point = army_target.global_position
+		else:
+			order = Order.CHARGE  # missed: charge there
+	army_target_path = army_target.get_path() if army_target else NodePath()
+	army_order = order
+	order_serial += 1
+
+
+## The hostile unit / camp closest to `point` (within `radius`), for a kill order.
+func kill_target_near(point: Vector3, radius: float = KILL_PICK_RADIUS) -> Node3D:
+	var best: Node3D = null
+	var best_dist := radius
+	for group in KILL_GROUPS:
+		for node in get_tree().get_nodes_in_group(group):
+			var candidate := node as Node3D
+			if candidate == null or GameConfig.is_gone(candidate) or not GameConfig.is_hostile(self, candidate) \
+					or candidate.is_in_group(&"penned"):
+				continue
+			var reach: float = Unit.target_radius(candidate) if candidate is Camp else 0.0
+			var d := Vector2(candidate.global_position.x - point.x, candidate.global_position.z - point.z).length() - reach
+			if d < best_dist:
+				best_dist = d
+				best = candidate
+	return best
+
+
+## Server: while hunting, keep the point on the target; once it's dead, charge where it fell.
+func _update_kill_order() -> void:
+	if not GameConfig.is_gone(army_target):
+		if army_target.global_position.distance_to(army_point) > 1.5:
+			army_point = army_target.global_position  # quantized: only when it moved a bit
+		return
+	army_target = null
+	army_target_path = NodePath()
+	army_order = Order.CHARGE
 
 
 @rpc("any_peer", "call_remote", "reliable")

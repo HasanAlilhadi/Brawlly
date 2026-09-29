@@ -1,7 +1,7 @@
 extends Node
 ## World events + army orders + pings + awards (solo):
 ## treasure goblin flees / drops coins / gets caught, soldiers hold / charge / follow, the Warlord
-## marches in with its warband which joins the player when it falls, a ping shows, awards at the end.
+## marches in with its warband which is routed when it falls, a ping shows, awards at the end.
 ##   "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/events_test.gd
 
 var t := 0.0
@@ -15,6 +15,7 @@ var start_dist := 0.0
 var coins_before := 0
 var point := Vector3.ZERO
 var failures := 0
+var wave_warning_checked := false
 
 
 func _ready() -> void:
@@ -97,7 +98,9 @@ func _process(delta: float) -> void:
 				for orc in get_tree().get_nodes_in_group(&"active_enemies"):
 					if (orc as Node3D).global_position.distance_to(player.global_position) < 25.0:
 						orc.queue_free()
-				player.reserve_soldiers = 6
+				for i in 6:
+					NetSpawn.unit(&"ally", player.global_position + Vector3(cos(i), 0, sin(i)) * 3.0,
+							{"team": player.team_id, "owner": player.peer_id, "color": player.unit_color})
 				_next()
 		4:
 			if player.followers().size() >= 6 and pt > 2.0:
@@ -142,17 +145,42 @@ func _process(delta: float) -> void:
 				_check(warlord._band.size() >= 7, "warband raised (%d orcs)" % warlord._band.size())
 				var dist := warlord.global_position.distance_to(player.global_position)
 				_check(dist < start_dist - 5.0, "warlord marches on the player (%.1f -> %.1f m)" % [start_dist, dist])
-				start_dist = player.followers().size() + player.reserve_soldiers
+				start_dist = player.followers().size()
 				warlord.take_damage(1e7, player)
 				_next()
 		10:
 			if pt > 1.0:
-				var army := player.followers().size() + player.reserve_soldiers
-				_check(army > start_dist, "warband joins the player (%d -> %d soldiers)" % [start_dist, army])
+				var army := player.followers().size()
+				_check(army <= start_dist, "warband is routed, not recruited (%d -> %d soldiers)" % [start_dist, army])
+				_check(warlord._band.is_empty(), "warband cleared")
 				_check(main.match_stats.stat(1, &"warlord_kills") == 1.0, "warlord kill counted")
-				main.game_mode.finish("Test over", "")
+				_check(main.world_events._wave_scenes(1).size() == 10 \
+						and main.world_events._wave_scenes(2).size() == 20 \
+						and main.world_events._wave_scenes(5).size() == 50 \
+						and main.world_events._wave_scenes(8).size() == 50, "waves scale 10 -> 50 and cap")
+				_check(main.world_events.start_wave(0.1), "wave warning started")
 				_next()
 		11:
+			if pt > 0.03 and not wave_warning_checked:
+				wave_warning_checked = true
+				_check(get_tree().get_nodes_in_group(&"pings").size() >= 4, "four border warnings shown")
+			if pt > 1.0:
+				var raiders := get_tree().get_nodes_in_group(&"wave_enemies")
+				var at_edges := raiders.all(func(enemy: Enemy) -> bool:
+					return maxf(absf(enemy.global_position.x), absf(enemy.global_position.z)) > GameConfig.world_half - 9.0)
+				var hunting := raiders.all(func(enemy: Enemy) -> bool: return enemy.target == player)
+				_check(raiders.size() == 10, "wave 1 spawned 10 raiders (%d)" % raiders.size())
+				_check(at_edges, "wave raiders entered from the map borders")
+				_check(hunting, "wave raiders hunt the nearest player")
+				for enemy in raiders:
+					(enemy as Enemy).take_damage(1e7, player)
+				_next()
+		12:
+			if pt > 0.3:
+				_check(not main.world_events.wave_active, "wave clears only after all raiders fall")
+				main.game_mode.finish("Test over", "")
+				_next()
+		13:
 			if pt > 0.5:
 				var awards: Array = main.match_stats.compute_awards(main.game_mode.player_names())
 				_log("awards: %s" % [awards.map(func(a: Dictionary) -> String: return "%s (%s)" % [a.title, a.detail])])

@@ -1,18 +1,22 @@
 class_name Pickup
 extends Node3D
-## Item lying on the ground (arrows, spears, health or coins). Spins, gets pulled toward the nearest player
+## Item lying on the ground (arrows, spears, health, coins, or a weapon dropped by a dead player). Spins, gets pulled toward the nearest player
 ## who can use it, and is collected on contact. Disappears after a while.
 ## Multiplayer: spawned by the server through NetSpawn; every peer animates the pull, only the
 ## server decides who collects it (freeing it removes it everywhere).
 
-## Ammo (ARROWS / SPEARS) is only pulled to and collected by players carrying that weapon.
-enum Kind { ARROWS, HEALTH, COIN, SPEARS }
+## Ammo (ARROWS / SPEARS) is only pulled to and collected by players carrying that weapon; a weapon
+## (WEAPON_*) only by players who don't carry it yet. Append new kinds (the ids are sent over the network).
+enum Kind { ARROWS, HEALTH, COIN, SPEARS, WEAPON_BOW, WEAPON_SPEAR }
+## Weapon id (Player.WEAPONS) -> its pickup kind. The sword is never dropped.
+const WEAPON_KINDS: Dictionary = {"bow": Kind.WEAPON_BOW, "spear": Kind.WEAPON_SPEAR}
 
 const SCENE_PATH := "res://scenes/items/pickup.tscn"
 const ARROW_MODEL := preload("res://assets/items/forest/arrow.glb")
 const POTION_MODEL := preload("res://assets/items/dungeon/potion.glb")
 const COIN_MODEL := preload("res://assets/items/dungeon/coin.glb")
 const SPEAR_MODEL := preload("res://assets/items/dungeon/spear.glb")
+const BOW_MODEL := preload("res://assets/items/forest/bow.glb")
 
 @export var kind: Kind = Kind.ARROWS
 @export var amount: int = 3
@@ -26,6 +30,8 @@ var _visual: Node3D
 
 ## Spawns a pickup near `at` with a little pop (server only; mirrored to every peer).
 static func drop(_parent: Node, at: Vector3, pickup_kind: Kind, pickup_amount: int) -> void:
+	if pickup_amount <= 0:
+		return
 	var scatter := Vector3(randf_range(-0.7, 0.7), 0.0, randf_range(-0.7, 0.7))
 	NetSpawn.pickup(pickup_kind, pickup_amount, GameConfig.clamp_to_world(Vector3(at.x, 0.0, at.z) + scatter))
 
@@ -47,6 +53,16 @@ func _ready() -> void:
 				spear.rotation_degrees = Vector3(90, -15.0 + i * 30.0, 0)
 				spear.position = Vector3((i - 0.5) * 0.08, 0.05, 0)
 				_visual.add_child(spear)
+		Kind.WEAPON_BOW:
+			var bow := BOW_MODEL.instantiate() as Node3D
+			bow.rotation_degrees = Vector3(0, 0, 90)
+			_visual.add_child(bow)
+			_visual.scale = Vector3.ONE * 1.5
+		Kind.WEAPON_SPEAR:
+			var spear := SPEAR_MODEL.instantiate() as Node3D
+			spear.rotation_degrees = Vector3(90, 0, 0)
+			_visual.add_child(spear)
+			_visual.scale = Vector3.ONE * 1.3
 		Kind.HEALTH:
 			_visual.add_child(POTION_MODEL.instantiate())
 			_visual.scale = Vector3.ONE * 1.2
@@ -64,7 +80,7 @@ func _process(delta: float) -> void:
 	_age += delta
 	_visual.rotation.y += delta * 2.0
 	var server := multiplayer.is_server()
-	if _age > lifetime:
+	if _age > lifetime and not is_weapon():
 		if server:
 			queue_free()
 		return
@@ -79,6 +95,16 @@ func _process(delta: float) -> void:
 			queue_free()
 	elif dist < magnet_range and _age > 0.4:
 		global_position += to / dist * minf(dist, delta * 7.0)
+
+
+## Dropped weapons stay until someone picks them up.
+func is_weapon() -> bool:
+	return kind == Kind.WEAPON_BOW or kind == Kind.WEAPON_SPEAR
+
+
+## Weapon id of a WEAPON_* pickup ("" otherwise).
+static func weapon_of(pickup_kind: Kind) -> String:
+	return str(WEAPON_KINDS.find_key(pickup_kind)) if WEAPON_KINDS.values().has(pickup_kind) else ""
 
 
 func _nearest_collector() -> Player:

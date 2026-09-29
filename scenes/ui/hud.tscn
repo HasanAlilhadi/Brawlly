@@ -177,19 +177,6 @@ theme_type_variation = &"ButtonSquare"
 theme_override_font_sizes/font_size = 24
 text = "II"
 
-[node name="ShopButton" type="Button" parent="Root"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(60, 60)
-layout_mode = 1
-offset_left = 80.0
-offset_top = 104.0
-offset_right = 140.0
-offset_bottom = 164.0
-theme_type_variation = &"ButtonSquare"
-icon = ExtResource("12_coin")
-icon_alignment = 1
-expand_icon = true
-
 [node name="MinimapFrame" type="PanelContainer" parent="Root"]
 layout_mode = 1
 anchors_preset = 1

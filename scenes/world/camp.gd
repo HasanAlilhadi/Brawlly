@@ -3,8 +3,8 @@ extends StaticBody3D
 ## Orc camp: a tent for small squads (≤ `tent_max_squad`), a house for bigger ones. Spawns a squad of orcs (arranged in rings around the house) and respawns each one
 ## some time after it dies. Bigger squads get a bigger, tougher house.
 ## Attacking the camp or any of its orcs (even from range) sends the whole squad after the attacker.
-## Destroying the house stops the spawning and turns the whole squad into soldiers for the player who
-## destroyed it (over their follower cap they go to that player's reserve).
+## Destroying the house stops the spawning; the surviving orcs are routed (they fall and drop their
+## loot) and the house spills coins.
 ## Far-away squads are paused to keep the big world cheap on mobile.
 ##
 ## Multiplayer: every peer builds the same camps (same names) from the shared seed; only the server
@@ -260,21 +260,11 @@ func take_damage(amount: float, attacker: Node3D = null, is_melee: bool = true, 
 
 
 func _destroy() -> void:
-	# Every member of the squad becomes a soldier for the player who destroyed the camp; over their
-	# follower cap they go to that player's reserve instead of standing around in the world.
-	var player := _player_by_peer(_last_hit_peer)
-	for i in squad_size:
-		var enemy := _squad[i]
-		var spawn_pos := _spawn_points[i]
+	# Without their camp the surviving orcs are routed: they fall and drop their loot (soldiers are
+	# bought at the barracks, not won here).
+	for enemy in _squad:
 		if enemy and not enemy.is_dead:
-			spawn_pos = enemy.global_position
-			enemy.queue_free()
-		if player == null:
-			continue
-		if player.followers().size() >= player.follower_cap:
-			player.reserve_soldiers += 1
-			continue
-		NetSpawn.unit(&"ally", spawn_pos, {"team": player.team_id, "owner": player.peer_id, "color": player.unit_color})
+			enemy.die()
 	_squad.fill(null)
 	MatchStats.add(_last_hit_peer, &"camps")
 	_spill_bounty()

@@ -22,6 +22,28 @@ See `README.md` for the full folder layout and project defaults.
   keep **one** copy in `assets/textures/palettes/` and relink the models with
   `tools/glb_set_texture.py <texture.png> <model.glb>...` instead of copying the texture next to every model.
 - Skip pack extras (preview images, `.url` files, `Overview.html`). Record each pack's author and license in `assets/CREDITS.md`.
+- **Own models** are built by scripts `tools/blender_<name>.py` on top of `tools/blender_kit.py` (palette cells,
+  Godot-space box/prism/cylinder helpers, generic pieces: walls, windows, roofs, banners, barrels…, `run()`):
+  `blender -b --python tools/blender_<name>.py -- --check [--preview out.png --yaw 35]`. Rules (see the kit's header):
+  texture = the shared Kenney palette, one cell per surface, sampled **linearly** ("Closest" stripes tall faces);
+  **no overlapping coplanar faces** (z-fighting: flicker / see-through — one block per stair step, walls stop at
+  towers, caps sit above what they cap, decor never overlaps); single-sided, outward faces; `--check` must print
+  `OVERLAPS 0` and `FLIPPED 0`; then look at it **up close in the game** (`tests/screenshot_test.gd`, e.g. the
+  `barracks_close` shot), not only in the Blender preview. Model in Godot meters, 1 unit = one tile after the
+  prop scale, origin bottom center, front = +Z; the GLB links the shared palette. Example: `tools/blender_barracks.py`
+  → `assets/environment/buildings/barracks.glb` (the Barracks stall: a walled training compound, layout constants
+  shared with `ShopStation`); `tools/blender_blacksmith.py` → `blacksmith.glb` (a small forge workshop);
+  `tools/blender_armory.py` → `armory.glb` (the Bows & Spears log cabin); `tools/blender_healer.py` → `healer.glb`
+  (the Healer cottage); `tools/blender_town.py` → `town.glb` / `town.tscn` (the town they stand in: `marker()` spots,
+  `solid_box()` / `solid_cyl()` collision, the buildings loaded with `prop(export=False)` so `--check` sees them). **Reuse existing models**: anything the
+  game already has (the player's sword / bow / spear / arrows, shields, barrels, targets, weapon racks, banners,
+  flags — listed with their in-game sizes in `tools/blender_props.py`) is placed with `kit.prop()`, never modeled
+  again; `run()` then also writes `<name>.tscn` (building GLB + those models), which is what the stall loads.
+  Model only what doesn't exist yet, and then rounded / pointed with `loft` / `rod` / `ball` (convex pieces), not
+  plain boxes. The game
+  camera looks down steeply: keep what matters (workshop, tools) out from under big roofs — open yards, small
+  canopies. A stall that is a building gives its `STALLS` row a `block` rect (collision + keeps trees / decor
+  off it, `footprint_radius()`), `block_height` and `sign_height`.
 - Never reference `pre-assets/` from a scene or script (it is not imported, so `res://pre-assets/...` will not load).
 
 ## Conventions
@@ -49,14 +71,18 @@ by touch index so the joystick and buttons work together with multi-touch.
 - **Desktop first**: design for 1920×1080 landscape with keyboard + mouse (and gamepad); phones must keep working
   (720×1280 portrait UI, touch controls). `Platform` (autoload) picks the layout: `Platform.mobile_layout`,
   `Platform.touch_mode` (+ `touch_mode_changed`). Test the phone layout on a PC with `-- --mobile`.
-- Input goes through Input Map actions (`move_*`, `aim_*`, `attack`, `aim_bow`, `shoot`, `switch_weapon`, `shop`, `pause`,
-  `toggle_fullscreen`, `army_*`, `ping*`) — add new bindings there, not as hard-coded keys, and list them on the
+- Input goes through Input Map actions (`move_*`, `aim_*`, `attack`, `aim_bow`, `shoot`, `switch_weapon`, `interact`, `pause`,
+  `toggle_fullscreen`, `rotate_camera`, `army_*`, `ping*`) — add new bindings there, not as hard-coded keys, and list them on the
   Controls page (`scenes/ui/controls_menu.gd`, main menu → Controls). Mouse clicks for gameplay are taken in
   `_unhandled_input` (so clicks on HUD buttons don't attack); ignore events with `device == DEVICE_ID_EMULATION`.
 - UI must work in both orientations: anchor to edges, use `MaxWidth` on full-width panels, check both with
   `tests/screenshot_test.gd` (with and without `--mobile`). Touch controls still handle input in `_input` by touch index.
 - 3D cameras: FOV applies to the screen's short side (`FollowCamera3D.fit_fov_to_short_side`). "Off-screen"
-  distances must hold for the wide desktop view (e.g. `main.gd` `REINFORCE_DISTANCE`).
+  distances must hold for the wide desktop view (e.g. `WorldEvents.goblin_distance`). Camera zoom (main.gd):
+  offset × `DESKTOP_CAMERA_ZOOM` (desktop) × `camera.zoom` = `CAMERA_ZOOM` 1.2 + `WEAPON_CAMERA_ZOOM` (spear +0.1, bow +0.2).
+  R (`rotate_camera`) orbits the camera 90° (`FollowCamera3D.rotate_step`): screen-space input (WASD, sticks,
+  touch) goes through `camera.to_world()` / `main._screen_to_world()`; the minimap turns with the view; world labels
+  that stack must use screen-space `Label3D.offset`, not height, so they hold from every side.
 - Renderer: Forward+ on PC, Mobile on phones (`.mobile` overrides) — keep effects cheap enough for phones.
 - Respect safe areas on phones (`DisplayServer.get_display_safe_area()`).
 - Exports: `Windows Desktop` preset → `builds/windows/MyGame.exe`; Android / iOS presets unchanged.
@@ -99,7 +125,7 @@ by touch index so the joystick and buttons work together with multi-touch.
   sword, Keen Points the bow and spear. Ammo: arrows (bow) and `spears` (max 8, 6 when bought); ammo pickups
   (`Pickup.Kind.ARROWS` / `SPEARS`) only go to players carrying that weapon (`Player.can_collect`). Chests are
   broken open by any weapon (group `breakable`, 60 hp), not opened by walking up. Shots fly at 0.55–0.7 m, so
-  anything hittable needs collision up to `GameConfig.HIT_HEIGHT` (1 m); aim assist falls back to breakables. The player carries `Player.weapons` (≤ `MAX_WEAPONS` = 3, ids from `Player.WEAPONS`) and holds one
+  anything hittable needs collision up to `GameConfig.HIT_HEIGHT` (1 m); aimed shots fly exactly where aimed (no snapping); a quick shot / tap with no aim auto-targets the nearest enemy. The player carries `Player.weapons` (≤ `MAX_WEAPONS` = 3, ids from `Player.WEAPONS`) and holds one
   (`weapon_index`, replicated); `switch_weapon()` (server; Q / Y / HUD button via `request_switch_weapon`), `give_weapon(id)`
   for pickups. Melee / shoot functions refuse the weapon not in hand; attack keys and left mouse use the one in hand.
   New weapon (e.g. spear) = a `WEAPONS` row + its model in `_weapon_items` + an icon in `Hud._weapon_icons`.
@@ -109,8 +135,32 @@ by touch index so the joystick and buttons work together with multi-touch.
 - **Combo hits**: `Enemy.take_damage` — a player hit within `combo_window` (1 s) of a teammate's hit on the same orc deals
   `combo_damage_multiplier` (1.5×) and pops "COMBO!" for everyone (`HitFx.report_combo` → `main._net_combo`). Soldiers don't count.
 - Economy: `Player.coins`, `Player.upgrade_levels`, `buy_upgrade(def)`; shop items are `UpgradeDef` resources in
-  `resources/data/upgrade_catalog.tres` (effects by `id` in `Player._apply_upgrade`). Soldiers read `Player.ally_power`;
-  `Player.follower_cap` replaces a fixed cap.
+  `resources/data/upgrade_catalog.tres` (effects by `id` in `Player._apply_upgrade`). There is no global shop: items
+  are sold at **trading post stalls** (`ShopStation`) in the **town** at every spawn point: one fixed layout, never
+  turned (`tools/blender_town.py` → `assets/environment/buildings/town.tscn`: paved square + mosaic at the spawn, decor
+  with its collision, markers `Stall_<id>` / `StarterChest` / `Tree_<n>`: the town's trees are the normal choppable
+  trees). A felled tree drops arrows only with `ChoppableTree.arrow_chance` (0.5). `WorldBuilder._add_towns()` instances it and puts a stall
+  on each marker; `WorldBuilder.TOWN_RADIUS` stays free of trees / camps / scatter, no camp within
+  `stall_safe_distance` of a stall. Move a building = change `STALLS` in the town script and rebuild; deathmatch spreads
+  its per-player towns so they never overlap (`GameMode.setup`). `UpgradeDef.stalls` lists the stalls that sell an item;
+  `Player.can_buy()` requires standing at one (`ShopStation.can_buy_here`, also checked on the server). main.gd
+  tracks the stall in reach (`_update_stall`: highlight, HUD prompt, `interact` opens `ShopMenu.open(stall)`). Every stall is used from any side, within `ShopStation.STALL_REACH` of its building (`_distance()` from `_footprint()`: the STALLS "block", the barracks' compound); `nearest()` = the closest in reach. No ground rings: a stall in reach glows (`set_highlight` → `assets/shaders/highlight_glow.gdshader` as `material_overlay`) and its sign turns gold; a pin bobs over the barracks gate while your soldiers wait. New building = a STALLS row with its "block". Soldiers read `Player.ally_power`.
+- **Soldiers come only from the barracks** (camps and the Warlord's warband are routed — they `die()` and drop loot).
+  Recruit (50, constant) → `Player.soldiers_training` (replicated count; a queue — one after another,
+  `GameConfig.SOLDIER_TRAIN_TIME` each) → server spawns an `Ally` with `penned` (replicated; group `penned`, out of
+  `player_units`, can't be hurt, drawn at `Ally.PENNED_SCALE`) in that barracks' courtyard (`ShopStation.pen_spot()`).
+  The barracks is a walled compound (hall in the front wall = the shop door, courtyard = the pen, watchtower, archery
+  range, gate in the +X wall); its layout constants in `ShopStation` (`COMPOUND`, `HALL`, `PEN`, `GATE_Z`, …) must
+  match `tools/blender_barracks.py`, which builds the model from the same numbers. Take them at the
+  gate (main.gd `_gate`: HUD prompt "Take N soldiers" + interact, `ShopStation.nearest_gate`) or the shop's Take row →
+  `Player.request_collect_soldiers()` → `Ally.release(delay, lane)` (they file out `Player.EXIT_INTERVAL` apart,
+  closest first, in 3 lanes through the wide gate). The walls (`GameConfig.LAYER_FENCE`) block everyone; soldiers
+  near a barracks path around it with `ShopStation.detour()` (from inside the pen: via the gate; outside: shortest
+  way around the compound corners) — `Ally._route()` wraps every move toward a slot or target.
+  Inside a compound soldiers don't collide with each other (`Ally._update_compound_collision`: allies bit off
+  their mask + no separation push; own layer kept so orcs / hits still find them); walls still block them.
+  `Player.followers()` excludes penned; `army_size()` = followers + penned + training ≤ `follower_cap`
+  (`GameConfig.BASE_FOLLOWER_CAP` 10, Command +1 per level, 100 constant, max 15).
 - Squads come from `EnemyRoster` (`resources/data/orc_roster.tres`: filler + RosterEntry share/min_squad/max_count/
   inner_ring). New enemy type = new scene + roster entry. Camps scale orc stats and coins by `Camp.tier` (0..1).
 - Targeting uses group `active_enemies` (orcs of awake camps only) — keep it that way for performance with many camps.
@@ -122,15 +172,28 @@ by touch index so the joystick and buttons work together with multi-touch.
   (`is_downed`, crawl speed, out of `player_units`). `GameConfig.is_gone()` treats downed units as gone, so AI and
   aim assist skip them. Revive = teammate within `Player.REVIVE_RANGE` for `REVIVE_TIME`. Only hostile
   player-owned damage finishes a downed player. Signals `went_down` / `revived` → main.gd (announce, Help ping).
+- **Death drops** (online only, real death — not downed): `Player._drop_items()` drops the bow / spear you carry
+  (`Pickup.Kind.WEAPON_*`, never expire) plus their ammo; coins and the sword stay. Anyone without that weapon
+  picks it up (goes into the carried list, the weapon in hand doesn't change).
   Clips `crawl` (moving) / `downed` (still) come from `assets/characters/animations/archer_downed.glb` (made in Blender on
   the archer armature, copied into the archer library by `Player._add_downed_anims()`); while downed the arm holds stay off and the sword / bow are hidden.
 - **World events** (`WorldEvents`, setting `events`): `spawn_goblin()` / `spawn_warlord()` (server; tests call them
   directly). `TreasureGoblin` (NetSpawn kind `goblin`, orc team, flees), `Warlord` (extends `Enemy`, warband orcs
-  have `Enemy.warlord` set and follow via `follow_point()`, killer inherits the warband).
+  have `Enemy.warlord` set and follow via `follow_point()`, its warband is routed when it falls).
 - **Army orders**: `Player.army_order` / `army_point` (replicated), `command_army()` / `net_command` RPC; `Ally`
-  anchors its formation to the point for CHARGE / HOLD.
+  anchors its formation to the point for CHARGE / HOLD. Orders are always obeyed: every order bumps
+  `Player.order_serial` (server) and each soldier (`Ally._obey`, checked every frame) drops its target and walks to
+  its new spot without fighting (`Ally._regroup`: until within `regroup_arrive` of its slot or `regroup_time`).
+  KILL (key 4 / B / HUD Kill → click): `Player.kill_target_near(point)` picks the hostile at the point
+  (`army_target`, replicated as `army_target_path` for the red mark in main.gd); everyone hunts it, and once it's
+  gone the order becomes CHARGE where it fell; no enemy at the point → plain CHARGE. The mouse pick is on screen
+  (`main._kill_pick`, models stand up); the HUD Kill button with a mouse waits for the next world click (`_kill_picking`).
 - **Stats & awards**: report events with `MatchStats.add(peer, &"stat")` (server; kills / deaths / soldiers lost
   come from `Unit.die()`, damage from `HitFx.report_hit`). New award = a row in `MatchStats.AWARDS`.
+- **Minimap** (`scenes/ui/minimap.gd`): shows only friends (players / soldiers not `GameConfig.is_hostile` to you),
+  camps as tent badges, trading posts, the hill (group `hill`, holder color) and CTF flags (group `flags`). Tracked
+  nodes can set meta `marker_icon` (Texture2D, drawn in a round badge) + `marker_portrait` (a face). Faces are rendered
+  with `tools/render_portrait.gd` into `assets/ui/icons/portraits/` (Warlord).
 - **Pings**: `main._ping()` → server `_on_ping()` (rate-limited) → teammates' `PingMarker`. Things that should get a
   screen-edge arrow + minimap diamond join group `tracked` with metas `marker_color` / `marker_label`.
 - Balance reference (base stats, before camp tier 0.75–1.35×): player 150hp, sword 40 (cleaves), arrow 25, spear 35, regen 6/s;
@@ -141,9 +204,11 @@ by touch index so the joystick and buttons work together with multi-touch.
   never retarget an orc that is already fighting; only a direct hit from a much closer attacker does.
 - AI movement goes through `Unit.engage(target)` (spreads attackers around the target) and `Unit.steer(dir)`
   (avoids trees/houses with shape casts sized to the unit's `radius`, sidesteps when stuck, + separation between
-  same-side units). Use these for new AI.
-- Soldiers: max `GameConfig.MAX_FOLLOWERS` (25) follow in a compact spiral formation (group `followers`); extra freed
-  soldiers go to `Player.reserve_soldiers` and `main.gd` spawns them off-screen as slots free up (no idle soldiers in the world).
+  same-side units; keeps going around the same side up to 90° before switching, `STEER_ANGLES`). Use these for new AI.
+  `Unit.chase_avoid_mask`: extra layers `engage()` steers around while still chasing (soldiers: enemies, so they go
+  around orcs in the way). Soldiers commit to their target (`Ally._commit_target`: no switching to a closer enemy
+  until it's dead or out of range) — orcs keep the sticky `choose_target` rule.
+- Soldiers follow in a compact spiral formation (`Ally._update_slot`), at most `Player.follower_cap` (10–15) per player.
 - Far-away camps pause their orcs (`Camp.activation_range`; downed players still count as near, only dead ones don't) — keep this for mobile performance. Orcs that are
   provoked or walking home (`Enemy.is_busy()`) stay awake. Damage calls `Unit._on_damaged(attacker)`; orcs forward it
   to `Camp.alert(attacker)`, which provokes the whole squad (tuning in `enemy.gd` → "Provoked" exports).

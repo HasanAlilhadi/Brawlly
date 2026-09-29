@@ -152,7 +152,7 @@ func _build_settings() -> void:
 	_add_slider("camp_count", "Orc camps", 0, 60, 1)
 	_difficulty_option = _add_option("Difficulty", Net.DIFFICULTY_NAMES, func(index: int) -> void:
 		Net.set_setting("difficulty", index))
-	_events_option = _add_option("World events", PackedStringArray(["On: goblin + Warlord", "Off"]), func(index: int) -> void:
+	_events_option = _add_option("World events", PackedStringArray(["On: goblin + Warlord + Waves", "Off"]), func(index: int) -> void:
 		Net.set_setting("events", index == 0))
 	_add_slider("start_coins", "Starting coins", 0, 1000, 50)
 	_add_slider("team_count", "Teams", 2, 4, 1)

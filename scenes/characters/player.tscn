@@ -41,7 +41,7 @@ properties/8/replication_mode = 2
 properties/9/path = NodePath(".:coins")
 properties/9/spawn = true
 properties/9/replication_mode = 2
-properties/10/path = NodePath(".:reserve_soldiers")
+properties/10/path = NodePath(".:soldiers_training")
 properties/10/spawn = true
 properties/10/replication_mode = 2
 properties/11/path = NodePath(".:follower_cap")
@@ -74,10 +74,13 @@ properties/19/replication_mode = 2
 properties/20/path = NodePath(".:spears")
 properties/20/spawn = true
 properties/20/replication_mode = 2
+properties/21/path = NodePath(".:army_target_path")
+properties/21/spawn = true
+properties/21/replication_mode = 2
 
 [node name="Player" type="CharacterBody3D"]
 collision_layer = 2
-collision_mask = 5
+collision_mask = 21
 motion_mode = 1
 script = ExtResource("1_script")
 arrow_scene = ExtResource("5_arrow")

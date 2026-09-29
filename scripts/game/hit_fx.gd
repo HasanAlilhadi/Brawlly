@@ -4,7 +4,7 @@ class_name HitFx
 ## - Damage numbers are shown only to the player who landed the hit (`report_hit` on the server
 ##   sends them to that player's device).
 
-enum Kind { FLESH, WOOD, LEAVES }
+enum Kind { FLESH, WOOD, LEAVES, DIRT }
 
 const NUMBER_COLOR := Color(1.0, 0.96, 0.82)
 const CRIT_COLOR := Color(1.0, 0.72, 0.15)
@@ -215,6 +215,9 @@ static func burst(at: Vector3, kind: Kind, amount: int = 10) -> void:
 		Kind.LEAVES:
 			ramp.set_color(0, Color(0.45, 0.8, 0.4))
 			ramp.set_color(1, Color(0.3, 0.6, 0.25, 0.0))
+		Kind.DIRT:
+			ramp.set_color(0, Color(0.68, 0.46, 0.27))
+			ramp.set_color(1, Color(0.32, 0.18, 0.1, 0.0))
 	particles.color_ramp = ramp
 	world.add_child(particles)
 	particles.global_position = at

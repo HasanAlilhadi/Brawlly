@@ -52,7 +52,7 @@ func _draw() -> void:
 		var color: Color = target.get_meta(&"marker_color", Color.WHITE)
 		_draw_arrow(at, dir, color)
 		var text: String = target.get_meta(&"marker_label", "")
-		if is_instance_valid(origin):
+		if is_instance_valid(origin) and origin.is_inside_tree():
 			text += "  %dm" % roundi(origin.global_position.distance_to(target.global_position))
 		if text != "":
 			# Beside the arrow, on the screen side: right-aligned at the right edge, left-aligned at the left.

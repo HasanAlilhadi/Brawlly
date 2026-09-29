@@ -13,8 +13,8 @@ signal army_command_requested(order: int)
 signal ping_requested
 signal weapon_switch_requested
 
-const ARMY_ORDERS: PackedStringArray = ["Follow", "Charge", "Hold"]
-const ARMY_KEYS: PackedStringArray = ["1", "2", "3"]
+const ARMY_ORDERS: PackedStringArray = ["Follow", "Charge", "Hold", "Kill"]
+const ARMY_KEYS: PackedStringArray = ["1", "2", "3", "4"]
 ## The Warlord's bar shows while it is this close to you.
 const BOSS_BAR_RANGE: float = 40.0
 const DOWNED_PANEL_WIDTH: float = 380.0
@@ -44,7 +44,6 @@ const SPEAR_ICON := preload("res://assets/ui/icons/game/spear.svg")
 @onready var restart_button: Button = %RestartButton
 @onready var menu_button: Button = %MenuButton
 @onready var pause_button: Button = %PauseButton
-@onready var shop_button: Button = %ShopButton
 @onready var coins_label: Label = %CoinsLabel
 @onready var toast: Control = %Toast
 @onready var toast_label: Label = %ToastLabel
@@ -63,8 +62,12 @@ var _boss_panel: Control
 var _boss_bar: ProgressBar
 var _army_row: VBoxContainer
 var _army_buttons: Array[Button] = []
+var _kill_picking: bool = false
 var _ping_button: Button
 var _switch_button: TouchButton
+var _stall_prompt: Button
+var _stall_key: HBoxContainer
+var _stall_label: Label
 var _weapon_bar: PanelContainer
 var _weapon_slots: HBoxContainer
 var _weapon_icons: Dictionary = {}  # weapon id -> texture for the touch buttons
@@ -87,12 +90,10 @@ func _ready() -> void:
 	restart_button.pressed.connect(restart_requested.emit)
 	menu_button.pressed.connect(main_menu_requested.emit)
 	pause_button.pressed.connect(pause_requested.emit)
-	shop_button.pressed.connect(shop_requested.emit)
 	_apply_safe_area()
 	_build_hurt_overlay()
 	if not Platform.mobile_layout:
 		pause_button.tooltip_text = "Pause (Esc)"
-		shop_button.tooltip_text = "Shop (B)"
 	joystick.pad_texture = TOUCH_PAD
 	joystick.knob_texture = TOUCH_NUB
 	joystick.knob_held_texture = TOUCH_NUB_HELD
@@ -125,6 +126,7 @@ func setup(player: Player, camps: Array[Camp]) -> void:
 	player.arrows_changed.connect(_on_arrows_changed)
 	player.spears_changed.connect(_on_arrows_changed)
 	player.coins_changed.connect(_on_coins_changed)
+	player.soldier_ready.connect(func() -> void: show_toast("A soldier is ready at the barracks"))
 	_on_coins_changed(player.coins)
 	_on_health_changed(player.health, player.max_health)
 	_on_arrows_changed(player.arrows)
@@ -168,7 +170,7 @@ func show_end(title: String, subtitle: String, restart_label: String = "Play aga
 	_switch_button.hide()
 	_weapon_bar.hide()
 	pause_button.hide()
-	shop_button.hide()
+	_stall_prompt.hide()
 	end_title.text = title
 	end_subtitle.text = subtitle
 	end_subtitle.visible = subtitle != ""
@@ -192,10 +194,9 @@ func _process(delta: float) -> void:
 		if not is_instance_valid(_player) or not _player.is_inside_tree():
 			return  # the match is closing
 		var followers := _player.followers().size()
-		var reserve := _player.reserve_soldiers
-		allies_label.text = str(followers) if reserve <= 0 else "%d +%d" % [followers, reserve]
+		allies_label.text = str(followers)
 		if not _ended:
-			_army_row.visible = followers + reserve > 0
+			_army_row.visible = followers > 0
 			_update_boss_bar()
 			_update_downed()
 
@@ -336,7 +337,7 @@ func _build_extras() -> void:
 		button.add_theme_font_size_override("font_size", HudStyle.FONT_BUTTON)
 		if not Platform.mobile_layout:
 			button.tooltip_text = "%s (%s)" % [ARMY_ORDERS[order], ARMY_KEYS[order]]
-			# Key prompt (1 / 2 / 3) at the left of the label.
+			# Key prompt (1 / 2 / 3 / 4) at the left of the label.
 			button.icon = load("res://assets/ui/prompts/keyboard/%s.png" % ARMY_KEYS[order])
 			for state in ["icon_normal_color", "icon_hover_color", "icon_pressed_color", "icon_hover_pressed_color", "icon_focus_color"]:
 				button.add_theme_color_override(state, UiKit.PROMPT_INK)  # same dark key cap as UiKit.prompt
@@ -349,7 +350,7 @@ func _build_extras() -> void:
 	_army_row.hide()
 	root.add_child(_army_row)
 
-	# Ping (online only): next to the shop button.
+	# Ping (online only): next to the pause button.
 	_ping_button = Button.new()
 	_ping_button.text = "!"
 	_ping_button.theme_type_variation = &"ButtonSquare"
@@ -366,6 +367,7 @@ func _build_extras() -> void:
 
 	_build_downed_panel()
 	_build_weapon_controls()
+	_build_stall_prompt()
 
 	_revive_label = _small_label("", 26)
 	_revive_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
@@ -378,6 +380,75 @@ func _build_extras() -> void:
 	root.add_child(_revive_label)
 
 	_build_end_screen()
+
+
+## "E  Blacksmith" (bottom center) while the local player stands at a trading post stall; click / tap it
+## or press interact to open that stall's shop.
+func _build_stall_prompt() -> void:
+	_stall_prompt = Button.new()
+	_stall_prompt.theme_type_variation = &"ButtonBeige"
+	_stall_prompt.focus_mode = Control.FOCUS_NONE
+	_stall_prompt.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_stall_prompt.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_stall_prompt.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	_stall_prompt.offset_bottom = -DOWNED_PANEL_MARGIN
+	_stall_prompt.pressed.connect(shop_requested.emit)
+	# Key + label, centered on the button's face: inset by the style's content margins (the beige
+	# button has a drop-shadow lip at the bottom, so its face sits a little above the rect's middle).
+	var row := HBoxContainer.new()
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", int(HudStyle.GAP))
+	row.set_anchors_preset(Control.PRESET_FULL_RECT)
+	var face := _stall_prompt.get_theme_stylebox(&"normal")
+	row.offset_left = face.get_margin(SIDE_LEFT)
+	row.offset_top = face.get_margin(SIDE_TOP)
+	row.offset_right = -face.get_margin(SIDE_RIGHT)
+	row.offset_bottom = -face.get_margin(SIDE_BOTTOM)
+	_stall_prompt.add_child(row)
+	_stall_key = HBoxContainer.new()
+	_stall_key.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(_stall_key)
+	_stall_label = Label.new()
+	_stall_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_stall_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_stall_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_stall_label.add_theme_font_size_override("font_size", HudStyle.FONT_TITLE)
+	row.add_child(_stall_label)
+	_stall_prompt.hide()
+	$Root.add_child(_stall_prompt)
+
+
+## Every frame from main.gd: the stall the local player can use (null = none).
+## `take_soldiers` > 0: the player stands at the barracks pen gate — "Take N soldiers" instead of the shop.
+func set_stall(stall: ShopStation, take_soldiers: int = 0) -> void:
+	_stall_prompt.visible = stall != null and not _ended
+	if not _stall_prompt.visible:
+		return
+	var key := "touch/tap" if Platform.touch_mode else "keyboard/e"
+	var allowed := stall.can_access(_player)
+	var text := stall.title_for(_player)
+	var ready := _player.penned_soldiers().size() if allowed and stall.stall_id == ShopStation.BARRACKS else 0
+	if allowed and take_soldiers > 0:
+		text = "Take %d soldier%s" % [take_soldiers, "" if take_soldiers == 1 else "s"]
+	elif ready > 0:
+		text += "  (%d ready)" % ready
+	if _stall_label.text != text or _stall_key.get_meta(&"key", "") != key:
+		_stall_label.text = text
+		_stall_key.set_meta(&"key", key)
+		for child in _stall_key.get_children():
+			child.queue_free()
+		_stall_key.add_child(UiKit.prompt(key, HudStyle.KEY))
+		# Button = content (key + gap + label) + the style's content margins, so the row fills the face exactly.
+		var face := _stall_prompt.get_theme_stylebox(&"normal")
+		var label_size := _stall_label.get_minimum_size()
+		var content := Vector2(HudStyle.KEY + HudStyle.GAP + label_size.x, maxf(HudStyle.KEY, label_size.y))
+		_stall_prompt.custom_minimum_size = content + Vector2(face.get_margin(SIDE_LEFT) + face.get_margin(SIDE_RIGHT),
+				face.get_margin(SIDE_TOP) + face.get_margin(SIDE_BOTTOM))
+		_stall_prompt.offset_left = -_stall_prompt.custom_minimum_size.x * 0.5
+		_stall_prompt.offset_right = _stall_prompt.custom_minimum_size.x * 0.5
+	_stall_prompt.offset_bottom = -(DOWNED_PANEL_TOUCH_LIFT if Platform.touch_mode else DOWNED_PANEL_MARGIN)
+	_stall_prompt.offset_top = _stall_prompt.offset_bottom - _stall_prompt.custom_minimum_size.y
 
 
 ## "You're down" card (bottom center, clear of the player): skull badge, bleed-out bar with seconds,
@@ -492,7 +563,13 @@ func _small_label(text: String, font_size: int) -> Label:
 
 func _on_army_order_changed(order: int) -> void:
 	for i in _army_buttons.size():
-		_army_buttons[i].set_pressed_no_signal(i == order)
+		_army_buttons[i].set_pressed_no_signal(i == order or (i == Player.Order.KILL and _kill_picking))
+
+
+## Mouse: the Kill button stays lit while the next click picks the target.
+func set_kill_picking(on: bool) -> void:
+	_kill_picking = on
+	_on_army_order_changed(_player.army_order if _player else 0)
 
 
 func _update_boss_bar() -> void:
@@ -663,7 +740,7 @@ func _apply_design() -> void:
 	buttons.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	buttons.add_theme_constant_override("separation", int(HudStyle.GAP))
 	left.add_child(buttons)
-	for button: Button in [pause_button, shop_button, _ping_button]:
+	for button: Button in [pause_button, _ping_button]:
 		button.reparent(buttons, false)
 		button.custom_minimum_size = Vector2(HudStyle.BUTTON, HudStyle.BUTTON)
 		button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
@@ -697,6 +774,8 @@ func _apply_design() -> void:
 	_weapon_bar.offset_right = -HudStyle.MARGIN
 	_weapon_bar.offset_bottom = -HudStyle.MARGIN
 	_weapon_slots.add_theme_constant_override("separation", int(HudStyle.GAP))
+	# Off-screen arrows slide under the HUD panels (minimap, stats) instead of over them.
+	root.move_child(markers, 0)
 
 
 ## A top-left (or top-right) column at the HUD margin that stacks its children with the HUD gap.

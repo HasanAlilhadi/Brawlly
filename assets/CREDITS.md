@@ -12,6 +12,11 @@
 | Light Masks 1.0 | [Kenney](https://www.kenney.nl) | CC0 1.0 | `vfx/light_masks/` (transparent PNGs) |
 | Cursor Pack | [Kenney](https://www.kenney.nl) | CC0 1.0 | `ui/cursors/cursor_target_*`, `cursor_cross_small`, `cursor_hand_{point,open,closed}`, `cursor_pointer_toon_a`, `cursor_busy_circle`, `cursor_disabled` (Outline, Double) |
 | Mobile Controls 1 | [Kenney](https://www.kenney.nl) | CC0 1.0 | `ui/touch/` (Style A, 2x), `ui/touch/highlights/` (Highlights A), `ui/touch/icons/` |
+| Barracks compound (own) | made for this game in Blender (`tools/blender_barracks.py`) | — | `environment/buildings/barracks.glb` (uses the Mini Forest palette) |
+| Bows & Spears cabin (own) | made for this game in Blender (`tools/blender_armory.py`) | — | `environment/buildings/armory.glb` (uses the Mini Forest palette) |
+| Healer cottage (own) | made for this game in Blender (`tools/blender_healer.py`) | — | `environment/buildings/healer.glb` + `healer.tscn` (uses the Mini Forest palette) |
+| Town (own) | made for this game in Blender (`tools/blender_town.py`) | — | `environment/buildings/town.glb` + `town.tscn` (uses the Mini Forest palette + existing Kenney props) |
+| Blacksmith workshop (own) | made for this game in Blender (`tools/blender_blacksmith.py`) | — | `environment/buildings/blacksmith.glb` (uses the Mini Forest palette) |
 | Spear icons (own) | made for this game | — | `ui/icons/spear.svg` (shop), `ui/icons/game/spear.svg` (white glyph, HUD) |
 
 CC0: free for personal and commercial use; credit is appreciated but not required.

@@ -3,8 +3,8 @@ extends Node3D
 ## - Every peer builds the same world from the shared seed in Net.settings.
 ## - The server waits until every peer has built it, then spawns one Player per peer and starts the camps.
 ## - Local input (HUD touch controls / keyboard) goes to the local Player on the server.
-## - Soldiers from each player's reserve are sent in as follower slots free up.
-## - World events (treasure goblin, Orc Warlord), match stats + awards, pings and army orders.
+## - Soldiers are bought and trained at the barracks (Player.soldiers_training, ShopStation pen).
+## - World events (treasure goblin, Orc Warlord, invasion waves), match stats + awards, pings and army orders.
 
 const PLAYER_SCENE := preload("res://scenes/characters/player.tscn")
 const ALLY_SCENE := preload("res://scenes/characters/ally.tscn")
@@ -19,10 +19,12 @@ const PROJECTILE_SCENES := {
 	&"spear": preload("res://scenes/combat/spear_projectile.tscn"),
 	&"player_spear": preload("res://scenes/combat/player_spear_projectile.tscn"),
 }
-## Reserve soldiers appear this far from their player (off-screen, also on wide desktop screens) and run in.
-const REINFORCE_DISTANCE: float = 15.0
 ## Desktop monitors show the world from a bit further away than phones.
 const DESKTOP_CAMERA_ZOOM: float = 1.25
+## Default camera zoom-out on top of that (1.2 = 20% further than the camera's offset).
+const CAMERA_ZOOM: float = 1.2
+## Extra zoom-out while holding a ranged weapon, so you see further where you shoot.
+const WEAPON_CAMERA_ZOOM: Dictionary = {"spear": 0.1, "bow": 0.2}
 ## Army orders from the keyboard / buttons without a cursor point: this far in front of the player.
 const ORDER_AHEAD: float = 9.0
 
@@ -33,7 +35,14 @@ const PING_COLORS: Array[Color] = [Color(0.45, 0.8, 1.0), Color(1.0, 0.35, 0.3),
 const PING_COOLDOWN: float = 0.7
 ## Clients send held-button actions at most this often (the server enforces cooldowns anyway).
 const ACTION_SEND_INTERVAL: float = 0.15
-const ARMY_ACTIONS: Array[StringName] = [&"army_follow", &"army_charge", &"army_hold"]
+const ARMY_ACTIONS: Array[StringName] = [&"army_follow", &"army_charge", &"army_hold", &"army_kill"]
+const ARMY_SHOUTS: PackedStringArray = ["Follow me!", "Charge!", "Hold here!", "Kill!"]
+## Kill order with the mouse: an enemy counts as clicked this close to the cursor (px at 1080 p).
+const KILL_PICK_PIXELS: float = 70.0
+## Kill order without a cursor (gamepad / touch): the enemy nearest this far ahead, within this radius.
+const KILL_AHEAD: float = 5.0
+const KILL_AHEAD_RADIUS: float = 6.0
+const KILL_MARK_TEXTURE := preload("res://assets/ui/icons/game/target.svg")
 ## A quick left click keeps aiming the sword this long, so the swing also reaches the server online.
 const MOUSE_CLICK_HOLD: float = 0.2
 
@@ -53,9 +62,15 @@ var _camps_left: int = 0
 var _ready_peers: Dictionary = {}
 var _started: bool = false
 var _game_over: bool = false
-var _reinforce_timer: float = 0.0
 var _melee_send_timer: float = 0.0
 var _shoot_send_timer: float = 0.0
+var _stall: ShopStation  # the trading post stall the local player stands at
+var _gate: ShopStation  # the barracks pen gate the local player stands at (with soldiers waiting there)
+var _current_town: Node3D
+## Mouse: the HUD Kill button was clicked; the next left click in the world picks the target.
+var _kill_picking: bool = false
+## Over the enemy our soldiers are told to kill (local player's KILL order).
+var _kill_mark: Sprite3D
 var _last_coins: int = 0
 var _last_health: float = 0.0
 var _vibrate_cooldown: float = 0.0
@@ -97,6 +112,7 @@ func _ready() -> void:
 	var builder := WorldBuilder.new()
 	builder.camp_count = settings.camp_count
 	builder.spawn_points = game_mode.world_spawn_points()
+	builder.town_access = game_mode.world_town_access()
 	builder.clear_areas = game_mode.world_clear_areas()
 	_camps = builder.build(world)
 	game_mode.build_objectives(world)
@@ -108,12 +124,12 @@ func _ready() -> void:
 	hud.restart_requested.connect(_restart)
 	hud.main_menu_requested.connect(func() -> void: Net.leave())
 	hud.pause_requested.connect(pause_menu.open)
-	hud.shop_requested.connect(shop_menu.open)
+	hud.shop_requested.connect(_open_stall)
 	hud.bow_stick.aim_released.connect(_on_bow_released)
 	hud.bow_stick.tapped.connect(func() -> void: _fire(Vector3.ZERO))
 	hud.melee_button.tapped.connect(_melee_once)
 	hud.weapon_switch_requested.connect(_switch_weapon)
-	hud.army_command_requested.connect(func(order: int) -> void: _command_army(order))
+	hud.army_command_requested.connect(_on_army_button)
 	hud.ping_requested.connect(func() -> void: _ping(_ahead_point(0.0)))
 	hud.set_mode_label(game_mode.score_text())
 	pause_menu.online = Net.is_online()
@@ -127,9 +143,10 @@ func _ready() -> void:
 	if not Platform.mobile_layout:
 		camera.offset *= DESKTOP_CAMERA_ZOOM
 		Input.set_custom_mouse_cursor(MATCH_CURSOR, Input.CURSOR_ARROW, Vector2(2, 2))
+	camera.zoom = CAMERA_ZOOM
 	# Look at our spawn until our player appears.
 	var spawn := game_mode.spawn_point_for(Net.my_id())
-	camera.global_position = spawn + camera.offset
+	camera.global_position = spawn + camera.offset * camera.zoom
 	camera.look_at(spawn, Vector3.UP)
 
 	multiplayer.peer_disconnected.connect(_on_peer_left)
@@ -187,13 +204,19 @@ func _spawn_unit(data: Dictionary) -> Node:
 			player.coins = data.get("start_coins", 0)
 			unit = player
 		&"ally":
-			unit = ALLY_SCENE.instantiate() as Ally
+			var ally := ALLY_SCENE.instantiate() as Ally
+			if data.has("pen"):
+				ally.pen = get_node_or_null(data.pen) as ShopStation
+				ally.penned = true
+			unit = ally
 		&"goblin":
 			unit = GOBLIN_SCENE.instantiate() as TreasureGoblin
 			unit.max_health *= data.get("health_scale", 1.0)
 		&"enemy":
 			var enemy := (load(data.scene) as PackedScene).instantiate() as Enemy
 			enemy.home = data.pos
+			enemy.wave_enemy = data.get("wave_enemy", false)
+			enemy.wave_number = data.get("wave_number", 0)
 			if data.has("camp"):
 				enemy.camp = get_node_or_null(data.camp) as Camp
 			if data.has("warlord"):
@@ -311,23 +334,25 @@ func _physics_process(delta: float) -> void:
 		_show_bow_cursor(false)
 		return
 	_mouse_click_left = maxf(_mouse_click_left - delta, 0.0)
+	# Sticks / WASD are screen directions: turn them with the camera (R rotates it in 90° steps).
 	var move := hud.joystick.output
 	var keys := Input.get_vector(&"move_left", &"move_right", &"move_up", &"move_down")
 	if keys != Vector2.ZERO:
 		move = keys
+	move = camera.to_world(move)
 	var aim := Vector3.ZERO
 	if hud.bow_stick.is_aiming:
-		aim = Vector3(hud.bow_stick.output.x, 0.0, hud.bow_stick.output.y)
+		aim = _screen_to_world(hud.bow_stick.output)
 	var stick := Input.get_vector(&"aim_left", &"aim_right", &"aim_up", &"aim_down")
 	if stick != Vector2.ZERO:
-		aim = Vector3(stick.x, 0.0, stick.y)
+		aim = _screen_to_world(stick)
 	if _mouse_bow:
 		aim = _cursor_direction()
-	_show_bow_cursor(local_player.holds_ranged() and not local_player.is_dead and not local_player.is_downed)
+	_show_bow_cursor(_kill_picking or (local_player.holds_ranged() and not local_player.is_dead and not local_player.is_downed))
 	var melee := local_player.holds_melee()
 	var melee_aim := Vector3.ZERO
 	if hud.melee_button.is_aiming:
-		melee_aim = Vector3(hud.melee_button.output.x, 0.0, hud.melee_button.output.y)
+		melee_aim = _screen_to_world(hud.melee_button.output)
 	if melee and (_mouse_attack or _mouse_click_left > 0.0):
 		melee_aim = _cursor_direction()
 	# Holding the sword button without dragging (or an attack key) keeps auto-attacking the nearest enemy;
@@ -368,6 +393,13 @@ func _unhandled_input(event: InputEvent) -> void:
 	var button := event as InputEventMouseButton
 	var real_click := button != null and button.pressed and button.device != InputEvent.DEVICE_ID_EMULATION \
 			and not Platform.mobile_layout
+	if _kill_picking and real_click:
+		# Picking the kill target: left click orders it, any other button cancels. No swing / shot.
+		_set_kill_picking(false)
+		if button.button_index == MOUSE_BUTTON_LEFT:
+			_command_army(Player.Order.KILL, _cursor_point())
+		get_viewport().set_input_as_handled()
+		return
 	if real_click and local_player.holds_ranged() and (button.is_action(&"attack") or button.is_action(&"aim_bow")):
 		_mouse_bow = true
 		_mouse_bow_button = button.button_index
@@ -376,17 +408,19 @@ func _unhandled_input(event: InputEvent) -> void:
 		_mouse_click_left = MOUSE_CLICK_HOLD
 	elif event.is_action_pressed(&"switch_weapon") and not event.is_echo():
 		_switch_weapon()
-	elif event.is_action_pressed(&"shop") and not event.is_echo():
-		shop_menu.open()
+	elif event.is_action_pressed(&"rotate_camera") and not event.is_echo():
+		camera.rotate_step(1)
+	elif event.is_action_pressed(&"interact") and not event.is_echo() and (_stall or _gate):
+		_open_stall()
 		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed(&"ping") and not event.is_echo():
 		_ping(_ahead_point(6.0) if event is InputEventJoypadButton else _pointer_point())
 	elif event.is_action_pressed(&"ping_help") and not event.is_echo():
 		_ping(local_player.global_position, true)
 	else:
-		for order in 3:
+		for order in ARMY_ACTIONS.size():
 			if event.is_action_pressed(ARMY_ACTIONS[order]) and not event.is_echo():
-				_command_army(order, _ahead_point(ORDER_AHEAD) if event is InputEventJoypadButton else _pointer_point())
+				_command_army(order, Vector3.INF if event is InputEventJoypadButton else _pointer_point())  # INF: ahead of us
 
 
 ## Releases are caught everywhere (also over the HUD) so buttons never stick.
@@ -426,6 +460,12 @@ func _ahead_point(distance: float) -> Vector3:
 	return local_player.global_position + local_player.facing() * distance
 
 
+## A screen-space stick direction (x right, y down) as a flat world direction for the current camera turn.
+func _screen_to_world(screen: Vector2) -> Vector3:
+	var flat := camera.to_world(screen)
+	return Vector3(flat.x, 0.0, flat.y)
+
+
 ## Flat direction from the local player to the point under the mouse cursor (ZERO if unknown).
 func _cursor_direction() -> Vector3:
 	if local_player == null or not is_instance_valid(local_player):
@@ -458,7 +498,7 @@ func _melee_once() -> void:
 
 
 func _on_bow_released(aim: Vector2) -> void:
-	_fire(Vector3(aim.x, 0.0, aim.y))
+	_fire(_screen_to_world(aim))
 	if local_player:
 		local_player.clear_aim()
 
@@ -488,26 +528,86 @@ func _on_paused() -> void:
 
 func _process(delta: float) -> void:
 	_vibrate_cooldown -= delta
-	if multiplayer.is_server() and _started and not _game_over:
-		_reinforce(delta)
 	_update_respawn_display(delta)
+	_update_stall()
+	_update_town()
+	_update_camera_zoom()
+	_update_kill_mark()
 
 
-## Each player's reserve soldiers run in, one at a time, while that player has free follower slots.
-func _reinforce(delta: float) -> void:
-	_reinforce_timer -= delta
-	if _reinforce_timer > 0.0:
+## Default zoom + a bit more with the bow / spear in hand.
+func _update_camera_zoom() -> void:
+	var extra := 0.0
+	if is_instance_valid(local_player):
+		extra = WEAPON_CAMERA_ZOOM.get(local_player.current_weapon(), 0.0)
+	camera.zoom = CAMERA_ZOOM + extra
+
+
+## The trading post stall the local player stands at: highlight it, show the HUD prompt, and close its
+## shop when they walk away.
+func _update_stall() -> void:
+	var stall: ShopStation = null
+	var gate: ShopStation = null
+	var waiting: Array[Node] = []
+	if is_instance_valid(local_player) and local_player.is_inside_tree() and not local_player.is_dead \
+			and not local_player.is_downed and not _game_over:
+		# Keep locked enemy shops detectable so interaction can explain why access is denied.
+		stall = ShopStation.nearest(local_player, ShopStation.INTERACT_RANGE, &"", false)
+		waiting = local_player.penned_soldiers()
+		if not waiting.is_empty():
+			gate = ShopStation.nearest_gate(local_player)
+	# Barracks pens with our soldiers show a ring at the gate (bright while we stand on it).
+	for node in get_tree().get_nodes_in_group(&"shop_stations"):
+		var barracks := node as ShopStation
+		if barracks.stall_id == ShopStation.BARRACKS:
+			barracks.set_gate_state(waiting.any(func(a: Node) -> bool: return a.get("pen") == barracks), barracks == gate)
+	_gate = gate
+	if stall != _stall:
+		if is_instance_valid(_stall):
+			_stall.set_highlight(false)
+		if stall and stall.can_access(local_player):
+			stall.set_highlight(true)
+		_stall = stall
+	if shop_menu.visible and shop_menu.stall != stall:
+		shop_menu.close()
+	if _gate and not shop_menu.visible:
+		hud.set_stall(_gate, waiting.size())
+	else:
+		hud.set_stall(null if shop_menu.visible else stall)
+
+
+## Interact / the HUD prompt: take the soldiers at a pen gate, else open the stall's shop.
+func _open_stall() -> void:
+	if _game_over:
 		return
-	_reinforce_timer = 0.4
-	for node in get_tree().get_nodes_in_group(&"players"):
-		var player := node as Player
-		if player.reserve_soldiers <= 0 or player.is_dead or player.followers().size() >= player.follower_cap:
+	if _gate:
+		local_player.request_collect_soldiers()
+	elif _stall:
+		if _stall.can_access(local_player):
+			shop_menu.open(_stall)
+		else:
+			hud.show_toast(_stall.access_denied_text())
+
+
+## Shows ownership once when the local player enters a town, from any direction.
+func _update_town() -> void:
+	if not is_instance_valid(local_player) or not local_player.is_inside_tree() or local_player.is_dead:
+		_current_town = null
+		return
+	var inside: Node3D
+	for node in get_tree().get_nodes_in_group(&"towns"):
+		var town := node as Node3D
+		if not is_instance_valid(town) or not town.is_inside_tree():
 			continue
-		var spot := free_spot_around(player.global_position, REINFORCE_DISTANCE)
-		if spot == Vector3.INF:
-			continue
-		player.reserve_soldiers -= 1
-		NetSpawn.unit(&"ally", spot, {"team": player.team_id, "owner": player.peer_id, "color": player.unit_color})
+		var offset := local_player.global_position - town.global_position
+		offset.y = 0.0
+		if offset.length() <= WorldBuilder.TOWN_RADIUS:
+			inside = town
+			break
+	if inside != _current_town:
+		_current_town = inside
+		if inside:
+			hud.show_toast(String(inside.get_meta(&"display_title", "Town")), 2.0)
 
 
 ## A point `distance` from `center` not inside a tree/building (tries a few directions).
@@ -543,20 +643,93 @@ func _update_respawn_display(delta: float) -> void:
 
 # --- Army orders & pings ---------------------------------------------------------
 
+## HUD army buttons. Kill with a mouse: wait for a click on the enemy; on touch / gamepad: the enemy ahead.
+func _on_army_button(order: int) -> void:
+	if order == Player.Order.KILL and not Platform.touch_mode and not Platform.mobile_layout:
+		_set_kill_picking(not _kill_picking)
+		return
+	_command_army(order)
+
+
+func _set_kill_picking(on: bool) -> void:
+	_kill_picking = on
+	hud.set_kill_picking(on)
+	if on:
+		hud.show_toast("Click an enemy to kill")
+
+
+## `point`: the cursor (keys / clicks) or INF = in front of the player (gamepad / touch buttons).
+## KILL takes the enemy under the cursor (or ahead); with none there it becomes a CHARGE to the point.
 func _command_army(order: int, point: Vector3 = Vector3.INF) -> void:
 	if local_player == null or _game_over:
 		return
+	if _kill_picking and order != Player.Order.KILL:
+		_set_kill_picking(false)
+	var from_cursor := point != Vector3.INF
 	if point == Vector3.INF:
 		point = _ahead_point(ORDER_AHEAD)
+	if order == Player.Order.KILL:
+		var prey := _kill_pick() if from_cursor and not Platform.mobile_layout else \
+				local_player.kill_target_near(_ahead_point(KILL_AHEAD), KILL_AHEAD_RADIUS)
+		if prey:
+			point = prey.global_position  # the server takes the enemy standing here
+		else:
+			order = Player.Order.CHARGE
 	if multiplayer.is_server():
 		local_player.command_army(order, point)
 	else:
 		local_player.net_command.rpc_id(1, order, point)
-	var shout: String = ["Follow me!", "Charge!", "Hold here!"][order]
+	var shout: String = ARMY_SHOUTS[order]
 	FloatingText3D.spawn(world, local_player.global_position + Vector3(0, 2.1, 0), shout, Color(1.0, 0.95, 0.8), 52)
-	if order != Player.Order.FOLLOW:
+	if order == Player.Order.CHARGE or order == Player.Order.HOLD:
 		PingMarker.spawn(world, point, shout, local_player.unit_color if local_player.unit_color.a > 0.0 else Color.WHITE,
 				local_player.display_name)
+
+
+## The hostile unit / camp drawn nearest the mouse cursor (models stand up, so compare on screen).
+func _kill_pick() -> Node3D:
+	var mouse := get_viewport().get_mouse_position()
+	var best: Node3D = null
+	var best_px := KILL_PICK_PIXELS * get_viewport().get_visible_rect().size.y / 1080.0
+	for group in Player.KILL_GROUPS:
+		for node in get_tree().get_nodes_in_group(group):
+			var candidate := node as Node3D
+			if candidate == null or GameConfig.is_gone(candidate) or not GameConfig.is_hostile(local_player, candidate) \
+					or candidate.is_in_group(&"penned") or not candidate.is_visible_in_tree():
+				continue
+			var center := candidate.global_position + Vector3(0, 0.6, 0)
+			if camera.is_position_behind(center):
+				continue
+			var px := camera.unproject_position(center).distance_to(mouse)
+			if candidate is Camp:  # big: anywhere over the camp counts
+				px = maxf(px - Unit.target_radius(candidate) * 40.0, 0.0)
+			if px < best_px:
+				best_px = px
+				best = candidate
+	return best
+
+
+## Local player's KILL order: a red target mark bobs over the enemy being hunted.
+func _update_kill_mark() -> void:
+	var prey: Node3D = null
+	if is_instance_valid(local_player) and local_player.army_order == Player.Order.KILL \
+			and not local_player.army_target_path.is_empty():
+		prey = get_node_or_null(local_player.army_target_path) as Node3D
+	if prey == null or GameConfig.is_gone(prey):
+		if _kill_mark:
+			_kill_mark.visible = false
+		return
+	if _kill_mark == null:
+		_kill_mark = Sprite3D.new()
+		_kill_mark.texture = KILL_MARK_TEXTURE
+		_kill_mark.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		_kill_mark.no_depth_test = true
+		_kill_mark.pixel_size = 0.004
+		_kill_mark.modulate = Color(1.0, 0.3, 0.25)
+		world.add_child(_kill_mark)
+	var height := 1.9 + Unit.target_radius(prey) * (1.0 if prey is Camp else 0.8)  # just over the health bar
+	_kill_mark.visible = true
+	_kill_mark.global_position = prey.global_position + Vector3(0, height + 0.15 * sin(Time.get_ticks_msec() * 0.006), 0)
 
 
 ## Pings what's at `point` for your team: an enemy → "Attack!", a chest → "Loot!", else "Here!".
@@ -713,9 +886,9 @@ func _on_camp_destroyed(camp: Camp) -> void:
 	_camps_left -= 1
 	hud.set_camps(_camps_left, _camps.size())
 	if camp.destroyed_by() == Net.my_id():
-		hud.show_toast("Camp freed!  +%d soldiers" % camp.squad_size)
+		hud.show_toast("Camp destroyed!")
 	elif Net.is_online():
-		hud.show_toast("%s freed a camp" % Net.name_of(camp.destroyed_by()))
+		hud.show_toast("%s destroyed a camp" % Net.name_of(camp.destroyed_by()))
 	if multiplayer.is_server() and game_mode.match_mode == Net.Mode.COOP and _camps_left <= 0:
 		game_mode.finish("Victory!", "Every orc camp has fallen.")
 

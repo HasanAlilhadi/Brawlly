@@ -50,8 +50,12 @@ func setup(match_settings: Dictionary, players: Dictionary) -> void:
 			Net.Mode.COOP:
 				point = Vector3(cos(TAU * i / peers.size()), 0, sin(TAU * i / peers.size())) * (2.5 if peers.size() > 1 else 0.0)
 			Net.Mode.DEATHMATCH:
-				var angle: float = TAU * i / maxi(peers.size(), 2)
-				point = Vector3(cos(angle), 0.0, sin(angle)) * half * 0.6
+				# Every player gets a town: far enough apart that neighboring towns never overlap.
+				var count := maxi(peers.size(), 2)
+				var angle: float = TAU * i / count
+				var apart := WorldBuilder.TOWN_RADIUS * 2.2 / (2.0 * sin(PI / count))
+				var ring := minf(maxf(half * 0.6, apart), half - WorldBuilder.TOWN_RADIUS)
+				point = Vector3(cos(angle), 0.0, sin(angle)) * ring
 				scores[peer] = 0
 			_:
 				var team: int = players[peer].get("team", 0)
@@ -69,9 +73,29 @@ func world_spawn_points() -> Array[Vector3]:
 	if match_mode == Net.Mode.COOP:
 		points.append(Vector3.ZERO)
 	else:
-		for peer in _spawn_points:
+		var peers := _spawn_points.keys()
+		peers.sort()
+		for peer in peers:
 			points.append(_spawn_points[peer])
 	return points
+
+
+## Access rule for each town returned by `world_spawn_points()`, in the same order.
+## Empty = shared by everyone; owner_peer = personal base; team_id = team base.
+func world_town_access() -> Array[Dictionary]:
+	var access: Array[Dictionary] = []
+	match match_mode:
+		Net.Mode.COOP:
+			access.append({})
+		Net.Mode.DEATHMATCH:
+			var peers := _spawn_points.keys()
+			peers.sort()
+			for peer in peers:
+				access.append({"owner_peer": peer})
+		_:
+			for team in team_bases.size():
+				access.append({"team_id": team})
+	return access
 
 
 func world_clear_areas() -> Array[Vector3]:

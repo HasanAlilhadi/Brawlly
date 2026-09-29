@@ -18,6 +18,7 @@ var _ring: MeshInstance3D
 
 
 func _ready() -> void:
+	add_to_group(&"hill")
 	position = Vector3.ZERO
 	var disc := CylinderMesh.new()
 	disc.top_radius = RADIUS

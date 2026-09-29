@@ -7,7 +7,7 @@ Run from the project folder (`G` = the Godot binary). Tests start the game norma
 # Menus: presses the real buttons (Multiplayer → Host → Leave, Play → Start)
 "$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/ui_flow_test.gd
 
-# Solo: chest, tree, camp, shop, death
+# Solo: chest, tree, camp (gives no soldiers), trading post (buy only at the right stall), barracks (queue 10 s each, pen, take at the gate, 8 soldiers leave the pen, army cap 10 → 15), death
 "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/solo_test.gd
 
 # AI: orcs keep their targets, the Warlord walks around a house and never gets stuck, tents for small camps,
@@ -17,14 +17,18 @@ Run from the project folder (`G` = the Godot binary). Tests start the game norma
 # World events + army orders + pings + awards (solo)
 "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/events_test.gd
 
-# Desktop controls: WASD, mouse sword / bow, Space, B shop, touch controls hidden until a real touch
+# Army orders obeyed mid-fight (HOLD / FOLLOW drop the fight at once), KILL on the orc under the cursor
+# (key 4, HUD Kill + click), CHARGE after the kill, a KILL that misses charges there
+"$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/army_test.gd
+
+# Desktop controls: WASD, mouse sword / bow, K, E at a trading post stall, camera zoom per weapon, R rotates the camera 90°, touch controls hidden until a real touch
 "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/desktop_input_test.gd
 
 # Screenshots of every screen (needs a window, no --headless); add --mobile for the phone layout
 "$G" --path . res://tests/test_runner.tscn -- --test=res://tests/screenshot_test.gd --out=/tmp/shots
 "$G" --path . res://tests/test_runner.tscn -- --test=res://tests/screenshot_test.gd --out=/tmp/shots --mobile
 
-# Multiplayer (run both at once): world determinism + camp sync
+# Multiplayer (run both at once): world determinism + camp sync + a client buys / takes a barracks soldier
 "$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/mp_sync_host.gd &
 "$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/mp_sync_client.gd
 
@@ -32,7 +36,7 @@ Run from the project folder (`G` = the Godot binary). Tests start the game norma
 "$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/mp_predict_host.gd &
 "$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/mp_predict_client.gd
 
-# Multiplayer downed + revive (goes down, orc can't finish, host revives, bleeds out, respawns)
+# Multiplayer downed + revive (goes down, orc can't finish, host revives, bleeds out and drops the bow, respawns)
 "$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/mp_revive_host.gd &
 "$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/mp_revive_client.gd
 

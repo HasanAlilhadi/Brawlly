@@ -1,0 +1,48 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="PackedScene" path="res://assets/environment/buildings/healer.glb" id="1"]
+[ext_resource type="PackedScene" path="res://assets/environment/dungeon/barrel.glb" id="2"]
+[ext_resource type="PackedScene" path="res://assets/environment/dungeon/pot.glb" id="3"]
+[ext_resource type="PackedScene" path="res://assets/environment/dungeon/table.glb" id="4"]
+[ext_resource type="PackedScene" path="res://assets/environment/forest/plant.glb" id="5"]
+[ext_resource type="PackedScene" path="res://assets/items/dungeon/potion.glb" id="6"]
+
+[node name="Healer" type="Node3D"]
+
+[node name="Building" parent="." instance=ExtResource("1")]
+
+[node name="Plant" parent="." instance=ExtResource("5")]
+transform = Transform3D(0.22427, 0, -0.6982, 0, 0.73333, 0, 0.6982, 0, 0.22427, 0.20667, 0.56667, -0.52667)
+
+[node name="Plant2" parent="." instance=ExtResource("5")]
+transform = Transform3D(0.28611, 0, 0.67522, 0, 0.73333, 0, -0.67522, 0, 0.28611, 0.38667, 0.56667, -0.52667)
+
+[node name="Plant3" parent="." instance=ExtResource("5")]
+transform = Transform3D(0.93333, 0, 0, 0, 0.93333, 0, 0, 0, 0.93333, -1.1667, 0.12667, -1.1467)
+
+[node name="Plant4" parent="." instance=ExtResource("5")]
+transform = Transform3D(-0.12025, 0, 0.92555, 0, 0.93333, 0, -0.92555, 0, -0.12025, -1.1, 0.12667, -0.94667)
+
+[node name="Plant5" parent="." instance=ExtResource("5")]
+transform = Transform3D(-0.90235, 0, -0.2385, 0, 0.93333, 0, 0.2385, 0, -0.90235, -1.1667, 0.12667, -0.74667)
+
+[node name="Table" parent="." instance=ExtResource("4")]
+transform = Transform3D(0.86667, 0, 0, 0, 0.86667, 0, 0, 0, 0.86667, 0.3, 0, -0.2)
+
+[node name="Potion" parent="." instance=ExtResource("6")]
+transform = Transform3D(0.63689, 0, 0.19701, 0, 0.66667, 0, -0.19701, 0, 0.63689, 0.1, 0.26867, -0.18667)
+
+[node name="Potion2" parent="." instance=ExtResource("6")]
+transform = Transform3D(0.73333, 0, 0, 0, 0.73333, 0, 0, 0, 0.73333, 0.3, 0.26867, -0.25333)
+
+[node name="Potion3" parent="." instance=ExtResource("6")]
+transform = Transform3D(0.52655, 0, -0.28766, 0, 0.6, 0, 0.28766, 0, 0.52655, 0.48667, 0.26867, -0.16667)
+
+[node name="Pot" parent="." instance=ExtResource("3")]
+transform = Transform3D(0.73685, 0, 0.31153, 0, 0.8, 0, -0.31153, 0, 0.73685, -0.73333, 0, -0.41333)
+
+[node name="Pot2" parent="." instance=ExtResource("3")]
+transform = Transform3D(0.50951, 0, -0.15761, 0, 0.53333, 0, 0.15761, 0, 0.50951, -0.08, 0, -0.45333)
+
+[node name="Barrel" parent="." instance=ExtResource("2")]
+transform = Transform3D(0.62071, 0, 0.12582, 0, 0.63333, 0, -0.12582, 0, 0.62071, 1, 0, -1.0333)

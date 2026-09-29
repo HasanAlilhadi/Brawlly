@@ -1,6 +1,6 @@
 class_name UpgradeDef
 extends Resource
-## One item in the shop. Permanent upgrades have a max level; consumables (max_level 0) can be
+## One item for sale at the trading post stalls (see ShopStation). Permanent upgrades have a max level; consumables (max_level 0) can be
 ## bought again and again. What it does is decided by `id` in Player._apply_upgrade().
 
 @export var id: StringName
@@ -14,6 +14,8 @@ extends Resource
 @export var max_level: int = 5
 ## Effect strength per purchase (meaning depends on id: +health, +% damage, soldiers, …).
 @export var amount: float = 0.0
+## Stalls that sell it (ShopStation.STALLS ids: blacksmith, armory, healer, barracks).
+@export var stalls: Array[StringName] = []
 
 
 func cost_at(level: int) -> int:

@@ -32,4 +32,21 @@ func _process(delta: float) -> void:
 				_log("destroyed %s (is_dead=%s)" % [camps[0].name, camps[0].is_dead])
 				phase = 3; pt = 0
 		3:
-			if pt > 6: _log("done"); get_tree().quit()
+			# Barracks over the network: the client buys a soldier, it trains here, the client takes it.
+			if pt > 2:
+				var guest: Player = get_tree().get_nodes_in_group(&"players").filter(func(p): return p.peer_id != 1)[0]
+				for stall: ShopStation in get_tree().get_nodes_in_group(&"shop_stations"):
+					if stall.stall_id == ShopStation.BARRACKS: guest.global_position = stall.front()
+				guest.coins = 120
+				_log("client at the barracks with %d coins" % guest.coins)
+				phase = 4; pt = 0
+		4:
+			if pt > 18:
+				var guest: Player = get_tree().get_nodes_in_group(&"players").filter(func(p): return p.peer_id != 1)[0]
+				_log("client army: following %d, penned %d, training %d, coins %d" % [guest.followers().size(), guest.penned_soldiers().size(), guest.soldiers_training, guest.coins])
+				get_tree().current_scene.world_events.start_wave(0.1)
+				phase = 5; pt = 0
+		5:
+			if pt > 2:
+				_log("wave enemies replicated: %d" % get_tree().get_nodes_in_group(&"wave_enemies").size())
+				_log("done"); get_tree().quit()

@@ -12,13 +12,17 @@ signal health_changed(current: float, maximum: float)
 signal died(unit: Unit)
 
 const LOOPING_ANIMS: Array[String] = ["idle", "walk", "sprint"]
-## Directions tried (radians from the desired one) when the way ahead is blocked.
-const STEER_ANGLES: Array[float] = [0.0, 0.4, -0.4, 0.8, -0.8, 1.2, -1.2, 1.6, -1.6, 2.1, -2.1, 2.6, -2.6]
+## Directions tried (radians from the desired one, + = the side we're already going around) when the way
+## ahead is blocked. Our own side is tried up to 90° before switching sides, so a unit walks along a wide
+## obstacle (a wall of orcs, a house) instead of flip-flopping in front of it.
+const STEER_ANGLES: Array[float] = [0.0, 0.4, -0.4, 0.8, -0.8, 1.2, 1.6, -1.2, -1.6, 2.1, -2.1, 2.6, -2.6]
 const STEER_INTERVAL: float = 0.15
 ## Target stickiness: after picking a target, keep it at least this long, and only switch to one that
 ## is much closer (at most this fraction of the current distance). Stops AI flip-flopping.
 const TARGET_LOCK_TIME: float = 2.5
 const TARGET_SWITCH_RATIO: float = 0.5
+## Above raised walkable details such as the town compass mosaic (top: 0.037 m).
+const COLOR_RING_HEIGHT: float = 0.06
 const ARM_RIGHT: int = 1
 const ARM_LEFT: int = 2
 const ARM_BOTH: int = 3
@@ -80,6 +84,10 @@ const ARM_BOTH: int = 3
 @export_group("Steering")
 ## How far ahead AI units look for obstacles (trees, houses).
 @export var steer_lookahead: float = 1.3
+## Extra physics layers `engage()` steers around while still chasing its target (not yet close), e.g.
+## soldiers go around orcs in the way instead of getting tangled in (and fighting) them. 0 = only
+## trees / houses / walls.
+@export_flags_3d_physics var chase_avoid_mask: int = 0
 ## Push away from same-side units closer than this (stops them stacking in a line).
 @export var separation_radius: float = 0.75
 @export var separation_strength: float = 0.9
@@ -208,7 +216,7 @@ func _ready() -> void:
 ## Client: make this (local player's) unit move immediately from local input.
 func enable_prediction() -> void:
 	is_predicted = true
-	collision_mask = GameConfig.LAYER_WORLD
+	collision_mask = GameConfig.LAYER_WORLD | GameConfig.LAYER_FENCE
 	global_position = net_position
 
 
@@ -568,7 +576,7 @@ func _apply_color() -> void:
 	_color_ring = MeshInstance3D.new()
 	_color_ring.mesh = ring_mesh
 	_color_ring.scale = Vector3(1, 0.15, 1)
-	_color_ring.position.y = 0.03
+	_color_ring.position.y = COLOR_RING_HEIGHT
 	_color_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(_color_ring)
 	if recolor_key_hue < 0.0:
@@ -768,14 +776,15 @@ func engage(target: Node3D, delta: float) -> Vector3:
 		var slot := target.global_position + Vector3(cos(_slot_angle), 0.0, sin(_slot_angle)) * reach * 0.8
 		desired = slot - global_position
 		desired.y = 0.0
-	return steer(desired, delta, target)  # the target itself (e.g. a camp) is not an obstacle
+	# The target itself (e.g. a camp) is not an obstacle; while still chasing, others in the way are.
+	return steer(desired, delta, target, dist > reach + 1.5)
 
 
 ## Turns a desired direction into one that goes around obstacles, plus separation from
 ## nearby units on the same side. `ignore` (e.g. the building being attacked) is not an obstacle.
 ## A unit that barely moves for a few checks while trying to (wedged against a tree, a crowd or a
 ## wall corner) switches sides and walks sideways for a moment to get free.
-func steer(desired: Vector3, delta: float, ignore: Node3D = null) -> Vector3:
+func steer(desired: Vector3, delta: float, ignore: Node3D = null, chasing: bool = false) -> Vector3:
 	var strength := minf(desired.length(), 1.0)
 	if strength < 0.01:
 		return Vector3.ZERO
@@ -784,8 +793,9 @@ func steer(desired: Vector3, delta: float, ignore: Node3D = null) -> Vector3:
 	if _steer_timer <= 0.0:
 		_steer_timer = STEER_INTERVAL + randf() * 0.05
 		_check_stuck(strength)
-		_steer_angle = _pick_steer_angle(want, ignore, 1.2 if _unstick_time > 0.0 else 0.0)
-		_separation = _compute_separation()
+		_steer_angle = _pick_steer_angle(want, ignore, 1.2 if _unstick_time > 0.0 else 0.0,
+				chase_avoid_mask if chasing else 0)
+		_separation = _compute_separation() if separation_strength > 0.0 else Vector3.ZERO
 	var dir := want.rotated(Vector3.UP, _steer_angle) + _separation * separation_strength
 	return dir.normalized() * strength
 
@@ -805,14 +815,14 @@ func _check_stuck(strength: float) -> void:
 
 ## Picks the direction closest to `want` whose path is free of trees / houses for `steer_lookahead`.
 ## The probe is sized to the unit, so big ones (giants, the Warlord) look for wide enough gaps.
-## `min_angle` > 0 forces a sideways step (used to get unstuck).
-func _pick_steer_angle(want: Vector3, ignore: Node3D, min_angle: float = 0.0) -> float:
+## `min_angle` > 0 forces a sideways step (used to get unstuck). `extra_mask`: more layers to go around.
+func _pick_steer_angle(want: Vector3, ignore: Node3D, min_angle: float = 0.0, extra_mask: int = 0) -> float:
 	if _probe_shape == null:
 		_probe_shape = SphereShape3D.new()
 		_probe_shape.radius = clampf(radius * 0.6, 0.24, 0.5)
 	var query := PhysicsShapeQueryParameters3D.new()
 	query.shape = _probe_shape
-	query.collision_mask = GameConfig.LAYER_WORLD
+	query.collision_mask = GameConfig.LAYER_WORLD | (collision_mask & GameConfig.LAYER_FENCE) | extra_mask
 	query.transform = Transform3D(Basis(), global_position + Vector3(0, 0.45, 0))
 	var exclude: Array[RID] = [get_rid()]
 	if is_instance_valid(ignore) and ignore is CollisionObject3D:

@@ -4,8 +4,11 @@ class_name GameConfig
 ## The playable world is a square from -world_half to +world_half on X and Z.
 ## Set by main.gd (from the match settings) before the world is built.
 static var world_half: float = 80.0
-## Starting follower cap (the shop raises Player.follower_cap); extra soldiers wait in the reserve.
-const BASE_FOLLOWER_CAP: int = 25
+## Army size every player starts with (soldiers following + waiting in the pen + in training).
+## The barracks "Command" upgrade raises Player.follower_cap by 1 per level, up to 15.
+const BASE_FOLLOWER_CAP: int = 10
+## Seconds a soldier bought at the barracks trains before it waits in the pen.
+const SOLDIER_TRAIN_TIME: float = 10.0
 
 ## Orcs are their own team, hostile to everyone.
 const ORC_TEAM: int = -1
@@ -15,6 +18,8 @@ const LAYER_WORLD: int = 1      # ground props, trees, camps, chests
 const LAYER_PLAYER: int = 2
 const LAYER_ENEMIES: int = 4
 const LAYER_ALLIES: int = 8
+## Barracks pen fence (blocks everyone; soldiers route around it with ShopStation.detour()).
+const LAYER_FENCE: int = 16
 const LAYER_UNITS: int = LAYER_PLAYER | LAYER_ENEMIES | LAYER_ALLIES
 ## Shots fly at 0.55 m (arrows) to 0.7 m (spears): anything hittable needs a collision shape from the
 ## ground up to at least this height, or arrows and spears pass over it (melee hits by distance).

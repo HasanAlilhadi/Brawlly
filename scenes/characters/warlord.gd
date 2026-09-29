@@ -2,7 +2,7 @@ class_name Warlord
 extends Enemy
 ## World event boss: marches from far away toward `quarry` (a player) with a warband that grows on
 ## the way. Hitting it or its warband sends them all after the attacker. When it falls, its surviving
-## warband joins the player who landed the final blow (like a destroyed camp) and it spills a pile of
+## warband is routed (they fall and drop their loot, like a destroyed camp's squad) and it spills a pile of
 ## coins. Spawned by WorldEvents (server).
 ## Fighting: prefers players over soldiers (most of all whoever is hurting it) and only switches when a
 ## clearly better target shows up; charges at targets a few meters away when the way is clear (so it
@@ -13,6 +13,9 @@ extends Enemy
 signal defeated(warlord: Warlord, by_peer: int)
 ## Server: at half health it called for reinforcements.
 signal rallied(warlord: Warlord)
+
+## Its face on the minimap (rendered by tools/render_portrait.gd).
+const PORTRAIT := preload("res://assets/ui/icons/portraits/warlord.png")
 
 ## Orc scenes the warband is made of (picked at random).
 @export var warband_scenes: Array[PackedScene] = []
@@ -76,6 +79,8 @@ func _ready() -> void:
 	add_to_group(&"bosses")
 	set_meta(&"marker_color", Color(1.0, 0.3, 0.25))
 	set_meta(&"marker_label", "Orc Warlord")
+	set_meta(&"marker_icon", PORTRAIT)
+	set_meta(&"marker_portrait", true)
 	add_to_group(&"tracked")
 	_reinforce_timer = reinforce_interval
 	_build_title()
@@ -275,22 +280,10 @@ func _on_died() -> void:
 	_title.hide()
 	if not multiplayer.is_server():
 		return
-	# The warband kneels to whoever landed the final blow (over their cap: into the reserve).
-	var player: Player = null
-	for node in get_tree().get_nodes_in_group(&"players"):
-		if (node as Player).peer_id == last_attacker_peer:
-			player = node
+	# Without their chief the warband is routed: they fall and drop their loot.
 	for orc in _band:
-		if not is_instance_valid(orc) or orc.is_dead:
-			continue
-		var spot := orc.global_position
-		orc.queue_free()
-		if player == null:
-			continue
-		if player.followers().size() >= player.follower_cap:
-			player.reserve_soldiers += 1
-		else:
-			NetSpawn.unit(&"ally", spot, {"team": player.team_id, "owner": player.peer_id, "color": player.unit_color})
+		if is_instance_valid(orc) and not orc.is_dead:
+			orc.die()
 	_band.clear()
 	for i in 10:
 		Pickup.drop(get_parent(), global_position + Vector3(randf_range(-1.5, 1.5), 0, randf_range(-1.5, 1.5)),

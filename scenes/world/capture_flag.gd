@@ -23,6 +23,7 @@ var _model: Node3D
 
 
 func _ready() -> void:
+	add_to_group(&"flags")
 	position = home
 	var color: Color = Net.TEAM_COLORS[team_id]
 	# Base pad (stays at home).

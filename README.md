@@ -9,19 +9,28 @@ Single-player archer vs. orc camps in a big procedural world (3D, Kenney mini pa
 - **Player** (archer): sword + bow with limited arrows. Both are aim sticks: sword = drag to keep swinging toward a direction
   (independent of movement); bow = drag to aim, release to shoot. A tap on either auto-targets the nearest enemy.
 - **Arrows** come from chests, chopped trees and orc drops. **Health** comes from potions (orc drops, chests).
+- **Chests** have five rarities: Common (gray), Uncommon (green), Rare (blue), Epic (purple), and Legendary (gold).
+  Higher rarities are tougher and drop progressively more ammo, healing, and coins. Town starter chests are always
+  Uncommon so every player/team begins with the same reward; world chests roll 55% / 25% / 12% / 6% / 2%.
 - **Orc camps**: small squads (≤ 7) live in a tent, bigger ones in a house. Each camp has a squad (≈4–6 near the start up to 20–25 at the edges; bigger squads get a bigger, tougher house). Killed orcs respawn after 10 s
-  until the house is destroyed. Destroying it turns the whole squad into **soldiers** that follow and fight
-  for the player; dead soldiers never come back.
-- **Follower cap**: up to 25 soldiers follow you in formation; extra ones wait in a reserve (HUD "25 +N") and run in
-  to replace fallen followers.
+  until the house is destroyed. Destroying it routes the surviving orcs (they fall and drop their loot) and
+  spills coins.
+- **Soldiers** are bought at the trading post's **Barracks** (a walled training compound): 50 coins each, trained
+  one after another (10 s each), then they wait in its courtyard until you take them at its gate (E / tap) or with
+  the Barracks shop's **Take** button. They follow and fight for
+  you; dead soldiers never come back. Army cap 10 (following + in the pen + training); **Command** raises it by 1
+  per level (100 coins each) up to 15.
 - **Orc types**: Spearman (basic; carries the arena sword), Swordsman (tougher, faster attacks; orc sword), Spear Thrower (throws spears from ~8 units,
   backs off when you close in), Giant (huge, slow, heavy punches that hit everything in front). Camps mix them:
   ~25% swordsmen, ~20% throwers, rest spearmen, plus 1 giant at 10+ orcs and 2 at 18+.
 - **Aggro**: hitting an orc or its camp (even with an arrow from far away) alerts the whole squad (red "!").
   They chase the attacker faster and much farther than usual, and give up only after losing sight for ~10 s.
-- **Coins & shop**: orcs, chests and destroyed camps give coins. The shop (coin button, top left; pauses the game)
-  sells upgrades (Vitality, Sharp Blade, Keen Arrows, Big Quiver, Drill Soldiers, Command) and consumables
-  (Recruit, Potion, Arrow Bundle). Items are data: `resources/data/upgrade_catalog.tres`.
+- **Coins & the town**: orcs, chests and destroyed camps give coins. Each spawn is a town (always the same layout:
+  a paved square with the Barracks north, Blacksmith + Healer west, Bows & Spears east; kept away from orc camps)
+  with one stall per trade: Blacksmith (Sharp Blade), Bows & Spears (bow, spear, Keen Points,
+  Big Quiver, arrows, spears), Healer (Potion, Vitality) and Barracks (Recruit, Drill Soldiers, Command).
+  Walk up to a stall and press E (or tap its button) to open its shop (pauses the game in solo). Items are data:
+  `resources/data/upgrade_catalog.tres` (`stalls` = which stalls sell it); stalls are `scenes/world/shop_station.gd`.
 - **Difficulty curve**: each camp has a tier (distance from the start). Orcs are 0.75× strength near the start up to
   1.35× at the edges; squads grow from ~4 to ~24. The house shows how many orcs are still alive; bigger camps are
   bigger squares on the minimap. Fallen orcs don't respawn while their camp is under attack.
@@ -39,6 +48,9 @@ Single-player archer vs. orc camps in a big procedural world (3D, Kenney mini pa
   in team modes. **Play** (solo) uses the same lobby offline.
 - **Modes**: Co-op vs Orcs · Deathmatch · Team Deathmatch · Capture the Flag · King of the Hill. Orcs stay in every
   mode and fight everyone. Destroying a camp gives its soldiers to whoever landed the last hit.
+- **Towns in multiplayer**: co-op uses one shared town, Deathmatch gives every player a private town, and team modes
+  give every team one shared town. A colored compass ring and entrance label identify the owner; other players can
+  enter the town but cannot use its shops or Barracks.
 - Online matches don't pause (pause menu → Leave Game); players respawn after a few seconds.
 - The host's device runs the match; up to 8 players. Joining by IP always works; automatic discovery on iPhone may
   need Apple's multicast entitlement.
@@ -55,6 +67,9 @@ Single-player archer vs. orc camps in a big procedural world (3D, Kenney mini pa
   - **Orc Warlord** (~4–5 min in, then every ~8 min): a huge boss marching on a player (in versus modes on the leader)
     with a warband that grows every 25 s. It stomps everyone around it. Whoever lands the final blow gets its
     surviving warband as soldiers, plus a pile of coins.
+  - **Waves** (~2 min in): red invasion beacons warn at all four map borders before raiders march in and hunt the
+    nearest living player. Waves contain 10, 20, 30, 40, then at most 50 enemies, adding swordsmen, throwers and
+    giants as they advance. A new wave starts only after the current one is defeated and a short recovery period.
 - **Army orders**: Follow (formation), Charge (run to a point and fight everything there), Hold (guard a point).
   Buttons under the soldier count, keys 1 / 2 / 3 (at the cursor), D-pad on a gamepad.
 - **Pings** (online, your team only): Q / middle mouse / the "!" button. Pinging an enemy says "Attack!", a chest
@@ -85,8 +100,8 @@ Single-player archer vs. orc camps in a big procedural world (3D, Kenney mini pa
 | Move | WASD / arrow keys | Left stick | Drag on the left side |
 | Sword | Left mouse — swings toward the cursor while held · J = nearest enemy | RB / X (nearest enemy) | Sword stick: drag = direction, tap = nearest |
 | Bow | Right mouse — hold to aim at the cursor, release to shoot | Right stick aims · RT / A shoots | Bow stick: drag to aim, release to shoot |
-| Quick shot (nearest enemy) | Space / K | RT / A without aiming | Tap the bow stick |
-| Shop | B / Tab | Back | Coin button |
+| Quick shot (nearest enemy) | K | RT / A without aiming | Tap the bow stick |
+| Use a stall | E / B | LB / View | Stall button |
 | Pause | Esc / P | Start | II button / Android back |
 | Army orders (follow / charge / hold) | 1 / 2 / 3 (charge / hold at the cursor) | D-pad up / right / down | Buttons under the soldier count |
 | Ping · call for help | Q or middle mouse · H | D-pad left | "!" button (online) |
@@ -94,7 +109,7 @@ Single-player archer vs. orc camps in a big procedural world (3D, Kenney mini pa
 
 All bindings are listed in-game under **main menu → Controls** (`scenes/ui/controls_menu.gd` — update it when
 bindings change). Bindings are Input Map actions (Project Settings → Input Map): `move_*`, `aim_*`, `attack`, `aim_bow`, `shoot`,
-`shop`, `pause`, `toggle_fullscreen`, `army_follow` / `army_charge` / `army_hold`, `ping`, `ping_help`. Touch controls appear on a PC only when a touchscreen is used.
+`interact`, `pause`, `toggle_fullscreen`, `army_follow` / `army_charge` / `army_hold`, `ping`, `ping_help`. Touch controls appear on a PC only when a touchscreen is used.
 
 ### Desktop vs. mobile (`scripts/autoload/platform.gd`, autoload `Platform`)
 
@@ -141,6 +156,14 @@ Desktop is always landscape. The phone orientation is set with `tools/set_orient
 ├── tools/               # Helper scripts (ignored by Godot)
 │   ├── set_orientation.sh
 │   ├── glb_set_texture.py           # Point 3D models at a shared palette texture
+│   ├── blender_kit.py               # Toolkit for own Blender models in the Kenney palette style (+ overlap check)
+│   ├── blender_barracks.py          # Builds the Barracks compound model (uses blender_kit.py)
+│   ├── blender_blacksmith.py        # Builds the Blacksmith workshop model (uses blender_kit.py)
+│   ├── blender_armory.py            # Builds the Bows & Spears cabin model (uses blender_kit.py)
+│   ├── blender_healer.py            # Builds the Healer cottage model (uses blender_kit.py)
+│   ├── blender_town.py              # Builds the town at every spawn (square, decor, stall spots, collision)
+│   ├── blender_props.py             # The game's existing models (paths + in-game sizes) for building scripts
+│   ├── render_portrait.gd           # Render a round head portrait of a model (map / HUD icons)
 │   ├── install_export_templates.py  # Download only the export templates you need (Windows/Android/iOS…)
 │   └── run_ios.sh       # Export, sign and launch the game on a connected iPhone
 ├── pre-assets/          # DROP ZONE: put raw assets/packs here, any layout (ignored by Godot)
@@ -154,7 +177,7 @@ Desktop is always landscape. The phone orientation is set with `tools/set_orient
 │   ├── fonts/
 │   ├── audio/           # sfx/  music/
 │   ├── vfx/
-│   └── shaders/
+│   └── shaders/         # highlight_glow.gdshader: pulsing "you can use this" glow (material_overlay)
 ├── scenes/              # .tscn files
 │   ├── main/            # Entry scene (main.tscn)
 │   ├── levels/  characters/  ui/  components/
@@ -180,7 +203,7 @@ Desktop is always landscape. The phone orientation is set with `tools/set_orient
 | `health_bar_3d.gd` (`HealthBar3D`) | Camera-facing health bar over 3D objects; hides when full (optional `auto_hide_delay`). `set_ratio()`. |
 | `bone_pose_override_3d.gd` (`BonePoseOverride3D`) | SkeletonModifier3D that holds chosen bones in a pose sampled from an animation (e.g. arm in a "holding" pose while legs walk), or plays them live from another animation (`start_live`, e.g. swing only the arm while running); blend with `influence`. |
 | `floating_text_3d.gd` (`FloatingText3D`) | Pop-up text in the 3D world that arcs up and fades ("+5" coins, damage numbers). Pooled, max 24 on screen. `FloatingText3D.spawn(parent, pos, text, color, size, emphasized)`. |
-| `follow_camera_3d.gd` (`FollowCamera3D`) | Fixed-angle smooth follow camera (top-down / isometric). Set `target`, call `snap()`, `shake()`. FOV covers the screen's short side (same view on phones and monitors). |
+| `follow_camera_3d.gd` (`FollowCamera3D`) | Fixed-angle smooth follow camera (top-down / isometric). Set `target`, call `snap()`, `shake()`; `zoom` (offset multiplier, eases in) zooms in / out; `rotate_step(±1)` orbits exactly 90° (turn screen input with `to_world(v)`). FOV covers the screen's short side (same view on phones and monitors). |
 | `offscreen_markers.gd` (`OffscreenMarkers`) | Screen-edge arrows (label + distance) to nodes in the "tracked" group (metas `marker_color`, `marker_label`). |
 | `max_width.gd` (`MaxWidth`) | Attach to a full-width menu panel: centered and at most `max_width` wide on wide screens, `margin` on each side on phones. |
 | `scripts/autoload/platform.gd` (autoload `Platform`) | Desktop / mobile setup: UI size per device, `mobile_layout`, `touch_mode` (+ `touch_mode_changed`), fullscreen toggle (F11 / Alt+Enter, saved), `-- --mobile` test flag. |

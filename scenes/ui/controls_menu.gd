@@ -14,16 +14,18 @@ const TWO_COLUMNS_WIDTH: float = 1150.0
 ## key caps with that text. Icons are Game Icon Pack glyphs (assets/ui/icons/game/).
 const KEYBOARD: Array = [
 	["cursor_move", "Move", "", [["keyboard/w", "keyboard/a", "keyboard/s", "keyboard/d"], ["keyboard/arrows"]]],
-	["broadsword", "Switch weapon", "Sword ⇄ the bow or spear you bought in the shop", [["keyboard/q"]]],
+	["broadsword", "Switch weapon", "Sword ⇄ the bow or spear you bought", [["keyboard/q"]]],
+	["rotate_right", "Rotate camera", "Turns the view 90° around you", [["keyboard/r"]]],
 	["sword", "Sword", "Swings toward the cursor", [["mouse/left"]]],
 	["bow", "Bow / spear", "Hold to aim at the cursor, release to shoot or throw", [["mouse/left"], ["mouse/right"]]],
-	["arrow", "Quick attack", "Weapon in hand on the nearest enemy", [["keyboard/space"], ["keyboard/j"], ["keyboard/k"]]],
+	["arrow", "Quick attack", "Weapon in hand on the nearest enemy", [["keyboard/j"], ["keyboard/k"]]],
 	["user_group", "Soldiers: follow", "They walk with you in formation", [["keyboard/1"]]],
 	["flag", "Soldiers: charge", "They run to the cursor and fight there", [["keyboard/2"]]],
 	["shield", "Soldiers: hold", "They guard the spot under the cursor", [["keyboard/3"]]],
+	["target", "Soldiers: kill", "They hunt the enemy under the cursor (none there: charge) · or click Kill, then the enemy", [["keyboard/4"]]],
 	["location", "Ping", "Attack! · Loot! · Here! for your team", [["G"], ["mouse/scroll"]]],
 	["heart", "Call for help", "", [["keyboard/h"]]],
-	["shop", "Shop", "", [["keyboard/b"], ["keyboard/tab"]]],
+	["shop", "Use a stall", "Shop at a trading post stall you stand at", [["keyboard/e"], ["keyboard/b"]]],
 	["pause", "Pause", "", [["keyboard/escape"], ["keyboard/p"]]],
 	["expand", "Fullscreen", "", [["keyboard/f11"], ["keyboard/alt", "keyboard/enter"]]],
 ]
@@ -35,8 +37,9 @@ const GAMEPAD: Array = [
 	["user_group", "Soldiers: follow", "", [["xbox/dpad_up"]]],
 	["flag", "Soldiers: charge", "In front of you", [["xbox/dpad_right"]]],
 	["shield", "Soldiers: hold", "In front of you", [["xbox/dpad_down"]]],
+	["target", "Soldiers: kill", "The enemy in front of you (none: charge)", [["xbox/b"]]],
 	["location", "Ping", "", [["xbox/dpad_left"]]],
-	["shop", "Shop", "", [["xbox/view"]]],
+	["shop", "Use a stall", "At a trading post stall", [["xbox/lb"], ["xbox/view"]]],
 	["pause", "Pause", "", [["xbox/menu"]]],
 ]
 const TOUCH: Array = [
@@ -44,16 +47,19 @@ const TOUCH: Array = [
 	["broadsword", "Switch weapon", "The small button above the weapon stick", [["touch/tap"]]],
 	["sword", "Sword", "Sword stick: drag to swing that way · tap hits the nearest enemy", [["touch/swipe_move"], ["touch/tap"]]],
 	["bow", "Bow", "Bow stick: drag to aim, release to shoot · tap auto-aims", [["touch/swipe_move"], ["touch/tap"]]],
-	["user_group", "Soldier orders", "The buttons under your soldier count", [["Follow"], ["Charge"], ["Hold"]]],
+	["user_group", "Soldier orders", "The buttons under your soldier count", [["Follow"], ["Charge"], ["Hold"], ["Kill"]]],
 	["location", "Ping", "Online games", [["!"]]],
-	["shop", "Shop", "The coin button", [["touch/tap"]]],
+	["shop", "Use a stall", "Tap the stall button at the bottom", [["touch/tap"]]],
 	["pause", "Pause", "", [["II"]]],
 ]
 const TIPS: Array = [
+	["shop", "Trading post", "Stalls around your spawn: Blacksmith, Bows & Spears, Healer, Barracks", []],
 	["health", "Revive", "Stand next to a downed teammate for 3 seconds", []],
-	["tent", "Free the camps", "Destroy a camp and its orcs become your soldiers", []],
+	["tent", "Destroy the camps", "A camp's surviving orcs fall with it and drop their loot", []],
+	["flag", "Orders come first", "Soldiers drop any fight to follow, charge or hold the moment you say so", []],
+	["user_group", "Barracks", "Buy soldiers (50 coins, 10 s each), then take them at the pen gate · army 10, Command raises it to 15", []],
 	["star_coin", "Treasure goblin", "Every hit spills coins — catch it before it escapes", []],
-	["boss", "Orc Warlord", "Land the final blow and its warband joins you", []],
+	["boss", "Orc Warlord", "Bring it down and its warband is routed", []],
 	["skull", "Revive or finish", "Orcs leave downed archers alone, enemy players don't", []],
 ]
 const TABS: Array = [["Keyboard & mouse", KEYBOARD], ["Gamepad", GAMEPAD], ["Touch", TOUCH], ["Tips", TIPS]]

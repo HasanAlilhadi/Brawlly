@@ -189,5 +189,22 @@ func _process(delta: float) -> void:
 		7:
 			if pt > 0.3:
 				_check(camp.health < float(get_meta(&"camp_health")), "point-blank arrow hits the camp wall (%.0f -> %.0f)" % [get_meta(&"camp_health"), camp.health])
+				# No aim snapping: an arrow aimed 6° beside an orc 8 m away flies past it.
+				player.global_position = Vector3(0, 0, 0)
+				var orc := NetSpawn.unit(&"enemy", Vector3(8, 0, 0), {
+					"scene": "res://scenes/characters/enemy.tscn", "strength": 1.0, "coins": 1.0}) as Enemy
+				orc.add_to_group(&"active_enemies")
+				orc.set_physics_process(false)
+				set_meta(&"orc", orc)
+				set_meta(&"orc_health", orc.max_health)
+				player._shoot_timer = 0.0
+				player.shoot(Vector3(cos(deg_to_rad(6.0)), 0, sin(deg_to_rad(6.0))))
+				phase = 9  # (8 is the downed check that runs first)
+				pt = 0.0
+		9:
+			if pt > 1.0:
+				var orc: Enemy = get_meta(&"orc")
+				_check(is_instance_valid(orc) and is_equal_approx(orc.health, float(get_meta(&"orc_health"))),
+						"an arrow aimed beside an orc flies where aimed (no snapping)")
 				_log("DONE failures=%d" % failures)
 				get_tree().quit(1 if failures > 0 else 0)

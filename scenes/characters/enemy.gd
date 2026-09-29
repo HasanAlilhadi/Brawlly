@@ -8,6 +8,7 @@ extends Unit
 
 ## Orcs fight every player and every player's soldiers.
 const TARGET_GROUPS: Array[StringName] = [&"player_units"]
+const WAVE_TARGET_GROUPS: Array[StringName] = [&"players"]
 
 @export var aggro_range: float = 6.5
 ## Beyond this distance from home a calm orc stops chasing and walks back.
@@ -49,6 +50,9 @@ var target: Node3D
 var camp: Camp
 ## Or the Warlord whose warband it marches in (the Warlord moves `home` along with it).
 var warlord: Warlord
+## Wave-event raiders never leash or wander: they cross the map after the nearest living player.
+var wave_enemy: bool = false
+var wave_number: int = 0
 ## Set by the camp: tougher camps drop more coins.
 var coin_multiplier: float = 1.0
 
@@ -79,6 +83,10 @@ func _ready() -> void:
 	_wander_point = global_position
 	_think_timer = randf() * 0.3
 	_build_alert_label()
+	if wave_enemy:
+		add_to_group(&"wave_enemies")
+		add_to_group(&"active_enemies")
+		alert_seq += 1
 
 
 ## Makes this orc hunt `attacker` (called by the camp / Warlord for the whole squad, and with
@@ -118,7 +126,7 @@ func is_provoked() -> bool:
 
 ## True while the orc is chasing or walking home (its camp keeps it awake even if far away).
 func is_busy() -> bool:
-	return is_provoked() or _returning
+	return wave_enemy or is_provoked() or _returning
 
 
 ## Combo: two players of the same team hitting this orc within `combo_window` — every such hit
@@ -175,6 +183,14 @@ func _get_move_input(delta: float) -> Vector3:
 
 
 func _think() -> void:
+	if wave_enemy:
+		var nearest := find_nearest(WAVE_TARGET_GROUPS, GameConfig.world_half * 3.0)
+		if nearest != target:
+			target = nearest
+			if target:
+				lock_target()
+		_returning = false
+		return
 	var dist_home := global_position.distance_to(home)
 
 	if is_provoked():

@@ -32,4 +32,31 @@ func _process(delta: float) -> void:
 			if camps[0].is_dead:
 				var hud: Hud = main.get_node("HUD")
 				_log("saw %s destroyed by %d; HUD camps='%s' toast='%s'" % [camps[0].name, camps[0].destroyed_by(), hud.camps_label.text, hud.toast_label.text])
-				phase = 3
+				phase = 3; pt = 0
+		3:
+			var me: Player = main.local_player
+			var recruit: UpgradeDef = (main.get_node("ShopMenu") as ShopMenu).catalog.upgrades.filter(func(d): return d.id == &"recruit")[0]
+			if me.coins >= 100 and me.can_buy(recruit):
+				me.request_buy(recruit)
+				_log("bought a soldier at the barracks")
+				phase = 4; pt = 0
+		4:
+			var me: Player = main.local_player
+			if me.penned_soldiers().size() > 0:
+				_log("soldier waiting in the pen after %.1fs (training %d, coins %d)" % [pt, me.soldiers_training, me.coins])
+				me.request_collect_soldiers()
+				phase = 5; pt = 0
+			elif pt > 14: _log("FAIL no soldier in the pen (training %d)" % me.soldiers_training); phase = 6
+		5:
+			var me: Player = main.local_player
+			if me.followers().size() > 0 and me.penned_soldiers().is_empty():
+				_log("took the soldier: following %d" % me.followers().size()); phase = 6; pt = 0
+			elif pt > 3: _log("FAIL collect: following %d penned %d" % [me.followers().size(), me.penned_soldiers().size()]); phase = 6; pt = 0
+		6:
+			var raiders := get_tree().get_nodes_in_group(&"wave_enemies")
+			if raiders.size() >= 10:
+				_log("saw replicated wave: %d raiders, wave=%d" % [raiders.size(), (raiders[0] as Enemy).wave_number])
+				phase = 7
+			elif pt > 25:
+				_log("FAIL no replicated wave enemies")
+				phase = 7

@@ -46,7 +46,7 @@ properties/9/replication_mode = 2
 
 [node name="Warlord" type="CharacterBody3D"]
 collision_layer = 4
-collision_mask = 15
+collision_mask = 31
 motion_mode = 1
 script = ExtResource("1_script")
 warband_scenes = Array[PackedScene]([ExtResource("5_spearman"), ExtResource("5_spearman"), ExtResource("6_swordsman"), ExtResource("7_thrower")])

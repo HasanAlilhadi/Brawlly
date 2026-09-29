@@ -1,0 +1,88 @@
+[gd_scene format=3 uid="uid://b7bmgddfe7lmp"]
+
+[ext_resource type="PackedScene" uid="uid://bgfs2f4oac8pd" path="res://assets/environment/buildings/armory.glb" id="1"]
+[ext_resource type="PackedScene" uid="uid://dtq4unpjwouj5" path="res://assets/environment/arena/weapon_rack.glb" id="2"]
+[ext_resource type="PackedScene" uid="uid://35ppmihqtjnf" path="res://assets/environment/dungeon/barrel.glb" id="3"]
+[ext_resource type="PackedScene" uid="uid://dt0mja04pcc35" path="res://assets/environment/forest/target.glb" id="4"]
+[ext_resource type="PackedScene" uid="uid://d4aq0d53r153k" path="res://assets/items/dungeon/spear.glb" id="5"]
+[ext_resource type="PackedScene" uid="uid://c2dqtf8sxcn0w" path="res://assets/items/forest/arrow.glb" id="6"]
+[ext_resource type="PackedScene" uid="uid://n5eatnif73ab" path="res://assets/items/forest/bow.glb" id="7"]
+
+[node name="Armory" type="Node3D" unique_id=1938201334]
+
+[node name="Building" parent="." unique_id=1716239410 instance=ExtResource("1")]
+
+[node name="Arrow" parent="." unique_id=1579410716 instance=ExtResource("6")]
+transform = Transform3D(0, 0, 0.8, 0, 0.8, 0, -0.8, 0, 0, -0.48, 0.5, -0.52)
+
+[node name="Arrow2" parent="." unique_id=274087573 instance=ExtResource("6")]
+transform = Transform3D(-0.063932, 0, 0.79744, 0, 0.8, 0, -0.79744, 0, -0.063932, -0.46, 0.508, -0.47333)
+
+[node name="Arrow3" parent="." unique_id=706757892 instance=ExtResource("6")]
+transform = Transform3D(-0.12745, 0, 0.78978, 0, 0.8, 0, -0.78978, 0, -0.12745, -0.44, 0.516, -0.42667)
+
+[node name="Arrow7" parent="." unique_id=1346549802 instance=ExtResource("6")]
+transform = Transform3D(0, 0, 0.6, 0.6, 0, 0, 0, 0.6, 0, 0.53333, 0.86667, -0.52667)
+
+[node name="Bow" parent="." unique_id=1790330340 instance=ExtResource("7")]
+transform = Transform3D(0, 0, 0.93333, 0, 0.93333, 0, -0.93333, 0, 0, 0.16, 0.45333, -0.56333)
+
+[node name="WeaponRack" parent="." unique_id=1244764748 instance=ExtResource("2")]
+transform = Transform3D(0.73333, 0, 0, 0, 0.73333, 0, 0, 0, 0.73333, -0.56667, 0, 0.066667)
+
+[node name="Spear4" parent="." unique_id=693168828 instance=ExtResource("5")]
+transform = Transform3D(0.75, 0, 0, 0, 0.75, 0, 0, 0, 0.75, -0.4881422, 0, 0.1472943)
+
+[node name="Spear5" parent="." unique_id=137582501 instance=ExtResource("5")]
+transform = Transform3D(0.75, 0, 0, 0, 0.75, 0, 0, 0, 0.75, -0.64312947, 0, 0.1472943)
+
+[node name="Spear6" parent="." unique_id=1086632872 instance=ExtResource("5")]
+transform = Transform3D(0.75, 0, 0, 0, 0.75, 0, 0, 0, 0.75, -0.4881422, 0, -0.022436097)
+
+[node name="Spear7" parent="." unique_id=1548674131 instance=ExtResource("5")]
+transform = Transform3D(0.75, 0, 0, 0, 0.75, 0, 0, 0, 0.75, -0.64312947, 0, -0.022436097)
+
+[node name="WeaponRack2" parent="." unique_id=1434687581 instance=ExtResource("2")]
+transform = Transform3D(0.73333, 0, 0, 0, 0.73333, 0, 0, 0, 0.73333, 0.16667, 0, 0.066667)
+
+[node name="Bow2" parent="." unique_id=1114076675 instance=ExtResource("7")]
+transform = Transform3D(-0.75, 0, -1.13246855e-07, 0, 0.75, 0, 1.13246855e-07, 0, -0.75, 0.06404406, 0.049049646, 0.2611542)
+
+[node name="Bow3" parent="." unique_id=217088810 instance=ExtResource("7")]
+transform = Transform3D(-0.75, 0, -1.13246855e-07, 0, 0.75, 0, 1.13246855e-07, 0, -0.75, 0.21161225, 0.049049646, 0.2611542)
+
+[node name="Bow4" parent="." unique_id=2047602193 instance=ExtResource("7")]
+transform = Transform3D(0.75, 0, 1.7881395e-07, 0, 0.75, 0, -1.7881395e-07, 0, 0.75, 0.1251674, 0.049049646, -0.121905595)
+
+[node name="Bow5" parent="." unique_id=908146755 instance=ExtResource("7")]
+transform = Transform3D(0.75, 0, 1.7881395e-07, 0, 0.75, 0, -1.7881395e-07, 0, 0.75, 0.26789656, 0.049049646, -0.12317059)
+
+[node name="Barrel" parent="." unique_id=1356289422 instance=ExtResource("3")]
+transform = Transform3D(0.60505, 0, 0.18716, 0, 0.63333, 0, -0.18716, 0, 0.60505, 0.83333, 0, -0.4)
+
+[node name="Arrow8" parent="." unique_id=262667397 instance=ExtResource("6")]
+transform = Transform3D(0.8, 0, 0, 0, 0.09577, -0.79425, 0, 0.79425, 0.09577, 0.89333, 0.39467, -0.4)
+
+[node name="Arrow9" parent="." unique_id=5442613 instance=ExtResource("6")]
+transform = Transform3D(0.4, 0.68784, 0.082939, 0, 0.09577, -0.79425, -0.69282, 0.39712, 0.047885, 0.86333, 0.41467, -0.34804)
+
+[node name="Arrow10" parent="." unique_id=1359467125 instance=ExtResource("6")]
+transform = Transform3D(-0.4, 0.68784, 0.082939, 0, 0.09577, -0.79425, -0.69282, -0.39712, -0.047885, 0.80333, 0.39467, -0.34804)
+
+[node name="Arrow11" parent="." unique_id=1318360094 instance=ExtResource("6")]
+transform = Transform3D(-0.8, 0, 0, 0, 0.09577, -0.79425, 0, -0.79425, -0.09577, 0.77333, 0.41467, -0.4)
+
+[node name="Arrow12" parent="." unique_id=2032416973 instance=ExtResource("6")]
+transform = Transform3D(-0.4, -0.68784, -0.082939, 0, 0.09577, -0.79425, 0.69282, -0.39712, -0.047885, 0.80333, 0.39467, -0.45196)
+
+[node name="Arrow13" parent="." unique_id=1767773016 instance=ExtResource("6")]
+transform = Transform3D(0.4, -0.68784, -0.082939, 0, 0.09577, -0.79425, 0.69282, 0.39712, 0.047885, 0.86333, 0.41467, -0.45196)
+
+[node name="Target" parent="." unique_id=431557028 instance=ExtResource("4")]
+transform = Transform3D(0.76454, 0, 0.53534, 0, 0.93333, 0, -0.53534, 0, 0.76454, 1.1467, 0, -0.76667)
+
+[node name="Arrow14" parent="." unique_id=1012750433 instance=ExtResource("6")]
+transform = Transform3D(-0.65532, 0, -0.45886, 0, 0.8, 0, 0.45886, 0, -0.65532, 1.2887, 0.33333, -0.62196)
+
+[node name="Arrow15" parent="." unique_id=841030862 instance=ExtResource("6")]
+transform = Transform3D(-0.65532, 0, -0.45886, 0, 0.8, 0, 0.45886, 0, -0.65532, 1.1958, 0.25333, -0.55695)

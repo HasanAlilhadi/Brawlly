@@ -2,10 +2,17 @@
   "mcpServers": {
     "godot": {
       "command": "npx",
-      "args": ["-y", "@coding-solo/godot-mcp"],
+      "args": [
+        "-y",
+        "@coding-solo/godot-mcp"
+      ],
       "env": {
         "GODOT_PATH": "/Users/hasanalilhadi/My Data/Godot/Godot.app/Contents/MacOS/Godot"
       }
+    },
+    "blender": {
+      "command": "/Users/hasanalilhadi/.local/bin/blender-mcp",
+      "args": []
     }
   }
 }
