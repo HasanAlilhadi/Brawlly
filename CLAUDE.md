@@ -126,7 +126,7 @@ by touch index so the joystick and buttons work together with multi-touch.
   sword, Keen Points the bow and spear. Ammo: arrows (bow) and `spears` (max 8, 6 when bought); ammo pickups
   (`Pickup.Kind.ARROWS` / `SPEARS`) only go to players carrying that weapon (`Player.can_collect`). Chests are
   broken open by any weapon (group `breakable`, 60 hp), not opened by walking up. Shots fly at 0.55–0.7 m, so
-  anything hittable needs collision up to `GameConfig.HIT_HEIGHT` (1 m); aimed shots fly exactly where aimed (no snapping); a quick shot / tap with no aim auto-targets the nearest enemy. The player carries `Player.weapons` (≤ `MAX_WEAPONS` = 3, ids from `Player.WEAPONS`) and holds one
+  anything hittable needs collision up to `GameConfig.HIT_HEIGHT` (1 m); aimed shots fly exactly where aimed (no snapping); a quick shot / tap with no aim auto-targets the nearest enemy. The sword hits exactly the aim wedge (`Player._melee_query`: `MELEE_ARC_DEGREES` wide, out to `melee_reach()`), aimed where the swing started (`Unit._melee_dir`); other units keep the sphere in `Unit._melee_query`. The player carries `Player.weapons` (≤ `MAX_WEAPONS` = 3, ids from `Player.WEAPONS`) and holds one
   (`weapon_index`, replicated); `switch_weapon()` (server; Q / Y / HUD button via `request_switch_weapon`), `give_weapon(id)`
   for pickups. Melee / shoot functions refuse the weapon not in hand; attack keys and left mouse use the one in hand.
   New weapon (e.g. spear) = a `WEAPONS` row + its model in `_weapon_items` + an icon in `Hud._weapon_icons`.
