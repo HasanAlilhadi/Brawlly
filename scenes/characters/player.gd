@@ -68,7 +68,7 @@ const SPEAR_SCENE := preload("res://assets/items/dungeon/spear.glb")
 ## (degrees, + = across to the left) and the blade grip while slashing (out along the arm, a bit raised).
 const SLASH_WIND_UP: float = 80.0
 const SLASH_FOLLOW: float = -75.0
-const SLASH_GRIP: Vector3 = Vector3(0, 0, 80)
+const SLASH_GRIP: Vector3 = Vector3(0, 0, -100)
 ## Downed archer: the revive bar sits just above the lying body; "HELP!" and the name stack above it
 ## in screen space (Label3D offsets, pixels), so they never overlap however steep the camera is.
 const DOWNED_LABEL_HEIGHT: float = 1.05

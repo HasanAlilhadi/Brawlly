@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" path="res://scenes/characters/player.gd" id="1_script"]
 [ext_resource type="PackedScene" path="res://assets/characters/archer.glb" id="2_model"]
-[ext_resource type="PackedScene" path="res://assets/items/dungeon/sword.glb" id="3_sword"]
+[ext_resource type="PackedScene" path="res://assets/items/arena/sword.glb" id="3_sword"]
 [ext_resource type="PackedScene" path="res://assets/items/forest/bow.glb" id="4_bow"]
 [ext_resource type="PackedScene" path="res://scenes/combat/arrow_projectile.tscn" id="5_arrow"]
 
@@ -96,9 +96,9 @@ knockback_taken = 0.0
 melee_mask = 15
 right_hand_item = ExtResource("3_sword")
 right_hand_offset = Vector3(-0.27, -0.05, 0)
-right_hand_rotation = Vector3(0, 0, 50)
+right_hand_rotation = Vector3(0, 0, -130)
 right_swing_offset = Vector3(-0.27, -0.05, 0)
-right_swing_rotation = Vector3(0, 0, -20)
+right_swing_rotation = Vector3(0, 0, -200)
 left_hand_item = ExtResource("4_bow")
 left_hand_offset = Vector3(0.27, -0.24, 0)
 hold_left_arm = true
