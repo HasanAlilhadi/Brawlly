@@ -168,9 +168,9 @@ Desktop is always landscape. The phone orientation is set with `tools/set_orient
 │   └── run_ios.sh       # Export, sign and launch the game on a connected iPhone
 ├── pre-assets/          # DROP ZONE: put raw assets/packs here, any layout (ignored by Godot)
 ├── assets/              # Cleaned, renamed, game-ready assets (imported by Godot)
-│   ├── characters/      # archer, human, orc, soldier (animated GLB)
-│   ├── environment/     # arena/  dungeon/  forest/  (level pieces & props)
-│   ├── items/           # arena/  dungeon/  forest/  (weapons, shields, pickups)
+│   ├── characters/      # archer, human, orc, soldier, ghost, keeper, skeleton, vampire, zombie; pets/ (animated GLB)
+│   ├── environment/     # arena/  dungeon/  forest/  graveyard/  (level pieces & props)
+│   ├── items/           # arena/  dungeon/  forest/  graveyard/  (weapons, shields, pickups)
 │   ├── textures/        # palettes/ — one colormap per kit
 │   ├── CREDITS.md       # Asset authors & licenses
 │   ├── ui/              # icons/  buttons/  panels/
