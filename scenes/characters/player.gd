@@ -64,11 +64,17 @@ const WEAPONS: Dictionary = {
 	"spear": {"melee": false, "hand": ARM_RIGHT, "icon": "spear", "name": "Spear"},
 }
 const SPEAR_SCENE := preload("res://assets/items/dungeon/spear.glb")
-## Procedural sword slash (`_sword_slash`): arm sweep around the shoulder from the holding pose
-## (degrees, + = across to the left) and the blade grip while slashing (out along the arm, a bit raised).
-const SLASH_WIND_UP: float = 80.0
-const SLASH_FOLLOW: float = -75.0
-const SLASH_GRIP: Vector3 = Vector3(0, 0, -100)
+## Procedural sword slash (`_sword_slash`), keyed carry → wind-up → mid-cut → follow-through → carry:
+## arm sweep around the torso (degrees, + = across to the left), arm raised above level (a diagonal
+## cut, high left to low right), body twist (degrees) and lunge (m), and where the blade points in the
+## body's space (+X left, +Y up, +Z forward; the first / last key is the carry grip). The blade stays
+## flat side up, so the cut reads from the top-down camera.
+const SLASH_YAW: Array[float] = [0.0, 80.0, 5.0, -75.0, 0.0]
+const SLASH_RAISE: Array[float] = [0.0, 30.0, 10.0, -8.0, 0.0]
+const SLASH_TWIST: Array[float] = [0.0, 22.0, 0.0, -25.0, 0.0]
+const SLASH_LUNGE: Array[float] = [0.0, -0.04, 0.07, 0.1, 0.0]
+const SLASH_BLADE: Array[Vector3] = [Vector3.ZERO, Vector3(0.55, 0.35, -0.75), Vector3(-0.3, 0.05, 1.0),
+		Vector3(-0.95, -0.1, -0.3), Vector3.ZERO]
 ## Downed archer: the revive bar sits just above the lying body; "HELP!" and the name stack above it
 ## in screen space (Label3D offsets, pixels), so they never overlap however steep the camera is.
 const DOWNED_LABEL_HEIGHT: float = 1.05
@@ -91,6 +97,8 @@ const KILL_GROUPS: Array[StringName] = [&"active_enemies", &"enemies", &"player_
 ## Spears in hand when you buy the spear.
 @export var spear_start: int = 6
 @export var aim_range: float = 12.0
+## Middle of the sword's handle (model space): the slash turns the blade around it, so it stays in the fist.
+@export var sword_grip_point: Vector3 = Vector3(0.0, 0.027, 0.0)
 @export var arrow_scene: PackedScene
 ## Chance and multiplier for critical hits (sword and arrows).
 @export_range(0.0, 1.0) var crit_chance: float = 0.15
@@ -205,6 +213,11 @@ var _revive_ring: Decal
 var _was_downed: bool = false
 var _weapon_items: Dictionary = {}  # weapon id -> the model in hand
 var _slash_tween: Tween
+var _slash_skeleton: Skeleton3D
+var _slash_skeleton_rest: Transform3D
+var _slash_raise_axis: Vector3 = Vector3.RIGHT
+var _slash_torso: int = -1
+var _slash_carry: Quaternion = Quaternion.IDENTITY  # carry grip in the skeleton's space
 
 
 func _ready() -> void:
@@ -302,9 +315,10 @@ func _slash_fx() -> void:
 
 
 ## Sword attack, standing or running: no clip (Kenney's melee clip twists the arm, so the blade pointed
-## at the ground or the camera). The arm stays in the holding pose (arm forward, level) and sweeps
-## around the shoulder — wind up across to the left, slash out to the right (like the swing trail), back — while the blade turns
-## out along the arm. Damage lands mid-sweep (`attack_hit_delay`).
+## at the ground or the camera). The arm starts from the holding pose and runs through the `SLASH_*` keys:
+## a slower wind-up, raised and across to the left, then a fast diagonal cut out to the right (like the
+## swing trail) with the blade snapping straight out and the body twisting and stepping into it, then
+## back. Damage lands in the fast part of the cut (`attack_hit_delay`).
 func _sword_slash(duration: float) -> void:
 	_action_time = duration
 	_was_acting = true
@@ -313,24 +327,65 @@ func _sword_slash(duration: float) -> void:
 		_arm_tween.kill()
 	if _slash_tween:
 		_slash_tween.kill()
+	if _slash_skeleton == null:
+		_slash_skeleton = model.find_child("Skeleton3D", true, false) as Skeleton3D
+		if _slash_skeleton:
+			_slash_skeleton_rest = _slash_skeleton.transform
+			_slash_torso = _slash_skeleton.get_bone_parent(_slash_skeleton.find_bone("arm-right"))
+	# Raise the arm in its own vertical plane: around the axis across the held arm (it points along -X).
+	var arm := _right_hold.get_held_rotation() * Vector3.LEFT
+	arm.y = 0.0
+	if arm.length_squared() > 0.0001:
+		_slash_raise_axis = arm.normalized().cross(Vector3.UP)
+	_slash_carry = Quaternion(_slash_arm_basis(Quaternion.IDENTITY) * Basis.from_euler(right_hand_rotation * (PI / 180.0)))
 	_right_hold.influence = 1.0
-	_right_item.position = right_hand_offset
 	var hit := attack_hit_delay / anim_speed
-	var wind := hit * 0.33
-	var strike := hit * 0.6
+	var wind := hit * 0.5
+	var strike := hit * 0.75
 	var back := maxf(duration * 0.95 - wind - strike, 0.05)
+	_slash_pose(0.0)
 	_slash_tween = create_tween()
-	_slash_tween.tween_method(_set_slash_yaw, 0.0, SLASH_WIND_UP, wind).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	_slash_tween.parallel().tween_property(_right_item, "rotation_degrees", SLASH_GRIP, wind)
-	_slash_tween.tween_method(_set_slash_yaw, SLASH_WIND_UP, SLASH_FOLLOW, strike).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
-	_slash_tween.tween_method(_set_slash_yaw, SLASH_FOLLOW, 0.0, back).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	_slash_tween.parallel().tween_property(_right_item, "rotation_degrees", right_hand_rotation, back)
+	_slash_tween.tween_method(_slash_pose, 0.0, 1.0, wind).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	_slash_tween.tween_method(_slash_pose, 1.0, 3.0, strike).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	_slash_tween.tween_method(_slash_pose, 3.0, 4.0, back).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 
 
-## Arm sweep in degrees around the torso's up axis, relative to the holding pose (+ = toward the left).
-func _set_slash_yaw(degrees: float) -> void:
+## Slash pose at `phase` (0 carry, 1 wind-up, 2 mid-cut, 3 follow-through, 4 carry): blends the `SLASH_*` keys.
+func _slash_pose(phase: float) -> void:
+	var i := clampi(int(phase), 0, SLASH_YAW.size() - 2)
+	var t := clampf(phase - i, 0.0, 1.0)
+	var key := func(keys: Array[float]) -> float: return lerpf(keys[i], keys[i + 1], t)
+	var offset := Quaternion(Vector3.UP, deg_to_rad(key.call(SLASH_YAW))) \
+			* Quaternion(_slash_raise_axis, deg_to_rad(key.call(SLASH_RAISE)))
 	if _right_hold:
-		_right_hold.pose_offset = Quaternion(Vector3.UP, deg_to_rad(degrees))
+		_right_hold.pose_offset = offset
+	if _right_item and _slash_skeleton:
+		var blade := _slash_blade(i).slerp(_slash_blade(i + 1), t)
+		var grip := _slash_arm_basis(offset).inverse() * Basis(blade)
+		var fist := right_hand_offset + Basis.from_euler(right_hand_rotation * (PI / 180.0)) * sword_grip_point
+		_right_item.basis = grip
+		_right_item.position = fist - grip * sword_grip_point
+	if _slash_skeleton:
+		_slash_skeleton.transform = _slash_skeleton_rest * Transform3D(
+				Basis(Vector3.UP, deg_to_rad(key.call(SLASH_TWIST))), Vector3(0.0, 0.0, key.call(SLASH_LUNGE)))
+
+
+## The sword's orientation in the skeleton's space at `SLASH_BLADE` key `index`: blade (model -Y) along the
+## key's direction, flat side up; the first / last key is the carry grip.
+func _slash_blade(index: int) -> Quaternion:
+	var direction := SLASH_BLADE[index]
+	if direction == Vector3.ZERO:
+		return _slash_carry
+	var y := -direction.normalized()
+	var z := (Vector3.UP - y * y.dot(Vector3.UP)).normalized()
+	return Quaternion(Basis(y.cross(z), y, z))
+
+
+## The right arm bone's rotation in the skeleton's space with `offset` on top of the held pose.
+func _slash_arm_basis(offset: Quaternion) -> Basis:
+	var torso := _slash_skeleton.get_bone_global_pose(_slash_torso).basis.orthonormalized() \
+			if _slash_torso >= 0 else Basis.IDENTITY
+	return torso * Basis(offset * _right_hold.get_held_rotation())
 
 
 ## Only the arm with the weapon in hand holds it; downed archers crawl with both arms.
@@ -338,7 +393,8 @@ func _hold_arms(instant: bool = false) -> void:
 	if _slash_tween:
 		_slash_tween.kill()
 		_slash_tween = null
-	_set_slash_yaw(0.0)
+	if _slash_skeleton:
+		_slash_pose(0.0)
 	super(instant)
 	if is_downed:
 		_release_arms(ARM_BOTH)

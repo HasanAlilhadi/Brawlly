@@ -47,6 +47,11 @@ func set_pose_from_animation(animation: Animation, time: float, bones: PackedStr
 		_rotations.append(rotation)
 
 
+## The held rotation of the `index`-th bone (parent bone space), without `pose_offset`.
+func get_held_rotation(index: int = 0) -> Quaternion:
+	return _rotations[index] if index < _rotations.size() else Quaternion.IDENTITY
+
+
 func start_live(animation: Animation) -> void:
 	_live_animation = animation
 	live_time = 0.0
