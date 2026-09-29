@@ -155,6 +155,7 @@ var _left_hold: BonePoseOverride3D
 var _arm_tween: Tween
 var _was_acting: bool = false
 var _melee_index: int = 0
+var _melee_dir: Vector3 = Vector3.ZERO  # facing when the current swing started
 var _since_hit: float = 0.0
 var _model_scale: Vector3 = Vector3.ONE  # the model's size as set in the scene (e.g. giants are big)
 var _action_seq: int = 0
@@ -438,6 +439,7 @@ func melee() -> bool:
 	if is_dead or _melee_timer > 0.0:
 		return false
 	_melee_timer = melee_cooldown
+	_melee_dir = facing()  # damage lands where the swing started, even if the unit turns meanwhile
 	var anim_name := melee_anims[_melee_index % melee_anims.size()]
 	_melee_index += 1
 	play_action(anim_name, 0.4 / anim_speed, ARM_RIGHT if anim_name.ends_with("right") else ARM_BOTH)
@@ -449,19 +451,11 @@ func melee() -> bool:
 func _apply_melee() -> void:
 	if is_dead:
 		return
-	# Covers up to ~1.25 × melee_range in front (plus the target's own size), so every unit can
-	# always hit from the distance where `engage()` stops it.
-	var sphere := SphereShape3D.new()
-	sphere.radius = melee_range * 0.75
-	var query := PhysicsShapeQueryParameters3D.new()
-	query.shape = sphere
-	query.transform = Transform3D(Basis(), global_position + facing() * melee_range * 0.5 + Vector3(0, 0.5, 0))
-	query.collision_mask = melee_mask
-	query.exclude = [get_rid()]
+	var query := _melee_query(_melee_dir if _melee_dir != Vector3.ZERO else facing())
 	var center := query.transform.origin
 	var roll := _roll_melee_damage()
 	var victims: Array[Node3D] = []
-	for hit in get_world_3d().direct_space_state.intersect_shape(query, 16):
+	for hit in get_world_3d().direct_space_state.intersect_shape(query, 32):
 		var collider := hit.collider as Node3D
 		if collider and not victims.has(collider) and collider.has_method("take_damage") and _can_hit(collider):
 			victims.append(collider)
@@ -477,6 +471,19 @@ func _apply_melee() -> void:
 		victims = [best]
 	for victim in victims:
 		victim.take_damage(roll[0], self, true, roll[1])
+
+
+## What a melee swing toward `direction` can hit. Covers up to ~1.25 × melee_range in front (plus the
+## target's own size), so every unit can always hit from the distance where `engage()` stops it.
+func _melee_query(direction: Vector3) -> PhysicsShapeQueryParameters3D:
+	var sphere := SphereShape3D.new()
+	sphere.radius = melee_range * 0.75
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = sphere
+	query.transform = Transform3D(Basis(), global_position + direction * melee_range * 0.5 + Vector3(0, 0.5, 0))
+	query.collision_mask = melee_mask
+	query.exclude = [get_rid()]
+	return query
 
 
 func take_damage(amount: float, attacker: Node3D = null, is_melee: bool = true, crit: bool = false) -> void:

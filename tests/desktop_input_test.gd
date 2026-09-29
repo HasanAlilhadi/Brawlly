@@ -1,5 +1,5 @@
 extends Node
-## Desktop controls: WASD moves, left mouse swings toward the cursor, Q switches to the bow, right mouse aims + shoots on release,
+## Desktop controls: WASD moves, left mouse swings toward the cursor (hits exactly the aim wedge), Q switches to the bow, right mouse aims + shoots on release,
 ## K shoots at the nearest enemy (Space does nothing), E does nothing away from a stall and opens / closes the Blacksmith's shop at it,
 ## and touch controls stay hidden.
 ##   "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/desktop_input_test.gd
@@ -15,6 +15,7 @@ var start_pos: Vector3
 var arrows_before := 0
 var at_stall := false
 var failures := 0
+var test_trees: Array[ChoppableTree] = []
 
 
 func _ready() -> void:
@@ -55,6 +56,17 @@ func _mouse(button: MouseButton, pressed: bool, at: Vector2) -> void:
 	e.position = at
 	e.global_position = at
 	Input.parse_input_event(e)
+
+
+## Trees around the swing that just started: at the wedge's edge (35° off, 1.35 m), point-blank, beside
+## it (70° off) and past its reach (2.2 m).
+func _spawn_test_trees() -> void:
+	var forward: Vector3 = player._melee_dir
+	for spot in [[35.0, 1.35], [0.0, 0.45], [70.0, 1.2], [0.0, 2.2]]:
+		var tree := preload("res://scenes/world/choppable_tree.tscn").instantiate() as ChoppableTree
+		main.add_child(tree)
+		tree.global_position = player.global_position + forward.rotated(Vector3.UP, deg_to_rad(spot[0])) * spot[1]
+		test_trees.append(tree)
 
 
 ## Screen point 3 m to the right of the player.
@@ -123,11 +135,20 @@ func _process(delta: float) -> void:
 				_mouse(MOUSE_BUTTON_LEFT, true, _right_of_player())
 				_next()
 		2:
-			if pt > 0.1:
+			if pt > 0.1 and test_trees.is_empty():
 				_check(player.facing().x > 0.8, "left mouse swings toward the cursor (facing %s)" % player.facing())
 				_mouse(MOUSE_BUTTON_LEFT, false, _right_of_player())
 				_check(player.holds_melee() and player._right_item.visible and not player._left_item.visible,
 						"starts with the sword in hand, bow put away")
+				_spawn_test_trees()
+			elif pt > 0.45 and not test_trees.is_empty():
+				# Damage lands 0.24 s into the swing: everything inside the aim wedge, nothing outside it.
+				var hit: Array[bool] = []
+				for tree in test_trees:
+					hit.append(tree.health < tree.max_health)
+					tree.queue_free()
+				_check(hit == [true, true, false, false],
+						"the sword hits trees in the wedge (edge, point-blank) and not outside it (side, too far): %s" % [hit])
 				_key(KEY_Q, true)
 				_key(KEY_Q, false)
 				_next()

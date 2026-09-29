@@ -37,6 +37,9 @@ const AIM_LINE_LENGTH: float = 5.0
 ## Aimed sword swings snap to an enemy within this angle / distance.
 const MELEE_ASSIST_DEGREES: float = 35.0
 const MELEE_ASSIST_RANGE: float = 2.4
+## The sword hits everything in the wedge shown while aiming (`_melee_indicator`): this wide in degrees,
+## out to `melee_reach()`, from the ground up to above `GameConfig.HIT_HEIGHT`.
+const MELEE_ARC_DEGREES: float = 80.0
 const CATALOG := preload("res://resources/data/upgrade_catalog.tres")
 const BLEED_TIME: float = 15.0
 const REVIVE_TIME: float = 3.0
@@ -203,6 +206,7 @@ var _aim_indicator: Node3D
 var _aim_material: StandardMaterial3D
 var _melee_aim: Vector3 = Vector3.ZERO
 var _melee_indicator: Node3D
+var _melee_wedge: ConvexPolygonShape3D
 var _name_label: Label3D
 var _base_move_speed: float
 var _bleed_left: float = 0.0
@@ -309,9 +313,10 @@ func _show_spear(shown: bool) -> void:
 func _slash_fx() -> void:
 	if is_dead or not is_inside_tree():
 		return
-	var forward := facing()
-	HitFx.swing_arc(self, 0.5, atan2(forward.x, forward.z), melee_range * 1.25 + 0.3,
-			Color(1.0, 0.96, 0.85))
+	# The trail covers the hit wedge (the server knows where the swing started; other peers use the facing).
+	var forward := _melee_dir if multiplayer.is_server() and _melee_dir != Vector3.ZERO else facing()
+	HitFx.swing_arc(self, 0.5, atan2(forward.x, forward.z), melee_reach(), Color(1.0, 0.96, 0.85),
+			MELEE_ARC_DEGREES)
 
 
 ## Sword attack, standing or running: no clip (Kenney's melee clip twists the arm, so the blade pointed
@@ -745,6 +750,32 @@ func _aim_quad(mesh: ImmediateMesh, a: Vector3, b: Vector3, c: Vector3, d: Vecto
 		mesh.surface_add_vertex(vertex[0])
 
 
+## How far the sword reaches from the archer's center (the aim wedge and the hit wedge).
+func melee_reach() -> float:
+	return melee_range * 1.25 + 0.3
+
+
+## The sword hits the aim wedge itself (a prism, so big colliders like camp houses count by their surface,
+## not their center), starting a little behind the archer so point-blank targets are never missed.
+func _melee_query(direction: Vector3) -> PhysicsShapeQueryParameters3D:
+	if _melee_wedge == null:
+		var points := PackedVector3Array()
+		var half := deg_to_rad(MELEE_ARC_DEGREES * 0.5)
+		for y in [0.05, GameConfig.HIT_HEIGHT + 0.3]:
+			points.append(Vector3(0.0, y, -0.3))
+			for i in 9:
+				var a := -half + 2.0 * half * i / 8.0
+				points.append(Vector3(sin(a) * melee_reach(), y, cos(a) * melee_reach()))
+		_melee_wedge = ConvexPolygonShape3D.new()
+		_melee_wedge.points = points
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = _melee_wedge
+	query.transform = Transform3D(Basis(Vector3.UP, atan2(direction.x, direction.z)), global_position)
+	query.collision_mask = melee_mask
+	query.exclude = [get_rid()]
+	return query
+
+
 ## Short orange wedge in front of the archer while aiming the sword.
 func _build_melee_indicator() -> void:
 	var material := StandardMaterial3D.new()
@@ -752,11 +783,11 @@ func _build_melee_indicator() -> void:
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	material.albedo_color = Color(1.0, 0.62, 0.2, 0.45)
 	material.cull_mode = BaseMaterial3D.CULL_DISABLED
-	var reach := melee_range * 1.25 + 0.3
+	var reach := melee_reach()
 	var wedge := ImmediateMesh.new()
 	wedge.surface_begin(Mesh.PRIMITIVE_TRIANGLES, material)
 	var steps := 8
-	var half := deg_to_rad(40.0)
+	var half := deg_to_rad(MELEE_ARC_DEGREES * 0.5)
 	for i in steps:
 		var a0 := -half + 2.0 * half * i / steps
 		var a1 := -half + 2.0 * half * (i + 1) / steps
