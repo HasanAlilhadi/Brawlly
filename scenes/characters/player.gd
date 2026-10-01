@@ -77,16 +77,12 @@ const SLASH_TWIST: Array[float] = [0.0, 22.0, 0.0, -25.0, 0.0]
 const SLASH_LUNGE: Array[float] = [0.0, -0.04, 0.07, 0.1, 0.0]
 const SLASH_BLADE: Array[Vector3] = [Vector3.ZERO, Vector3(0.55, 0.35, -0.75), Vector3(-0.3, 0.05, 1.0),
 		Vector3(-0.95, -0.1, -0.3), Vector3.ZERO]
-## Procedural spear stab (`_spear_thrust`), keyed carry → drawn back → full stab → hold → carry. The hero stays
-## where they are (no step forward): the arm draws back and drives forward (sweep around the torso in degrees,
-## - = back along the right side; raised above its holding pose), the spear tips level (0 carry grip,
-## upright; 1 straight ahead) and slides along its shaft through the fist (m, + = toward the tip), and the
-## shoulders turn into it (twist, degrees, in place).
-const THRUST_YAW: Array[float] = [0.0, -38.0, 12.0, 10.0, 0.0]
-const THRUST_RAISE: Array[float] = [0.0, 12.0, 22.0, 22.0, 0.0]
+## Procedural spear stab (`_spear_thrust`), keyed carry → drawn back → full stab → hold → carry. Straight
+## forward only: the hero, the arm and the shoulders stay put; the spear tips level, pointing down the middle
+## of the hit lane (0 carry grip, upright; 1 level), and slides along its shaft through the fist (m, + =
+## toward the tip): back, then out.
 const THRUST_LEVEL: Array[float] = [0.0, 1.0, 1.0, 1.0, 0.0]
-const THRUST_PUSH: Array[float] = [0.0, -0.12, 0.2, 0.18, 0.0]
-const THRUST_TWIST: Array[float] = [0.0, 22.0, -14.0, -12.0, 0.0]
+const THRUST_PUSH: Array[float] = [0.0, -0.16, 0.3, 0.28, 0.0]
 ## Spear carry grip (arm bone space, like the orc spearmen) and the point on its shaft held in the fist.
 const SPEAR_CARRY: Vector3 = Vector3(-0.27, -0.2, 0.0)
 const SPEAR_GRIP: Vector3 = Vector3(0.0, 0.2, 0.0)
@@ -224,6 +220,7 @@ var _slash_skeleton_rest: Transform3D
 var _slash_raise_axis: Vector3 = Vector3.RIGHT
 var _slash_torso: int = -1
 var _slash_carry: Quaternion = Quaternion.IDENTITY  # carry grip in the skeleton's space
+var _thrust_phase: float = -1.0  # stab phase (see `_thrust_pose`); < 0 = not stabbing
 
 
 ## Every peer, at spawn and before entering the tree: the class's model (replaces the scene's
@@ -409,9 +406,9 @@ func _find_slash_skeleton() -> void:
 
 
 ## Spear attack, standing or running: no clip (Kenney's melee clip swings the spear at the ground). The spear
-## tips level as the arm draws back along the side with the shoulders turned away, then the arm drives it
-## straight out (shoulders turning into it), holds a moment and returns (`THRUST_*` keys). The hero never
-## steps forward. Damage lands in the fast part (`attack_hit_delay`).
+## tips level, draws back through the fist, shoots straight out along the hit lane, holds a moment and returns
+## (`THRUST_*` keys). Nothing moves sideways and the hero never steps forward. Damage lands in the fast part
+## (`attack_hit_delay`).
 func _spear_thrust(duration: float) -> void:
 	_action_time = duration
 	_was_acting = true
@@ -425,11 +422,11 @@ func _spear_thrust(duration: float) -> void:
 		return
 	_right_hold.influence = 1.0
 	_right_hold.pose_offset = Quaternion.IDENTITY
-	# Raise the arm in its own vertical plane: around the axis across the held arm (it points along -X).
-	var arm := _right_hold.get_held_rotation() * Vector3.LEFT
-	arm.y = 0.0
-	if arm.length_squared() > 0.0001:
-		_slash_raise_axis = arm.normalized().cross(Vector3.UP)
+	_slash_skeleton.transform = _slash_skeleton_rest
+	# The spear is placed from the arm's real (final) pose each frame, so it points straight ahead whatever
+	# the holding pose / walk cycle does to the arm.
+	if not _slash_skeleton.skeleton_updated.is_connected(_place_stab_spear):
+		_slash_skeleton.skeleton_updated.connect(_place_stab_spear)
 	var hit := attack_hit_delay / anim_speed
 	var draw := hit * 0.7
 	var strike := hit * 0.3 + 0.04
@@ -442,24 +439,45 @@ func _spear_thrust(duration: float) -> void:
 	_slash_tween.tween_method(_thrust_pose, 3.0, 4.0, rest * 0.65).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 
 
-## Stab pose at `phase` (0 carry, 1 drawn back, 2 full stab, 3 held, 4 carry): blends the `THRUST_*` keys.
+## Stab pose at `phase` (0 carry, 1 drawn back, 2 full stab, 3 held, 4 carry). The spear itself is placed in
+## `_place_stab_spear` once the skeleton's pose is final; outside a stab it is back in its carry grip.
 func _thrust_pose(phase: float) -> void:
 	var spear := _weapon_items.get("spear") as Node3D
-	if spear == null or _slash_skeleton == null or _right_hold == null:
+	if spear == null:
 		return
-	var i := clampi(int(phase), 0, THRUST_PUSH.size() - 2)
-	var t := clampf(phase - i, 0.0, 1.0)
-	var key := func(keys: Array[float]) -> float: return lerpf(keys[i], keys[i + 1], t)
-	var offset := Quaternion(Vector3.UP, deg_to_rad(key.call(THRUST_YAW))) \
-			* Quaternion(_slash_raise_axis, deg_to_rad(key.call(THRUST_RAISE)))
-	_right_hold.pose_offset = offset
-	# Level: the shaft (spear +Y) along the body's forward (+Z) whatever the arm does, in the arm bone's space.
-	var level := _slash_arm_basis(offset).inverse() * Basis(Vector3.RIGHT, PI * 0.5)
-	var grip := Basis(Quaternion.IDENTITY.slerp(Quaternion(level.orthonormalized()), key.call(THRUST_LEVEL)))
+	_thrust_phase = phase if phase > 0.0 and phase < float(THRUST_PUSH.size() - 1) else -1.0
+	if _thrust_phase < 0.0:
+		spear.basis = Basis.IDENTITY
+		spear.position = SPEAR_CARRY + class_def.hand_offset
+	else:
+		_place_stab_spear()
+
+
+## Every skeleton update while stabbing: the spear level and pointing from the fist to the middle of the hit
+## lane's far end (in the body's frame, so straight ahead from the top-down camera), slid along its shaft.
+func _place_stab_spear() -> void:
+	var spear := _weapon_items.get("spear") as Node3D
+	if _thrust_phase < 0.0 or spear == null or _slash_skeleton == null:
+		return
+	var i := clampi(int(_thrust_phase), 0, THRUST_PUSH.size() - 2)
+	var t := clampf(_thrust_phase - i, 0.0, 1.0)
+	# The arm as last drawn (its BoneAttachment3D carries the pose after the holding-pose modifier;
+	# get_bone_global_pose() outside the skeleton update would miss it), in skeleton space.
+	var arm := _slash_skeleton.global_transform.affine_inverse() * (spear.get_parent() as Node3D).global_transform
+	arm.basis = arm.basis.orthonormalized()
+	# Body (model) space -> skeleton space.
+	var body_to_skeleton := (_slash_skeleton.global_transform.affine_inverse() * model.global_transform).orthonormalized()
 	var fist := SPEAR_CARRY + SPEAR_GRIP + class_def.hand_offset
+	var fist_body := body_to_skeleton.affine_inverse() * (arm * fist)
+	var far := Vector3(0.0, fist_body.y, melee_reach() / maxf(model.scale.z, 0.01))
+	var ahead := (far - fist_body).normalized()
+	var down := (Vector3.DOWN - ahead * ahead.dot(Vector3.DOWN)).normalized()
+	var level_body := Basis(ahead.cross(down), ahead, down)  # spear +Y (shaft) ahead, flat side up
+	var level := arm.basis.inverse() * body_to_skeleton.basis * level_body
+	var grip := Basis(Quaternion.IDENTITY.slerp(Quaternion(level.orthonormalized()),
+			lerpf(THRUST_LEVEL[i], THRUST_LEVEL[i + 1], t)))
 	spear.basis = grip
-	spear.position = fist - grip * SPEAR_GRIP + grip * Vector3(0.0, key.call(THRUST_PUSH), 0.0)
-	_slash_skeleton.transform = _slash_skeleton_rest * Transform3D(Basis(Vector3.UP, deg_to_rad(key.call(THRUST_TWIST))))
+	spear.position = fist - grip * SPEAR_GRIP + grip * Vector3(0.0, lerpf(THRUST_PUSH[i], THRUST_PUSH[i + 1], t), 0.0)
 
 
 ## Slash pose at `phase` (0 carry, 1 wind-up, 2 mid-cut, 3 follow-through, 4 carry): blends the `SLASH_*` keys.
