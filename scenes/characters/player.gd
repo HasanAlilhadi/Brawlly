@@ -86,6 +86,15 @@ const THRUST_PUSH: Array[float] = [0.0, -0.16, 0.3, 0.28, 0.0]
 ## Spear carry grip (arm bone space, like the orc spearmen) and the point on its shaft held in the fist.
 const SPEAR_CARRY: Vector3 = Vector3(-0.27, -0.2, 0.0)
 const SPEAR_GRIP: Vector3 = Vector3(0.0, 0.2, 0.0)
+## The bow is held upright in the body's frame (limbs up / down, belly toward where the hero faces, string
+## toward them), whatever the arm's pose: the fist (`left_hand_offset` + `BOW_FIST` in the arm's space) holds
+## it at `BOW_GRIP` (bow space: limbs along +Y, belly +Z, string at z = 0). An arrow sits nocked at
+## `NOCK_POSITION` (string drawn back); a shot leaves from exactly there and the next one is nocked after the
+## cooldown.
+const BOW_FIST: Vector3 = Vector3(0.0, 0.24, 0.0)
+const BOW_GRIP: Vector3 = Vector3(-0.04, 0.24, 0.15)
+const NOCK_POSITION: Vector3 = Vector3(-0.04, 0.24, 0.08)
+const ARROW_MODEL := preload("res://assets/items/forest/arrow.glb")
 ## Downed player: the revive bar sits just above the lying body; "HELP!" and the name stack above it
 ## in screen space (Label3D offsets, pixels), so they never overlap however steep the camera is.
 const DOWNED_LABEL_HEIGHT: float = 1.05
@@ -221,6 +230,8 @@ var _slash_raise_axis: Vector3 = Vector3.RIGHT
 var _slash_torso: int = -1
 var _slash_carry: Quaternion = Quaternion.IDENTITY  # carry grip in the skeleton's space
 var _thrust_phase: float = -1.0  # stab phase (see `_thrust_pose`); < 0 = not stabbing
+var _nocked_arrow: Node3D  # the arrow on the string (bow only)
+var _nock_body: Vector3 = Vector3.INF  # where it sits in the model's space (last drawn frame)
 
 
 ## Every peer, at spawn and before entering the tree: the class's model (replaces the scene's
@@ -279,6 +290,7 @@ func _ready() -> void:
 	_build_downed_visuals()
 	var spear := _attach_spear() if weapons.has("spear") or weapons.has("javelin") else null
 	_weapon_items = {"sword": _right_item, "bow": _left_item, "spear": spear, "javelin": spear}
+	_setup_bow()
 	_apply_weapon()
 	if is_downed:
 		_apply_downed()
@@ -335,6 +347,10 @@ func _play_action_local(anim_name: String, duration: float, release_arms: int) -
 		_spear_thrust(duration)
 	else:
 		super(anim_name, duration, release_arms)
+	if anim_name == "holding-left-shoot" and _nocked_arrow:
+		# The nocked arrow is the one that flies; the next one is on the string when the bow is ready again.
+		_nocked_arrow.visible = false
+		get_tree().create_timer(shoot_cooldown * 0.8).timeout.connect(_nock_arrow)
 	if not anim_name.begins_with("attack-melee"):
 		return
 	if melee:
@@ -343,6 +359,37 @@ func _play_action_local(anim_name: String, duration: float, release_arms: int) -
 		# The spear in hand leaves with the throw and a new one is drawn a moment later.
 		get_tree().create_timer(0.15).timeout.connect(_show_spear.bind(false))
 		get_tree().create_timer(0.75).timeout.connect(_show_spear.bind(true))
+
+
+## Bowman: an arrow on the string, and the bow placed upright in the body's frame after every skeleton update
+## (after the BoneAttachment3D, which was connected first, so its arm frame is this frame's final pose).
+func _setup_bow() -> void:
+	var bow := _weapon_items.get("bow") as Node3D
+	var skeleton := model.find_child("Skeleton3D", true, false) as Skeleton3D
+	if bow == null or skeleton == null:
+		return
+	_nocked_arrow = ARROW_MODEL.instantiate() as Node3D
+	_nocked_arrow.position = NOCK_POSITION
+	bow.add_child(_nocked_arrow)
+	skeleton.skeleton_updated.connect(_place_bow.bind(skeleton))
+	_place_bow(skeleton)
+
+
+func _nock_arrow() -> void:
+	if _nocked_arrow:
+		_nocked_arrow.visible = true
+
+
+func _place_bow(skeleton: Skeleton3D) -> void:
+	var bow := _weapon_items.get("bow") as Node3D
+	if bow == null or not bow.is_inside_tree():
+		return
+	var to_skeleton := skeleton.global_transform.affine_inverse()
+	var arm := (to_skeleton * (bow.get_parent() as Node3D).global_transform).orthonormalized()
+	var body := (to_skeleton * model.global_transform).orthonormalized()
+	bow.basis = arm.basis.inverse() * body.basis
+	bow.position = left_hand_offset + BOW_FIST - bow.basis * BOW_GRIP
+	_nock_body = model.global_transform.affine_inverse() * bow.global_transform * NOCK_POSITION
 
 
 func _show_spear(shown: bool) -> void:
@@ -800,6 +847,14 @@ func shoot(direction: Vector3 = Vector3.ZERO) -> void:
 	var crit := randf() < crit_chance
 	var multiplier := crit_multiplier if crit else 1.0
 	var from := global_position + Vector3(0, 0.55, 0) + direction * 0.4
+	if not spear and _nock_body != Vector3.INF:
+		# From the arrow on the string (in the model's frame, so the turn above counts), toward the aim line
+		# `aim_range` ahead: it lands where aimed, starting from the bow.
+		from = model.global_transform * _nock_body
+		from.y = clampf(from.y, 0.3, 0.8)
+		var aimed := global_position + direction * aim_range - from
+		aimed.y = 0.0
+		direction = aimed.normalized()
 	if spear:
 		play_action("attack-melee-right", 0.4, ARM_RIGHT)
 		NetSpawn.projectile(&"player_spear", from + Vector3(0, 0.15, 0), direction, spear_damage * multiplier, self, crit)

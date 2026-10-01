@@ -2,9 +2,9 @@ class_name ArrowProjectile
 extends Node3D
 ## Flying arrow / thrown spear. Raycasts along its path each physics frame (no tunneling),
 ## damages the first hostile thing with `take_damage`, passes through teammates, and stops at
-## trees/buildings. Point-blank shots count too: it spawns a little in front of the shooter, so the
-## stretch from the shooter's body to the spawn point is checked first, and rays that start inside a
-## body still hit it. Spawned by the server through NetSpawn; other peers only show the flight.
+## trees/buildings. Point-blank shots count too: it spawns a little in front of the shooter (the player's
+## arrows: at the bow), so the stretch from the shooter's body to the spawn point, and as far straight ahead,
+## is checked first, and rays that start inside a body still hit it. Spawned by the server through NetSpawn; other peers only show the flight.
 
 @export var speed: float = 18.0
 @export var lifetime: float = 0.72
@@ -31,7 +31,9 @@ func _ready() -> void:
 		_shooter = get_node_or_null(shooter_path) as Node3D
 	if multiplayer.is_server() and is_instance_valid(_shooter):
 		var origin := Vector3(_shooter.global_position.x, start.y, _shooter.global_position.z)
-		if _hit_something(origin, start):
+		# Also straight ahead of the shooter for as far: the bow is held to one side, and whatever touches
+		# the hero in front still gets hit.
+		if _hit_something(origin, start) or _hit_something(origin, origin + direction * origin.distance_to(start)):
 			visible = false
 			set_physics_process(false)
 			queue_free()

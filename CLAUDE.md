@@ -139,7 +139,9 @@ by touch index so the joystick and buttons work together with multi-touch.
   anything hittable needs collision up to `GameConfig.HIT_HEIGHT` (1 m); aimed shots fly exactly where aimed (no snapping); a quick shot / tap with no aim auto-targets the nearest enemy. Melee hits exactly the aim marker (`Player.melee_outline()` → `_melee_query` prism + `_melee_indicator`: a `melee_arc()` fan or a `melee_lane()` lane, out to `melee_reach()`), aimed where the swing started (`Unit._melee_dir`); other units keep the sphere in `Unit._melee_query`. The player carries `Player.weapons` (from the class) and holds one
   (`weapon_index`, replicated); `switch_weapon()` (server; E / Y / HUD button via `request_switch_weapon`). Melee / shoot
   functions refuse the weapon not in hand; attack keys and left mouse use the one in hand. The sword slash
-  (`_sword_slash`) and the spear stab (`_spear_thrust`, `THRUST_*` keys: the spear slides straight out along the lane, aimed from its BoneAttachment3D — `get_bone_global_pose()` outside the skeleton update misses the holding-pose modifier; nothing moves sideways, the hero never steps forward) are procedural; other units use clips.
+  (`_sword_slash`) and the spear stab (`_spear_thrust`, `THRUST_*` keys: the spear slides straight out along the lane, aimed from its BoneAttachment3D — `get_bone_global_pose()` outside the skeleton update misses the holding-pose modifier; nothing moves sideways, the hero never steps forward) are procedural; other units use clips. The Bowman's bow is placed upright in the body's frame after
+  every skeleton update (`Player._place_bow`, `BOW_*` constants) with an arrow nocked (`NOCK_POSITION`): a shot
+  leaves from that arrow toward the aim line `aim_range` ahead, and the next arrow is nocked after the cooldown.
   New weapon = a `WEAPONS` row + its model in `_weapon_items` + an icon in `Hud._weapon_icons` + a class that carries it.
 - **VFX**: `HitFx.flash(at, texture, color, size, …)` pops a billboard sprite from `assets/vfx/particles/` (Kenney Particle Pack;
   additive, or `additive = false` for smoke). Used for hit sparks, death / camp smoke, combo ring, revive sparkle. Ground
