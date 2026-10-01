@@ -12,6 +12,10 @@ const CATALOG_PATH := "res://resources/data/class_catalog.tres"
 @export var model: PackedScene
 @export var weapons: PackedStringArray = PackedStringArray()
 @export var ally_weapon: String = "sword"
+## Running speed in m/s (0: the player scene's move_speed): Bowman fastest, then Swordsman, then Spearman.
+@export var move_speed: float = 0.0
+## Running speed while carrying an unbroken shield (0: same as move_speed). Raised, it is × Player.BLOCK_SPEED.
+@export var shield_move_speed: float = 0.0
 ## Game Icon Pack glyph (assets/ui/icons/game/<icon>.svg).
 @export var icon: String = "sword"
 ## Where the fists sit relative to the standard rig's (arm bone space): the keeper's arms are a bit higher
@@ -24,6 +28,17 @@ const CATALOG_PATH := "res://resources/data/class_catalog.tres"
 @export var shield_center: Vector3 = Vector3.ZERO
 ## Size of the shield model (the rectangular one is small as modeled).
 @export var shield_scale: float = 1.0
+@export_group("Special ability")
+## Special ability (X / R3 / the touch ability button), see Player.use_ability(): "" = no ability.
+@export var ability: StringName = &""
+@export var ability_name: String = ""
+## Game Icon Pack glyph for the HUD.
+@export var ability_icon: String = "star_coin"
+## XP (dropped by enemies) needed for one use; using it spends it.
+@export var ability_xp: int = 10
+## Seconds after activation before this class can collect ability XP again.
+@export var ability_xp_lockout: float = 0.0
+@export var ability_duration: float = 4.0
 @export_group("Player color")
 ## Palette hue of the model recolored to the player's color (see Unit.recolor_*).
 @export_range(-1.0, 1.0) var recolor_key_hue: float = -1.0

@@ -140,6 +140,23 @@ static func swing_arc(parent: Node3D, height: float, yaw: float, radius: float, 
 	tween.tween_callback(ribbon.queue_free)
 
 
+## A reusable sword trail for continuous attacks. Unlike `swing_arc`, this creates one mesh and leaves its
+## lifetime and movement to the caller. This avoids overlapping tweens and node churn during Whirlwind.
+static func persistent_swing_arc(parent: Node3D, height: float, radius: float, color: Color,
+		arc_degrees: float = 120.0) -> MeshInstance3D:
+	if not is_instance_valid(parent) or not parent.is_inside_tree():
+		return null
+	_ensure_trail_material()
+	var mesh := ImmediateMesh.new()
+	var ribbon := MeshInstance3D.new()
+	ribbon.mesh = mesh
+	ribbon.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(ribbon)
+	ribbon.position = Vector3(0.0, height, 0.0)
+	_draw_persistent_arc(mesh, deg_to_rad(arc_degrees) * 0.5, radius, color)
+	return ribbon
+
+
 ## Spear stab: a narrow streak that shoots straight out along `yaw` to `length` (the spear's lane), pointed at
 ## the far end like the spearhead, then fades; a spark pops at the tip.
 static func stab(parent: Node3D, height: float, yaw: float, length: float, width: float, color: Color,
@@ -218,6 +235,23 @@ static func _draw_arc(mesh: ImmediateMesh, yaw: float, half: float, radius: floa
 		mesh.surface_add_vertex(dir * lerpf(radius, inner, width))
 		mesh.surface_set_color(Color(color, minf(alpha * 1.3, 1.0)))
 		mesh.surface_add_vertex(dir * radius)
+	mesh.surface_end()
+
+
+static func _draw_persistent_arc(mesh: ImmediateMesh, half: float, radius: float, color: Color) -> void:
+	mesh.clear_surfaces()
+	var steps := 18
+	var inner := radius * 0.4
+	mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLE_STRIP, _arc_material)
+	for i in steps + 1:
+		var k := float(i) / steps  # 0 at the blade, 1 at the fading end of the trail
+		var direction := Vector3(sin(lerpf(-half, half, k)), 0.0, cos(lerpf(-half, half, k)))
+		var alpha := pow(1.0 - k, 1.6)
+		var width := lerpf(1.0, 0.45, k)
+		mesh.surface_set_color(Color(color, alpha * 0.3))
+		mesh.surface_add_vertex(direction * lerpf(radius, inner, width))
+		mesh.surface_set_color(Color(color, minf(alpha * 1.3, 1.0)))
+		mesh.surface_add_vertex(direction * radius)
 	mesh.surface_end()
 
 

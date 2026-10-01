@@ -256,7 +256,7 @@ func _follow_server(delta: float) -> void:
 
 ## Local player on a client: move right away (no round trip), then drift toward the server's truth.
 func _predict(delta: float) -> void:
-	var move := Vector3(predict_input.x, 0.0, predict_input.y).limit_length(1.0)
+	var move := _prediction_move_input(delta).limit_length(1.0)
 	var strength := move.length()
 	velocity = move * move_speed * (0.4 if _full_body_busy() else 1.0)
 	move_and_slide()
@@ -275,6 +275,11 @@ func _predict(delta: float) -> void:
 		face(move, delta)
 	if not _full_body_busy():
 		play_anim(_move_anim(strength) if moving else _idle_anim())
+
+
+## Virtual: local client prediction input. Player abilities may force movement independently of the stick.
+func _prediction_move_input(_delta: float) -> Vector3:
+	return Vector3(predict_input.x, 0.0, predict_input.y)
 
 
 func _physics_process(delta: float) -> void:
@@ -439,7 +444,8 @@ func melee() -> bool:
 	if is_dead or _melee_timer > 0.0:
 		return false
 	_melee_timer = melee_cooldown
-	_melee_dir = facing()  # damage lands where the swing started, even if the unit turns meanwhile
+	# Base AI attacks stay locked here; player-controlled units may use their live aim on the hit frame.
+	_melee_dir = facing()
 	var anim_name := melee_anims[_melee_index % melee_anims.size()]
 	_melee_index += 1
 	play_action(anim_name, 0.4 / anim_speed, ARM_RIGHT if anim_name.ends_with("right") else ARM_BOTH)
@@ -451,7 +457,7 @@ func melee() -> bool:
 func _apply_melee() -> void:
 	if is_dead:
 		return
-	var query := _melee_query(_melee_dir if _melee_dir != Vector3.ZERO else facing())
+	var query := _melee_query(_melee_hit_direction())
 	var center := query.transform.origin
 	var roll := _roll_melee_damage()
 	var victims: Array[Node3D] = []
@@ -471,6 +477,12 @@ func _apply_melee() -> void:
 		victims = [best]
 	for victim in victims:
 		victim.take_damage(roll[0], self, true, roll[1])
+
+
+## Direction of the weapon on the damage frame. AI keeps the direction chosen when its attack started;
+## player-controlled units can override this with their live aim.
+func _melee_hit_direction() -> Vector3:
+	return _melee_dir if _melee_dir != Vector3.ZERO else facing()
 
 
 ## What a melee swing toward `direction` can hit. Covers up to ~1.25 × melee_range in front (plus the

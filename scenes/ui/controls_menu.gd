@@ -14,7 +14,9 @@ const TWO_COLUMNS_WIDTH: float = 1150.0
 ## key caps with that text. Icons are Game Icon Pack glyphs (assets/ui/icons/game/).
 const KEYBOARD: Array = [
 	["cursor_move", "Move", "", [["keyboard/w", "keyboard/a", "keyboard/s", "keyboard/d"], ["keyboard/arrows"]]],
+	["user_group", "Choose training hero", "Training Field: stand beside a displayed hero", [["F"]]],
 	["spear", "Spear: thrust ⇄ throw", "Spearman only", [["keyboard/e"]]],
+	["star_coin", "Special ability", "Charged by 10 XP from fallen enemies · Swordsman: Whirlwind", [["keyboard/x"]]],
 	["rotate_right", "Rotate camera", "Turns the view 90° around you", [["keyboard/r"]]],
 	["sword", "Sword / spear", "Swings or thrusts toward the cursor", [["mouse/left"]]],
 	["bow", "Bow / spear throw", "Hold to aim at the cursor, release to shoot or throw", [["mouse/left"], ["mouse/right"]]],
@@ -33,6 +35,7 @@ const KEYBOARD: Array = [
 const GAMEPAD: Array = [
 	["cursor_move", "Move", "", [["xbox/stick_l"]]],
 	["spear", "Spear: thrust ⇄ throw", "Spearman only", [["Y"]]],
+	["star_coin", "Special ability", "Charged by 10 XP from fallen enemies", [["xbox/stick_r_press"]]],
 	["bow", "Aim", "Bow / spear throw, then shoot with RT", [["xbox/stick_r"]]],
 	["arrow", "Attack", "Weapon in hand · the nearest enemy when not aiming", [["xbox/rt"], ["xbox/a"], ["xbox/rb"], ["xbox/x"]]],
 	["shield", "Shield", "Hold to block hits from the front (turns with the right stick)", [["LT"]]],
@@ -50,6 +53,7 @@ const TOUCH: Array = [
 	["sword", "Sword / spear", "Weapon stick: drag to swing that way · tap hits the nearest enemy", [["touch/swipe_move"], ["touch/tap"]]],
 	["bow", "Bow / spear throw", "Aim stick: drag to aim, release to shoot · tap auto-aims", [["touch/swipe_move"], ["touch/tap"]]],
 	["shield", "Shield", "Hold the shield button left of the weapon stick to block", [["touch/tap"]]],
+	["star_coin", "Special ability", "The button above the shield button, lit once charged by 10 XP", [["touch/tap"]]],
 	["user_group", "Soldier orders", "The buttons under your soldier count", [["Follow"], ["Charge"], ["Hold"], ["Kill"]]],
 	["location", "Ping", "Online games", [["!"]]],
 	["shop", "Use a stall", "Tap the stall button at the bottom", [["touch/tap"]]],

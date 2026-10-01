@@ -7,6 +7,9 @@ extends Node
 ##   `tools/set_orientation.sh` sets) and touch controls (the mouse emulates touch on desktop).
 ## - `touch_mode`: show on-screen touch controls. Always on for the mobile layout; on desktop it turns on
 ##   when a real touchscreen is used and off again on mouse / keyboard / gamepad input.
+## - `-- --tile=N` (N = 0..3, desktop, not embedded): the window fills one quarter of the screen (top left,
+##   top right, bottom left, bottom right) — for testing several instances side by side (Debug →
+##   Customize Run Instances: one instance per corner, arguments `-- --tile=0` … `-- --tile=3`).
 
 signal touch_mode_changed(enabled: bool)
 
@@ -36,7 +39,9 @@ func _enter_tree() -> void:
 		Input.emulate_touch_from_mouse = false
 		if not _is_embedded():
 			_resize_window(DESKTOP_WINDOW)
-			if _load_fullscreen():
+			if _tile_index() >= 0:
+				_tile_window.call_deferred(_tile_index())
+			elif _load_fullscreen():
 				set_fullscreen(true)
 
 
@@ -103,6 +108,33 @@ func _resize_window(size: Vector2i) -> void:
 	var window := get_window()
 	window.size = Vector2i(Vector2(size) * fit)
 	window.position = screen.position + (screen.size - window.size) / 2
+
+
+## The `--tile=N` argument (-1 without one).
+func _tile_index() -> int:
+	for arg in OS.get_cmdline_args() + OS.get_cmdline_user_args():
+		if arg.begins_with("--tile="):
+			return clampi(arg.get_slice("=", 1).to_int(), 0, 3)
+	return -1
+
+
+## Puts the window, title bar included, into quarter `tile` of the screen (0 top left, 1 top right,
+## 2 bottom left, 3 bottom right).
+func _tile_window(tile: int) -> void:
+	var window := get_window()
+	window.mode = Window.MODE_WINDOWED
+	await get_tree().process_frame  # decorations are known once the window is shown
+	var screen := DisplayServer.screen_get_usable_rect(window.current_screen)
+	var half := screen.size / 2
+	var corner := screen.position + Vector2i(half.x * (tile % 2), half.y * (tile / 2))
+	var border := window.get_size_with_decorations() - window.size
+	window.size = half - border
+	window.position = corner + (window.position - window.get_position_with_decorations())
+	# In front of the editor: raised, and briefly on top (macOS doesn't let a new process take the front).
+	window.move_to_foreground()
+	window.always_on_top = true
+	await get_tree().create_timer(0.5).timeout
+	window.always_on_top = false
 
 
 ## Running inside the editor's Game view: the editor owns the window.

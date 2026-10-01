@@ -1,0 +1,28 @@
+[gd_scene format=3 uid="uid://tyob0ieupwwp"]
+
+[ext_resource type="Script" uid="uid://cbcg0e6w0mi5w" path="res://scenes/training/training_target.gd" id="1_script"]
+[ext_resource type="PackedScene" uid="uid://dt0mja04pcc35" path="res://assets/environment/forest/target.glb" id="2_model"]
+
+[sub_resource type="BoxShape3D" id="BoxShape_target"]
+size = Vector3(0.55, 0.581, 0.471)
+
+[node name="TrainingTarget" type="StaticBody3D" unique_id=1398283733]
+collision_mask = 0
+script = ExtResource("1_script")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=928789910]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.2905, -0.0485)
+shape = SubResource("BoxShape_target")
+
+[node name="Model" parent="." unique_id=817942874 instance=ExtResource("2_model")]
+
+[node name="Label" type="Label3D" parent="." unique_id=665896415]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.35, 0)
+pixel_size = 0.006
+billboard = 1
+no_depth_test = true
+modulate = Color(1, 0.88, 0.55, 1)
+text = "Training Dummy
+∞"
+font_size = 38
+outline_size = 10

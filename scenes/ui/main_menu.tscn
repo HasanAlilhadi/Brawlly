@@ -52,12 +52,20 @@ layout_mode = 2
 alignment = 1
 theme_override_constants/separation = 20
 
-[node name="MultiplayerButton" type="Button" parent="UI/Root/Menu/Box"]
+[node name="TrainingButton" type="Button" parent="UI/Root/Menu/Box"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(340, 110)
 layout_mode = 2
 size_flags_horizontal = 4
 theme_override_font_sizes/font_size = 48
+text = "Training Field"
+
+[node name="MultiplayerButton" type="Button" parent="UI/Root/Menu/Box"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(340, 90)
+layout_mode = 2
+size_flags_horizontal = 4
+theme_type_variation = &"ButtonBeige"
 text = "Multiplayer"
 
 [node name="ControlsButton" type="Button" parent="UI/Root/Menu/Box"]
@@ -79,6 +87,6 @@ text = "Quit"
 [node name="Hint" type="Label" parent="UI/Root/Menu/Box"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 24
-text = "Destroy orc camps to free their warriors"
+text = "New here? Learn every hero in the Training Field"
 horizontal_alignment = 1
 autowrap_mode = 3

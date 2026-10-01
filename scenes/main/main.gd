@@ -10,10 +10,10 @@ const PLAYER_SCENE := preload("res://scenes/characters/player.tscn")
 const ALLY_SCENE := preload("res://scenes/characters/ally.tscn")
 const PICKUP_SCENE := preload("res://scenes/items/pickup.tscn")
 const GOBLIN_SCENE := preload("res://scenes/characters/treasure_goblin.tscn")
+const TRAINING_FIELD_SCENE := preload("res://scenes/training/training_field.tscn")
 ## PC cursor: the kit's gold sword while playing (menus use the gauntlet from Project Settings).
 const MATCH_CURSOR := preload("res://assets/ui/cursors/cursor_sword_gold.png")
 const MENU_CURSOR := preload("res://assets/ui/cursors/cursor_gauntlet_bronze.png")
-const AIM_CURSOR := preload("res://assets/ui/cursors/cursor_target_round_b.png")
 const PROJECTILE_SCENES := {
 	&"arrow": preload("res://scenes/combat/arrow_projectile.tscn"),
 	&"spear": preload("res://scenes/combat/spear_projectile.tscn"),
@@ -56,6 +56,8 @@ var game_mode: GameMode
 var local_player: Player
 var match_stats: MatchStats
 var world_events: WorldEvents
+var training_field: TrainingField
+var training_mode: bool = false
 
 var _camps: Array[Camp] = []
 var _camps_left: int = 0
@@ -78,10 +80,13 @@ var _respawn_left: float = 0.0
 var _mouse_attack: bool = false
 var _mouse_block: bool = false  # right mouse holds the shield up (melee weapon in hand)
 var _mouse_bow: bool = false
+var _aim_cursor: ImageTexture
 var _bow_cursor: bool = false
 var _mouse_bow_button: int = MOUSE_BUTTON_RIGHT
 var _mouse_click_left: float = 0.0
 var _last_ping_ms: Dictionary = {}  # peer -> time of their last ping (server)
+var _training_switching: bool = false
+var _training_welcomed: bool = false
 
 
 func _ready() -> void:
@@ -91,7 +96,8 @@ func _ready() -> void:
 		Net.settings.seed = randi()
 	var settings := Net.settings
 	seed(settings.seed)
-	GameConfig.world_half = clampf(40.0 + sqrt(float(settings.camp_count)) * 10.0, 60.0, 170.0)
+	training_mode = settings.get("training", false)
+	GameConfig.world_half = 23.0 if training_mode else clampf(40.0 + sqrt(float(settings.camp_count)) * 10.0, 60.0, 170.0)
 	GameConfig.orc_strength = Net.DIFFICULTY_STRENGTH[settings.difficulty]
 	GameConfig.orc_respawn_scale = Net.DIFFICULTY_RESPAWN[settings.difficulty]
 	# Downed + revive needs teammates: online co-op and team modes.
@@ -108,20 +114,25 @@ func _ready() -> void:
 	add_child(match_stats)
 	match_stats.awards_ready.connect(hud.show_awards)
 	world_events = WorldEvents.new()
-	world_events.setup(self, game_mode, settings.get("events", true))
+	world_events.setup(self, game_mode, settings.get("events", true) and not training_mode)
 	add_child(world_events)
-	var builder := WorldBuilder.new()
-	builder.camp_count = settings.camp_count
-	builder.spawn_points = game_mode.world_spawn_points()
-	builder.town_access = game_mode.world_town_access()
-	builder.clear_areas = game_mode.world_clear_areas()
-	_camps = builder.build(world)
-	game_mode.build_objectives(world)
+	if training_mode:
+		training_field = TRAINING_FIELD_SCENE.instantiate() as TrainingField
+		world.add_child(training_field)
+	else:
+		var builder := WorldBuilder.new()
+		builder.camp_count = settings.camp_count
+		builder.spawn_points = game_mode.world_spawn_points()
+		builder.town_access = game_mode.world_town_access()
+		builder.clear_areas = game_mode.world_clear_areas()
+		_camps = builder.build(world)
+		game_mode.build_objectives(world)
 	_camps_left = _camps.size()
 	for camp in _camps:
 		camp.destroyed.connect(_on_camp_destroyed)
 
 	hud.set_camps(_camps_left, _camps.size())
+	hud.set_training_mode(training_mode)
 	hud.restart_requested.connect(_restart)
 	hud.main_menu_requested.connect(func() -> void: Net.leave())
 	hud.pause_requested.connect(pause_menu.open)
@@ -130,10 +141,13 @@ func _ready() -> void:
 	hud.bow_stick.tapped.connect(func() -> void: _fire(Vector3.ZERO))
 	hud.melee_button.tapped.connect(_melee_once)
 	hud.weapon_switch_requested.connect(_switch_weapon)
+	hud.ability_requested.connect(_use_ability)
 	hud.army_command_requested.connect(_on_army_button)
 	hud.ping_requested.connect(func() -> void: _ping(_ahead_point(0.0)))
 	hud.set_mode_label(game_mode.score_text())
 	pause_menu.online = Net.is_online()
+	if training_mode:
+		pause_menu.set_hint("F: choose hero   •   X: special ability   •   Attack the targets to test damage")
 	shop_menu.online = Net.is_online()
 	pause_menu.paused.connect(_on_paused)
 	shop_menu.opened.connect(_on_paused)
@@ -203,6 +217,7 @@ func _spawn_unit(data: Dictionary) -> Node:
 			player.peer_id = data.peer
 			player.display_name = data.display_name
 			player.set_class(data.get("class", &""))
+			player.training_mode = data.get("training", false)
 			player.coins = data.get("start_coins", 0)
 			unit = player
 		&"ally":
@@ -266,19 +281,26 @@ func _on_unit_spawned(node: Node) -> void:
 		_bind_local_player(node)
 
 
-func _spawn_player(peer: int) -> void:
-	var player := NetSpawn.unit(&"player", game_mode.spawn_point_for(peer), {
+func _spawn_player(peer: int, class_override: StringName = &"", position_override: Vector3 = Vector3.INF) -> Player:
+	var spawn_position := game_mode.spawn_point_for(peer)
+	if training_mode:
+		spawn_position = TrainingField.SPAWN_POINT
+	if position_override != Vector3.INF:
+		spawn_position = position_override
+	var player := NetSpawn.unit(&"player", spawn_position, {
 		"peer": peer,
 		"display_name": Net.name_of(peer),
-		"class": Net.class_of(peer),
+		"class": class_override if class_override != &"" else Net.class_of(peer),
 		"team": Net.team_of(peer),
 		"start_coins": int(Net.settings.start_coins),
+		"training": training_mode,
 	}) as Player
 	player.died.connect(_on_player_died)
 	player.went_down.connect(_on_player_down)
 	player.revived.connect(_on_player_revived)
 	if player.is_local():
 		_bind_local_player(player)
+	return player
 
 
 func _bind_local_player(player: Player) -> void:
@@ -288,12 +310,16 @@ func _bind_local_player(player: Player) -> void:
 	camera.target = player
 	camera.snap()
 	hud.setup(player, _camps)
+	hud.set_training_mode(training_mode)
 	shop_menu.setup(player)
 	_last_coins = player.coins
 	player.coins_changed.connect(_on_local_coins_changed)
 	_last_health = player.health
 	player.health_changed.connect(_on_local_health_changed)
 	Transition.fade_in(0.6)
+	if training_mode and not _training_welcomed:
+		_training_welcomed = true
+		hud.show_toast("Welcome! Walk to a hero and press F to try them.", 4.5)
 
 
 # --- Match start (server waits for everyone's world) -----------------------------------
@@ -352,7 +378,7 @@ func _physics_process(delta: float) -> void:
 	if stick != Vector2.ZERO:
 		aim = _screen_to_world(stick)
 	if _mouse_bow:
-		aim = _cursor_direction()
+		aim = _cursor_aim()
 	_show_bow_cursor(_kill_picking or (local_player.holds_ranged() and not local_player.is_dead and not local_player.is_downed))
 	var melee := local_player.holds_melee()
 	var melee_aim := Vector3.ZERO
@@ -422,6 +448,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		_mouse_click_left = MOUSE_CLICK_HOLD
 	elif event.is_action_pressed(&"switch_weapon") and not event.is_echo():
 		_switch_weapon()
+	elif event.is_action_pressed(&"ability") and not event.is_echo():
+		_use_ability()
+	elif training_mode and event.is_action_pressed(&"training_interact") and not event.is_echo():
+		_switch_training_class()
+		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed(&"rotate_camera") and not event.is_echo():
 		camera.rotate_step(1)
 	elif event.is_action_pressed(&"interact") and not event.is_echo() and (_stall or _gate):
@@ -448,7 +479,7 @@ func _input(event: InputEvent) -> void:
 		_mouse_block = false
 	if _mouse_bow and button.button_index == _mouse_bow_button:
 		_mouse_bow = false
-		_fire(_cursor_direction())
+		_fire(_cursor_aim())
 		if local_player:
 			local_player.clear_aim()
 
@@ -458,10 +489,11 @@ func _attack_key_held() -> bool:
 	return Input.is_action_pressed(&"attack") and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
 
 
-## Ground point under the mouse cursor (Vector3.INF if the cursor points at the sky).
-func _cursor_point() -> Vector3:
+## Ground point under the mouse cursor (Vector3.INF if the cursor points at the sky); `height` above the
+## player's feet picks a higher plane.
+func _cursor_point(height: float = 0.0) -> Vector3:
 	var mouse := get_viewport().get_mouse_position()
-	var ground := Plane(Vector3.UP, local_player.global_position.y)
+	var ground := Plane(Vector3.UP, local_player.global_position.y + height)
 	var hit: Variant = ground.intersects_ray(camera.project_ray_origin(mouse), camera.project_ray_normal(mouse))
 	return hit if hit != null else Vector3.INF
 
@@ -492,6 +524,31 @@ func _cursor_direction() -> Vector3:
 	var direction: Vector3 = hit - local_player.global_position
 	direction.y = 0.0
 	return direction.normalized() if direction.length() > 0.15 else local_player.facing()
+
+
+## Ranged aim from the mouse: the flat offset from the player to the cursor at shot height (so the arrow /
+## spear flies right under the cursor and hits what it points at), or a unit direction when the cursor is
+## too close to make a point (`Player.set_aim`).
+func _cursor_aim() -> Vector3:
+	if local_player == null or not is_instance_valid(local_player):
+		return Vector3.ZERO
+	var hit := _cursor_point(Player.SHOT_HEIGHT)
+	if hit == Vector3.INF:
+		return Vector3.ZERO
+	var offset: Vector3 = hit - local_player.global_position
+	offset.y = 0.0
+	if offset.length() <= Player.AIM_POINT_MIN + 0.5:
+		return offset.normalized() if offset.length() > 0.15 else local_player.facing()
+	return offset
+
+
+## X / R3 / the touch ability button: the class's special ability (when charged with XP).
+func _use_ability() -> void:
+	if local_player == null or _game_over or local_player.is_dead or not local_player.ability_ready():
+		return
+	_mouse_attack = false
+	_mouse_block = false
+	local_player.request_ability()
 
 
 ## E / Y / the HUD switch button: next weapon in hand (drops any aim in progress).
@@ -550,6 +607,37 @@ func _process(delta: float) -> void:
 	_update_town()
 	_update_camera_zoom()
 	_update_kill_mark()
+	if training_mode and training_field:
+		if is_instance_valid(local_player):
+			training_field.update_player(local_player)
+		else:
+			training_field.hide_prompt()
+
+
+## Training only: replace the local hero at the same spot with the class beside them.
+func _switch_training_class() -> void:
+	if _training_switching or not training_field or not is_instance_valid(local_player):
+		return
+	var class_id := training_field.selected_class_id()
+	if class_id == &"":
+		return
+	if local_player.class_def.id == class_id:
+		hud.show_toast("You are already training as %s." % local_player.class_def.display_name)
+		return
+	_training_switching = true
+	var at := local_player.global_position
+	var old := local_player
+	local_player = null
+	training_field.hide_prompt()
+	Net.set_class(class_id)
+	Net.players[Net.my_id()]["class"] = class_id
+	old.queue_free()
+	await get_tree().process_frame
+	var replacement := _spawn_player(Net.my_id(), class_id, at)
+	if replacement:
+		replacement.face_now(Vector3.FORWARD)
+		hud.show_toast("Now training as %s — abilities are unlimited." % replacement.class_def.display_name, 3.5)
+	_training_switching = false
 
 
 ## Default zoom + a bit more with the bow / spear in hand.
@@ -881,7 +969,9 @@ func _show_bow_cursor(aiming: bool) -> void:
 		return
 	_bow_cursor = aiming
 	if aiming:
-		Input.set_custom_mouse_cursor(AIM_CURSOR, Input.CURSOR_ARROW, AIM_CURSOR.get_size() * 0.5)
+		if _aim_cursor == null:
+			_aim_cursor = AimCursor.make()
+		Input.set_custom_mouse_cursor(_aim_cursor, Input.CURSOR_ARROW, _aim_cursor.get_size() * 0.5)
 	else:
 		Input.set_custom_mouse_cursor(MATCH_CURSOR, Input.CURSOR_ARROW, Vector2(2, 2))
 

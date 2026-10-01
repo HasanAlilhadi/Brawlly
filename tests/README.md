@@ -10,6 +10,12 @@ Run from the project folder (`G` = the Godot binary). Tests start the game norma
 # and no --fixed-fps (it races ahead of real time and the connection times out)
 "$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/ui_flow_test.gd
 
+# Training Field: menu entry, unlimited special ability, permanent damage targets (sword, arrow and thrown spear hit them), switch hero at the gallery
+"$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/training_test.gd
+
+# Spearman Bull Rush: three-second shield charge, front protection, heavy steering, correct spear grip, one hit per target
+"$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/bull_rush_test.gd --class=spearman
+
 # Solo: chest, tree, camp (gives no soldiers), trading post (buy only at the right stall), barracks (queue 10 s each, pen, take at the gate, 8 soldiers leave the pen, army cap 10 → 15), death
 "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/solo_test.gd
 

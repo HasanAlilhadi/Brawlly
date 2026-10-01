@@ -1,7 +1,7 @@
-[gd_resource type="Resource" script_class="ClassDef" format=3]
+[gd_resource type="Resource" script_class="ClassDef" format=3 uid="uid://cmrpai3egau5r"]
 
-[ext_resource type="Script" path="res://scripts/game/class_def.gd" id="1_def"]
-[ext_resource type="PackedScene" path="res://assets/characters/archer.glb" id="2_model"]
+[ext_resource type="Script" uid="uid://ci34kgmnqq6xo" path="res://scripts/game/class_def.gd" id="1_def"]
+[ext_resource type="PackedScene" uid="uid://dwdksot4f3ahb" path="res://assets/characters/archer.glb" id="2_model"]
 
 [resource]
 script = ExtResource("1_def")
@@ -11,6 +11,7 @@ description = "Fast arrows from range. Soldiers are archers too."
 model = ExtResource("2_model")
 weapons = PackedStringArray("bow")
 ally_weapon = "bow"
+move_speed = 3.8
 icon = "bow"
 recolor_key_hue = 0.38
 recolor_hue_range = 0.08

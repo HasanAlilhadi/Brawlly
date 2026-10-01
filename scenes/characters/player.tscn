@@ -74,6 +74,15 @@ properties/19/replication_mode = 2
 properties/20/path = NodePath(".:shield_health")
 properties/20/spawn = true
 properties/20/replication_mode = 2
+properties/21/path = NodePath(".:xp")
+properties/21/spawn = true
+properties/21/replication_mode = 2
+properties/22/path = NodePath(".:ability_active")
+properties/22/spawn = true
+properties/22/replication_mode = 2
+properties/23/path = NodePath(".:ability_xp_locked")
+properties/23/spawn = true
+properties/23/replication_mode = 2
 
 [node name="Player" type="CharacterBody3D"]
 collision_layer = 2

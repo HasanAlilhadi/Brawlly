@@ -45,7 +45,7 @@ func _process(delta: float) -> void:
 			_check(player._left_hold.influence > 0.9, "left arm raised")
 			get_tree().current_scene._mouse_block = false
 			player.set_input(Vector2.ZERO, Vector3.ZERO, Vector3.ZERO, false)
-			_check(not player.shield_up and is_equal_approx(player.move_speed, player._base_move_speed), "released: down, full speed")
+			_check(not player.shield_up and is_equal_approx(player.move_speed, player.class_def.shield_move_speed), "released: down, carry speed")
 			var dummy := get_tree().current_scene.get_node("Front") as Node3D
 			dummy.global_position = front
 			var health := player.health

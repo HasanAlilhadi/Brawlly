@@ -1,16 +1,18 @@
 class_name Pickup
 extends Node3D
-## Item lying on the ground (health or coins). Spins, gets pulled toward the nearest player who can
+## Item lying on the ground (health, coins or XP). Spins, gets pulled toward the nearest player who can
 ## use it, and is collected on contact. Disappears after a while.
 ## Multiplayer: spawned by the server through NetSpawn; every peer animates the pull, only the
 ## server decides who collects it (freeing it removes it everywhere).
 
 ## Append new kinds (the ids are sent over the network). Weapons never run out of ammo, so none drop.
-enum Kind { HEALTH, COIN }
+enum Kind { HEALTH, COIN, XP }
 
 const SCENE_PATH := "res://scenes/items/pickup.tscn"
 const POTION_MODEL := preload("res://assets/items/dungeon/potion.glb")
 const COIN_MODEL := preload("res://assets/items/dungeon/coin.glb")
+const XP_GLOW := preload("res://assets/vfx/particles/magic_02.png")
+const XP_COLOR := Color(0.45, 0.8, 1.0)
 
 @export var kind: Kind = Kind.COIN
 @export var amount: int = 3
@@ -41,6 +43,25 @@ func _ready() -> void:
 			_visual.add_child(COIN_MODEL.instantiate())
 			# Bigger piles look bigger.
 			_visual.scale = Vector3.ONE * clampf(0.9 + amount * 0.03, 0.9, 1.8)
+			magnet_range = 3.5
+		Kind.XP:
+			# A glowing orb (bigger for more XP): a soft glow around a bright core.
+			var material := StandardMaterial3D.new()
+			material.albedo_texture = XP_GLOW
+			material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			material.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+			material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+			material.vertex_color_use_as_albedo = true
+			material.no_depth_test = false
+			for layer in [[1.0, 0.55], [0.45, 1.0]]:
+				var glow := Sprite3D.new()
+				glow.texture = XP_GLOW
+				glow.material_override = material
+				glow.modulate = Color(XP_COLOR, layer[1])
+				glow.pixel_size = 0.75 * layer[0] / XP_GLOW.get_width()
+				_visual.add_child(glow)
+			_visual.scale = Vector3.ONE * clampf(0.8 + amount * 0.06, 0.8, 1.6)
 			magnet_range = 3.5
 	# Pop out of the ground.
 	_visual.position.y = 0.8

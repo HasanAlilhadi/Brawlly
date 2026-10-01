@@ -12,6 +12,7 @@ signal shop_requested
 signal army_command_requested(order: int)
 signal ping_requested
 signal weapon_switch_requested
+signal ability_requested
 
 const ARMY_ORDERS: PackedStringArray = ["Follow", "Charge", "Hold", "Kill"]
 const ARMY_KEYS: PackedStringArray = ["1", "2", "3", "4"]
@@ -37,6 +38,9 @@ const SHIELD_ICON := preload("res://assets/ui/icons/game/shield.svg")
 @onready var health_bar: ProgressBar = %HealthBar
 @onready var allies_label: Label = %AlliesLabel
 @onready var camps_label: Label = %CampsLabel
+@onready var _stats_panel: PanelContainer = $Root/Stats
+@onready var _info_row: HBoxContainer = $Root/TopLeft/Rows/InfoRow
+@onready var _minimap_frame: PanelContainer = $Root/MinimapFrame
 @onready var minimap: Minimap = %Minimap
 @onready var end_panel: Control = %EndPanel
 @onready var end_title: Label = %EndTitle
@@ -67,6 +71,8 @@ var _ping_button: Button
 var _switch_button: TouchButton
 ## Touch: hold to raise the shield (Swordsman, Spearman with the spear in hand).
 var shield_button: TouchButton
+## Touch: the special ability (dim until enough XP).
+var ability_button: TouchButton
 var _stall_prompt: Button
 var _stall_key: HBoxContainer
 var _stall_label: Label
@@ -120,6 +126,7 @@ func setup(player: Player, camps: Array[Camp]) -> void:
 	_player = player
 	player.weapon_changed.connect(func(_weapon: String) -> void: _update_weapon_controls())
 	player.shield_changed.connect(_update_weapon_controls)
+	player.ability_changed.connect(_update_weapon_controls)
 	_update_weapon_controls()
 	player.health_changed.connect(_on_health_changed)
 	player.coins_changed.connect(_on_coins_changed)
@@ -134,6 +141,16 @@ func setup(player: Player, camps: Array[Camp]) -> void:
 
 func set_camps(left: int, total: int) -> void:
 	camps_label.text = "%d/%d" % [left, total]
+
+
+## Training keeps only combat information; economy, camps, army commands and the empty minimap add noise.
+func set_training_mode(enabled: bool) -> void:
+	_stats_panel.visible = not enabled
+	_info_row.visible = not enabled
+	_minimap_frame.visible = not enabled
+	_ping_button.visible = not enabled and Net.is_online()
+	if enabled:
+		_army_row.hide()
 
 
 ## Mode scoreboard line (hidden when empty, e.g. co-op).
@@ -165,6 +182,7 @@ func show_end(title: String, subtitle: String, restart_label: String = "Play aga
 	bow_stick.hide()
 	_switch_button.hide()
 	shield_button.hide()
+	ability_button.hide()
 	_weapon_bar.hide()
 	pause_button.hide()
 	_stall_prompt.hide()
@@ -183,6 +201,7 @@ func reset_touch_controls() -> void:
 	if _switch_button:
 		_switch_button.reset()
 		shield_button.reset()
+		ability_button.reset()
 
 
 func _process(delta: float) -> void:
@@ -676,6 +695,22 @@ func _build_weapon_controls() -> void:
 	shield_button.visible = false
 	root.add_child(shield_button)
 
+	ability_button = TouchButton.new()
+	ability_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	ability_button.offset_left = -300.0
+	ability_button.offset_top = -330.0
+	ability_button.offset_right = -206.0
+	ability_button.offset_bottom = -236.0
+	ability_button.color = bow_stick.color
+	ability_button.held_color = bow_stick.held_color
+	ability_button.ring_color = bow_stick.ring_color
+	ability_button.button_texture = TOUCH_BUTTON
+	ability_button.held_texture = TOUCH_BUTTON_HELD
+	ability_button.icon_scale = 0.9
+	ability_button.visible = false
+	ability_button.pressed.connect(ability_requested.emit)
+	root.add_child(ability_button)
+
 	_weapon_bar = PanelContainer.new()
 	_weapon_bar.theme_type_variation = &"PanelCompact"
 	_weapon_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -710,6 +745,13 @@ func _update_weapon_controls() -> void:
 	shield_button.visible = touch and _player != null and _player.can_block()
 	if not shield_button.visible:
 		shield_button.reset()
+	ability_button.visible = touch and _player != null and _player.has_ability()
+	if ability_button.visible:
+		if ability_button.icon == null:
+			var glyph := (load("res://assets/ui/icons/game/%s.svg" % _player.class_def.ability_icon) as Texture2D).get_image()
+			glyph.resize(44, 44, Image.INTERPOLATE_LANCZOS)
+			ability_button.icon = ImageTexture.create_from_image(glyph)
+		ability_button.modulate = HudStyle.SLOT_ACTIVE if _player.ability_ready() or _player.ability_active else HudStyle.SLOT_INACTIVE
 	_weapon_bar.visible = not touch and not _ended and _player != null
 	if _player == null:
 		return
@@ -740,6 +782,30 @@ func _update_weapon_controls() -> void:
 		mouse.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		mouse.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		_weapon_slots.add_child(mouse)
+	# The special ability: dim with the XP count until it's charged, then lit with "X".
+	if _player.has_ability():
+		var def := _player.class_def
+		var ready := _player.ability_ready() or _player.ability_active
+		var ability := UiKit.medal(def.ability_icon, HudStyle.BADGE)
+		ability.modulate = HudStyle.SLOT_ACTIVE if ready else HudStyle.SLOT_INACTIVE
+		ability.tooltip_text = "%s (Unlimited)" % def.ability_name if _player.training_mode else \
+				"%s (%d / %d XP)" % [def.ability_name, _player.xp, def.ability_xp]
+		for part in [ability] + ability.find_children("*", "Control", true, false):
+			(part as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_weapon_slots.add_child(ability)
+		if ready:
+			var key := UiKit.prompt("keyboard/x", HudStyle.KEY)
+			key.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			key.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			_weapon_slots.add_child(key)
+		elif not _player.training_mode:
+			var count := Label.new()
+			count.text = "%d/%d" % [_player.xp, def.ability_xp]
+			count.theme_type_variation = &"LabelLight"
+			count.add_theme_font_size_override("font_size", HudStyle.FONT_BODY)
+			count.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			count.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			_weapon_slots.add_child(count)
 
 
 # --- Design system -----------------------------------------------------------------

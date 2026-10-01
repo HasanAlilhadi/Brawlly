@@ -88,6 +88,7 @@ static func default_settings() -> Dictionary:
 		"score_limit": 10,
 		"time_limit": 10,
 		"events": true,
+		"training": false,
 		"seed": 0,
 	}
 

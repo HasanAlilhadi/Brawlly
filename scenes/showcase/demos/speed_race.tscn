@@ -1,0 +1,11 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scenes/showcase/demos/speed_race.gd" id="1"]
+
+[node name="SpeedRace" type="Node3D"]
+script = ExtResource("1")
+title = "Running speed"
+description = "Every class at its real speed, with and without its shield (ClassDef.move_speed / shield_move_speed)."
+view_offset = Vector3(0, 14, 19)
+look_offset = Vector3(0, 1.0, -1.0)
+area = Vector2(26, 16)

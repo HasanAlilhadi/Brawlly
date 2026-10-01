@@ -62,7 +62,7 @@ See `README.md` for the full folder layout and project defaults.
 ## Reusable components
 
 Check `scripts/components/` before writing new generic code — touch joystick, touch button,
-touch aim stick, 3D health bar, bone pose override, follow camera, floating text, off-screen markers and `MaxWidth` already exist,
+touch aim stick, 3D health bar, bone pose override, follow camera, fly camera, floating text, off-screen markers and `MaxWidth` already exist,
 plus a main menu and pause menu in `scenes/ui/` (see `README.md`). Touch controls handle input in `_input`
 by touch index so the joystick and buttons work together with multi-touch.
 
@@ -143,6 +143,13 @@ by touch index so the joystick and buttons work together with multi-touch.
   every skeleton update (`Player._place_bow`, `BOW_*` constants) with an arrow nocked (`NOCK_POSITION`): a shot
   leaves from that arrow toward the aim line `aim_range` ahead, and the next arrow is nocked after the cooldown.
   New weapon = a `WEAPONS` row + its model in `_weapon_items` + an icon in `Hud._weapon_icons` + a class that carries it.
+- **Special abilities** (X / R3 / touch ability button, action `ability`): enemies drop XP orbs (`Pickup.Kind.XP`,
+  `Enemy.xp_drop()`: `xp_value` or max_health × `Enemy.XP_PER_HEALTH`, split into orbs of ≤ `XP_ORB`); `Player.xp`
+  (replicated) fills up to `ClassDef.ability_xp` (10) and `use_ability()` (server; `request_ability()`) spends it.
+  Ability per class in its ClassDef (`ability` id, `ability_name`, `ability_icon`, `ability_duration`); `ability_active`
+  is replicated, `_apply_ability()` shows it on every peer. Swordsman `whirlwind`: spins (`_whirlwind_pose`, skeleton
+  turned by `_spin_angle`), hits everything within `WHIRLWIND_RADIUS` every `WHIRLWIND_TICK`, slower, no attack / block.
+  New ability = ClassDef fields + a branch in `_update_ability` / `_apply_ability`. Test: `tests/ability_test.gd`.
 - **VFX**: `HitFx.flash(at, texture, color, size, …)` pops a billboard sprite from `assets/vfx/particles/` (Kenney Particle Pack;
   additive, or `additive = false` for smoke). Used for hit sparks, death / camp smoke, combo ring, revive sparkle. Ground
   decals use `assets/vfx/light_masks/` (revive range ring). Touch controls are skinned from `assets/ui/touch/` (set in `hud.gd`).
@@ -211,6 +218,7 @@ by touch index so the joystick and buttons work together with multi-touch.
   (`army_target`, replicated as `army_target_path` for the red mark in main.gd); everyone hunts it, and once it's
   gone the order becomes CHARGE where it fell; no enemy at the point → plain CHARGE. The mouse pick is on screen
   (`main._kill_pick`, models stand up); the HUD Kill button with a mouse waits for the next world click (`_kill_picking`).
+- **Showcase** (`scenes/showcase/showcase.tscn`, run with F6): a world (dev only) to fly around (`FlyCamera3D`) with one station per demo. A demo = a scene extending `ShowcaseDemo` (title, description, camera view, area) instanced under `Demos`; they're laid out in a row, keys 1–9 fly to them. Demos so far: `demos/speed_race` (class running speeds). Put new demonstrations here.
 - **Stats & awards**: report events with `MatchStats.add(peer, &"stat")` (server; kills / deaths / soldiers lost
   come from `Unit.die()`, damage from `HitFx.report_hit`). New award = a row in `MatchStats.AWARDS`.
 - **Minimap** (`scenes/ui/minimap.gd`): shows only friends (players / soldiers not `GameConfig.is_hostile` to you),

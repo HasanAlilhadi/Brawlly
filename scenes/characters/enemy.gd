@@ -9,6 +9,10 @@ extends Unit
 ## Orcs fight every player and every player's soldiers.
 const TARGET_GROUPS: Array[StringName] = [&"player_units"]
 const WAVE_TARGET_GROUPS: Array[StringName] = [&"players"]
+## XP per point of max health (orc 80 hp: 2, giant 500: 13, Warlord: 45).
+const XP_PER_HEALTH: float = 0.025
+## Largest XP orb; bigger drops are split.
+const XP_ORB: int = 10
 
 @export var aggro_range: float = 6.5
 ## Beyond this distance from home a calm orc stops chasing and walks back.
@@ -34,6 +38,8 @@ const WAVE_TARGET_GROUPS: Array[StringName] = [&"players"]
 @export var health_drop_amount: int = 20
 @export var coin_drop_min: int = 2
 @export var coin_drop_max: int = 3
+## XP dropped when killed (special abilities); 0 = from its power: max_health (after the camp's tier) × XP_PER_HEALTH.
+@export var xp_value: int = 0
 @export_group("Combo")
 ## A player's hit within this many seconds of a teammate's hit on this orc is a combo.
 @export var combo_window: float = 1.0
@@ -277,6 +283,16 @@ func _on_died() -> void:
 	var coins := roundi(randi_range(coin_drop_min, coin_drop_max) * coin_multiplier)
 	if coins > 0:
 		Pickup.drop(world, global_position, Pickup.Kind.COIN, coins)
+	# Strong enemies drop several orbs (at most XP_ORB each).
+	var xp := xp_drop()
+	while xp > 0:
+		Pickup.drop(world, global_position, Pickup.Kind.XP, mini(xp, XP_ORB))
+		xp -= XP_ORB
+
+
+## XP this enemy drops: `xp_value`, or its power (tougher orcs, tougher camps: more).
+func xp_drop() -> int:
+	return xp_value if xp_value > 0 else maxi(1, roundi(max_health * XP_PER_HEALTH))
 
 
 # --- "!" alert ----------------------------------------------------------------

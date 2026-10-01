@@ -95,7 +95,9 @@ portrait on phones. There is no single player: host a game (alone is fine) or jo
 ### Menus & UI
 
 - Starts at the **main menu** (`scenes/ui/main_menu.tscn`, 3D camp backdrop from `menu_backdrop.tscn`):
-  Multiplayer (`multiplayer_menu.tscn`) · Controls · Quit. Lobby: `lobby.tscn`.
+  Training Field · Multiplayer (`multiplayer_menu.tscn`) · Controls · Quit. Lobby: `lobby.tscn`.
+- **Training Field** is a local onboarding area with every hero on display, unlimited special abilities and
+  indestructible damage targets. Stand beside a hero and press **F** to switch to it.
 - **Pause**: the II button (top left), Esc, or Android back → Resume / Restart / Main menu. Auto-pauses when the
   app goes to the background.
 - UI look: Kenney RPG UI pack via `resources/themes/rpg_theme.tres` (set as the project theme). Regenerate it with
@@ -110,6 +112,7 @@ portrait on phones. There is no single player: host a game (alone is fine) or jo
 | Action | Keyboard + mouse (PC) | Gamepad | Touch (phones) |
 |---|---|---|---|
 | Move | WASD / arrow keys | Left stick | Drag on the left side |
+| Choose training hero | F while beside a displayed hero | — | — |
 | Sword / spear | Left mouse — swings / thrusts toward the cursor while held · J = nearest enemy | RB / X (nearest enemy) | Weapon stick: drag = direction, tap = nearest |
 | Bow / spear throw | Right mouse — hold to aim at the cursor, release to shoot | Right stick aims · RT / A shoots | Aim stick: drag to aim, release to shoot |
 | Quick shot (nearest enemy) | K | RT / A without aiming | Tap the aim stick |
@@ -123,7 +126,7 @@ portrait on phones. There is no single player: host a game (alone is fine) or jo
 
 All bindings are listed in-game under **main menu → Controls** (`scenes/ui/controls_menu.gd` — update it when
 bindings change). Bindings are Input Map actions (Project Settings → Input Map): `move_*`, `aim_*`, `attack`, `aim_bow`, `shoot`,
-`switch_weapon`, `block`, `interact`, `pause`, `toggle_fullscreen`, `army_follow` / `army_charge` / `army_hold`, `ping`, `ping_help`. Touch controls appear on a PC only when a touchscreen is used.
+`switch_weapon`, `block`, `interact`, `training_interact`, `pause`, `toggle_fullscreen`, `army_follow` / `army_charge` / `army_hold`, `ping`, `ping_help`. Touch controls appear on a PC only when a touchscreen is used.
 
 ### Desktop vs. mobile (`scripts/autoload/platform.gd`, autoload `Platform`)
 
@@ -132,6 +135,7 @@ bindings change). Bindings are Input Map actions (Project Settings → Input Map
 - **Phones**: UI 720×1280 portrait, Mobile renderer, 2× MSAA, touch controls (renderer / MSAA use the `.mobile`
   project-setting overrides).
 - Test the phone layout on a PC: `"$G" --path . -- --mobile` (mouse emulates touch).
+- Several instances side by side: `-- --tile=N` (0..3) puts the window in one screen corner (Debug → Customize Run Instances → 4 instances, arguments `-- --tile=0` … `-- --tile=3`).
 - Menus adapt to both: `MaxWidth` caps full-width panels on wide screens; the main menu puts its buttons on the left
   in landscape; 3D cameras apply their FOV to the screen's short side (`FollowCamera3D.fit_fov_to_short_side`).
 
@@ -218,9 +222,10 @@ Desktop is always landscape. The phone orientation is set with `tools/set_orient
 | `bone_pose_override_3d.gd` (`BonePoseOverride3D`) | SkeletonModifier3D that holds chosen bones in a pose sampled from an animation (e.g. arm in a "holding" pose while legs walk), or plays them live from another animation (`start_live`, e.g. swing only the arm while running); blend with `influence`. |
 | `floating_text_3d.gd` (`FloatingText3D`) | Pop-up text in the 3D world that arcs up and fades ("+5" coins, damage numbers). Pooled, max 24 on screen. `FloatingText3D.spawn(parent, pos, text, color, size, emphasized)`. |
 | `follow_camera_3d.gd` (`FollowCamera3D`) | Fixed-angle smooth follow camera (top-down / isometric). Set `target`, call `snap()`, `shake()`; `zoom` (offset multiplier, eases in) zooms in / out; `rotate_step(±1)` orbits exactly 90° (turn screen input with `to_world(v)`). FOV covers the screen's short side (same view on phones and monitors). |
+| `fly_camera_3d.gd` (`FlyCamera3D`) | Free-fly camera: hold right mouse to look, `move_*` actions to fly, E / Q up / down, Shift fast, wheel = speed; `fly_to(at, target)` glides to a view. Used by the showcase. |
 | `offscreen_markers.gd` (`OffscreenMarkers`) | Screen-edge arrows (label + distance) to nodes in the "tracked" group (metas `marker_color`, `marker_label`). |
 | `max_width.gd` (`MaxWidth`) | Attach to a full-width menu panel: centered and at most `max_width` wide on wide screens, `margin` on each side on phones. |
-| `scripts/autoload/platform.gd` (autoload `Platform`) | Desktop / mobile setup: UI size per device, `mobile_layout`, `touch_mode` (+ `touch_mode_changed`), fullscreen toggle (F11 / Alt+Enter, saved), `-- --mobile` test flag. |
+| `scripts/autoload/platform.gd` (autoload `Platform`) | Desktop / mobile setup: UI size per device, `mobile_layout`, `touch_mode` (+ `touch_mode_changed`), fullscreen toggle (F11 / Alt+Enter, saved), `-- --mobile` test flag, `-- --tile=N` window in a screen corner. |
 | `scripts/autoload/transition.gd` (autoload `Transition`) | Screen fades: `await Transition.fade_out()`, `fade_in()`, `change_scene(path)` (fade out → switch → fade in; pass `false` to let the new scene fade in when ready). |
 | `scenes/ui/main_menu.tscn` | Main menu (title from Project Settings name, Play → `game_scene`, Quit hidden on iOS/web). Add any background as a child. |
 | `scenes/ui/pause_menu.tscn` (`PauseMenu`) | Pause overlay (Resume / Restart / Main menu). `open()`, Esc / `pause` action / Android back, auto-pause when the app is backgrounded on mobile, `set_hint(text)` for a controls line. Instance it in the game scene. |
