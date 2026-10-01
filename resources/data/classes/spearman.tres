@@ -16,6 +16,7 @@ icon = "spear"
 shield = ExtResource("3_shield")
 shield_health = 200.0
 shield_center = Vector3(0, 0.15, 0)
+shield_scale = 1.5
 hand_offset = Vector3(0, 0.085, 0.015)
 recolor_key_hue = 0.435
 recolor_hue_range = 0.04

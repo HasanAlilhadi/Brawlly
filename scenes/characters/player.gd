@@ -485,12 +485,14 @@ func _place_shield(skeleton: Skeleton3D) -> void:
 	var face := SHIELD_CARRY_FACE.normalized()
 	var carry_basis := sway.basis * body.basis * Basis(Vector3.UP.cross(face), Vector3.UP, face)
 	var forearm := arm * (SHIELD_CARRY + class_def.hand_offset)
-	var carried := Transform3D(carry_basis, forearm + carry_basis * Vector3(0.0, SHIELD_CARRY_LIFT, SHIELD_CARRY_OUT))
+	var size := class_def.shield_scale
+	var carried := Transform3D(carry_basis, forearm + carry_basis * Vector3(0.0, SHIELD_CARRY_LIFT * size, SHIELD_CARRY_OUT))
 	var recoil := Transform3D(Basis(Vector3.RIGHT, -deg_to_rad(SHIELD_RECOIL_TILT) * _shield_recoil),
 			SHIELD_BLOCK_AT - Vector3(0.0, 0.0, SHIELD_RECOIL_BACK) * _shield_recoil)
 	var raised := sway * body * recoil
 	var middle := carried.interpolate_with(raised, _shield_raise) if _shield_raise < 1.0 else raised
-	_left_item.transform = arm.affine_inverse() * middle * Transform3D(Basis.IDENTITY, -class_def.shield_center)
+	_left_item.transform = arm.affine_inverse() * middle * Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * size),
+			-class_def.shield_center * size)
 
 
 func _show_shield() -> void:
@@ -731,6 +733,11 @@ func _hold_arms(instant: bool = false) -> void:
 		_slash_pose(0.0)
 		_thrust_pose(0.0)
 	super(instant)
+
+
+## The bow and the shield are placed every frame (`_place_bow`, `_place_shield`), not by the arm blends.
+func _places_item(item: Node3D) -> bool:
+	return item != null and item == _left_item and (weapons.has("bow") or (class_def != null and class_def.shield != null))
 
 
 ## Only the arm with the weapon in hand holds it (and the left one while the shield is up); downed players

@@ -22,6 +22,8 @@ const CATALOG_PATH := "res://resources/data/class_catalog.tres"
 @export var shield: PackedScene
 @export var shield_health: float = 0.0
 @export var shield_center: Vector3 = Vector3.ZERO
+## Size of the shield model (the rectangular one is small as modeled).
+@export var shield_scale: float = 1.0
 @export_group("Player color")
 ## Palette hue of the model recolored to the player's color (see Unit.recolor_*).
 @export_range(-1.0, 1.0) var recolor_key_hue: float = -1.0

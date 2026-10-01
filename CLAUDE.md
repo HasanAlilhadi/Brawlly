@@ -192,7 +192,9 @@ by touch index so the joystick and buttons work together with multi-touch.
   `BLOCK_ARC` of the facing into `shield_health` (breaks at 0, back on `revive`; a shop item later), `BLOCK_SPEED`,
   no attacks, the hero turns toward the cursor / right stick, the shield placed by `_place_shield` after each skeleton update
   (carried: upright on the forearm, face out; up: in front of the chest; blended by `_shield_raise`; both ride the
-  torso bone's bob / sway; a block knocks it back via `_shield_recoil` — never re-blend the arms on a hit). Block FX:
+  torso bone's bob / sway; a block knocks it back via `_shield_recoil` — never re-blend the arms on a hit). Items a subclass places every
+  frame return true from `Unit._places_item()` so the arm blends never tween them (Euler tweens fought the placement:
+  the shield / bow flipped). `ClassDef.shield_scale` (Spearman 1.5). Block FX:
   `HitFx.block_impact` (ring, metal sparks, "Blocked"). Walks (no sprint clip) behind it. Tests: `shield_test.gd`,
   `shield_motion_test.gd`. Right mouse with a ranged weapon in hand still aims.
 - **Deaths drop nothing**: weapons come from the class and coins stay.
@@ -265,7 +267,8 @@ by touch index so the joystick and buttons work together with multi-touch.
   all peers → server waits for every peer's world → spawns players. `Net.return_to_lobby()` after a match.
 - **Testing multiplayer**: `-s script` runs skip autoloads (no `Net`), so use a runner scene that starts normally and
   attaches a driver Node — see `tests/` (`tests/README.md`): offline tests + host/client pairs on 127.0.0.1. Tests play a
-  Swordsman unless `--class=<id>` is passed to `test_runner.tscn`.
+  Swordsman unless `--class=<id>` is passed to `test_runner.tscn`. `--port=<N>` (Net.port) lets a pair run while a
+  game is open on this PC; no `--fixed-fps` for pairs (headless physics then races real time and the join times out).
   Run them after gameplay changes.
 
 ## Template sync (important)

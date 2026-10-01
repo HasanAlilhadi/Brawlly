@@ -54,6 +54,8 @@ var settings: Dictionary = default_settings()
 ## Discovered games: ip -> {"name", "players", "max", "mode", "port", "in_game", "seen"}
 var servers: Dictionary = {}
 var game_in_progress: bool = false
+## Game port (PORT, or `-- --port=N` on the command line: tests next to a running game).
+var port: int = PORT
 var counting_down: bool = false
 var _countdown_end_ms: int = 0
 
@@ -65,6 +67,9 @@ var _broadcast_timer: float = 0.0
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--port="):
+			port = int(arg.substr(7))
 	_load_profile()
 	multiplayer.peer_connected.connect(_on_peer_connected)
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
@@ -238,7 +243,7 @@ func open_offline_lobby() -> void:
 func host() -> Error:
 	_reset()
 	var peer := ENetMultiplayerPeer.new()
-	var err := peer.create_server(PORT, MAX_PLAYERS)
+	var err := peer.create_server(port, MAX_PLAYERS)
 	if err != OK:
 		return err
 	multiplayer.multiplayer_peer = peer
@@ -249,10 +254,10 @@ func host() -> Error:
 	return OK
 
 
-func join(address: String, port: int = PORT) -> Error:
+func join(address: String, join_port: int = -1) -> Error:
 	_reset()
 	var peer := ENetMultiplayerPeer.new()
-	var err := peer.create_client(address.strip_edges(), port)
+	var err := peer.create_client(address.strip_edges(), join_port if join_port > 0 else port)
 	if err != OK:
 		return err
 	multiplayer.multiplayer_peer = peer
@@ -497,7 +502,7 @@ func _process(delta: float) -> void:
 		if _broadcast_timer <= 0.0:
 			_broadcast_timer = 1.0
 			var info := {"game": GAME_ID, "name": profile.name, "players": players.size(),
-					"max": MAX_PLAYERS, "mode": mode(), "port": PORT, "in_game": game_in_progress}
+					"max": MAX_PLAYERS, "mode": mode(), "port": port, "in_game": game_in_progress}
 			_broadcaster.put_packet(JSON.stringify(info).to_utf8_buffer())
 	if _listener:
 		var changed := false

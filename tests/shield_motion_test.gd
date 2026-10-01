@@ -11,6 +11,14 @@ var t := 0.0
 var step := 0
 var player: Player
 var samples: Array = []
+## Largest turn of the shield's face from one frame to the next while it goes up / down (a flip shows here).
+var max_turn := 0.0
+var last_face := Vector3.ZERO
+func _track_turn() -> void:
+	var face := _rel().basis.orthonormalized().z
+	if last_face != Vector3.ZERO:
+		max_turn = maxf(max_turn, rad_to_deg(face.angle_to(last_face)))
+	last_face = face
 func _ready() -> void:
 	get_tree().change_scene_to_file("res://scenes/main/main.tscn")
 func _rel() -> Transform3D:
@@ -42,6 +50,7 @@ func _process(delta: float) -> void:
 				samples.clear()
 				step = 2; t = 2.0
 		2:
+			if t < 2.3: _track_turn()
 			if t > 2.25: samples.append(_rel().origin)
 			if t > 2.8:
 				var ys := samples.map(func(v): return v.y)
@@ -55,6 +64,7 @@ func _process(delta: float) -> void:
 			if t > 2.6:
 				var rest := _rel()
 				_check(rest.basis.orthonormalized().z.z > 0.95, "up, standing: square in front (%s)" % _fmt(rest))
+				_check(max_turn < 15.0, "swings up smoothly, no flip (max %.1f° per frame)" % max_turn)
 				set_meta(&"rest", rest)
 				var dummy := Node3D.new(); main.add_child(dummy)
 				dummy.global_position = player.global_position + player.facing() * 1.0
@@ -66,5 +76,12 @@ func _process(delta: float) -> void:
 			if t > 2.6:
 				_check(samples.max() > 0.05 and samples[-1] < 0.01 and player._left_hold.influence > 0.9,
 						"a blocked hit knocks it back %.2f m, it settles (%.3f), the arm stays up" % [samples.max(), samples[-1]])
+				main._mouse_block = false
+				max_turn = 0.0; last_face = Vector3.ZERO
+				step = 5; t = 2.0
+		5:
+			_track_turn()
+			if t > 2.4:
+				_check(not player.shield_up and max_turn < 15.0, "lowers smoothly, no flip (max %.1f° per frame)" % max_turn)
 				printerr("DONE failures=%d" % failures)
 				get_tree().quit(1 if failures > 0 else 0)

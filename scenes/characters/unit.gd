@@ -677,6 +677,12 @@ func _held_arms() -> int:
 	return ARM_BOTH
 
 
+## Virtual: true for a hand item the subclass places itself every frame (e.g. the player's bow and shield):
+## the arm blends leave it alone (tweening its Euler angles against that placement made it flip).
+func _places_item(_item: Node3D) -> bool:
+	return false
+
+
 ## Arms back into the holding pose (the free ones out of it), weapons into their carry grip.
 func _hold_arms(instant: bool = false) -> void:
 	_full_body_action = false
@@ -689,15 +695,17 @@ func _hold_arms(instant: bool = false) -> void:
 	if duration > 0.0 and (_right_hold or _left_hold):
 		_arm_tween = create_tween().set_parallel(true)
 	var held := _held_arms()
-	_tween_arm(_right_hold, _right_item, 1.0 if held & ARM_RIGHT else 0.0, right_hand_offset, right_hand_rotation, duration)
-	_tween_arm(_left_hold, _left_item, 1.0 if held & ARM_LEFT else 0.0, left_hand_offset, left_hand_rotation, duration)
+	var right_item := null if _places_item(_right_item) else _right_item
+	var left_item := null if _places_item(_left_item) else _left_item
+	_tween_arm(_right_hold, right_item, 1.0 if held & ARM_RIGHT else 0.0, right_hand_offset, right_hand_rotation, duration)
+	_tween_arm(_left_hold, left_item, 1.0 if held & ARM_LEFT else 0.0, left_hand_offset, left_hand_rotation, duration)
 	# Arms that are never held always use the swing grip.
 	if _right_hold == null and _right_item:
 		_right_item.position = right_swing_offset
 		_right_item.rotation_degrees = right_swing_rotation
-	if _left_hold == null and _left_item:
-		_left_item.position = left_hand_offset
-		_left_item.rotation_degrees = left_hand_rotation
+	if _left_hold == null and left_item:
+		left_item.position = left_hand_offset
+		left_item.rotation_degrees = left_hand_rotation
 
 
 func _release_arms(arms: int) -> void:

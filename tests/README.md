@@ -6,6 +6,8 @@ Run from the project folder (`G` = the Godot binary). Tests start the game norma
 ```bash
 # Menus: presses the real buttons (Multiplayer → Host → Leave, Multiplayer → Host → Start; no Play button)
 # Every test plays a Swordsman unless --class=<swordsman|spearman|bowman> (test_runner.gd)
+# Host/client pairs: add --port=<N> to both (e.g. 24575) when a game is already running on this PC (it holds 24565),
+# and no --fixed-fps (it races ahead of real time and the connection times out)
 "$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/ui_flow_test.gd
 
 # Solo: chest, tree, camp (gives no soldiers), trading post (buy only at the right stall), barracks (queue 10 s each, pen, take at the gate, 8 soldiers leave the pen, army cap 10 → 15), death
