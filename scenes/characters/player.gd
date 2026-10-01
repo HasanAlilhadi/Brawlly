@@ -51,15 +51,16 @@ const DOWNED_SPEED: float = 0.3
 const DOWNED_ANIMS := preload("res://assets/characters/animations/archer_downed.glb")
 const DOWNED_CLIPS: Array[String] = ["crawl", "downed"]
 const REVIVE_RING_TEXTURE := preload("res://assets/vfx/light_masks/ring_a.png")
-## Weapon id -> how it works. `melee` weapons swing (sword stick / left mouse) and hit the aim wedge:
-## `arc` degrees wide, out to `reach` m, every `cooldown` s. The others are aimed and fired (bow stick /
+## Weapon id -> how it works. `melee` weapons swing (sword stick / left mouse) and hit the aim area, out to
+## `reach` m, every `cooldown` s: a fan `arc` degrees wide (sword), or a straight `lane` this many m wide with a
+## pointed end (spear stab). The others are aimed and fired (bow stick /
 ## aim): the bow shoots arrows, the javelin throws the spear (slower, harder). No ammo. The class
 ## (ClassDef.weapons) decides what a player carries; E / Y / the HUD button cycles them. `hand` holds the
 ## model; `icon` is a Game Icon Pack glyph. New weapon = a row here + its model in `_weapon_items`.
 const WEAPONS: Dictionary = {
 	"sword": {"melee": true, "hand": ARM_RIGHT, "icon": "sword", "name": "Sword", "arc": 80.0, "reach": 1.55,
 			"cooldown": 0.5},
-	"spear": {"melee": true, "hand": ARM_RIGHT, "icon": "spear", "name": "Spear", "arc": 28.0, "reach": 2.4,
+	"spear": {"melee": true, "hand": ARM_RIGHT, "icon": "spear", "name": "Spear", "lane": 0.7, "reach": 2.4,
 			"cooldown": 0.7},
 	"javelin": {"melee": false, "hand": ARM_RIGHT, "icon": "spear", "name": "Throw"},
 	"bow": {"melee": false, "hand": ARM_LEFT, "icon": "bow", "name": "Bow"},
@@ -353,10 +354,14 @@ func _show_spear(shown: bool) -> void:
 func _slash_fx() -> void:
 	if is_dead or not is_inside_tree():
 		return
-	# The trail covers the hit wedge (the server knows where the swing started; other peers use the facing).
+	# The trail covers the hit area (the server knows where the swing started; other peers use the facing):
+	# a sweep for the sword, a straight stab for the spear.
 	var forward := _melee_dir if multiplayer.is_server() and _melee_dir != Vector3.ZERO else facing()
-	HitFx.swing_arc(self, 0.5, atan2(forward.x, forward.z), melee_reach(), Color(1.0, 0.96, 0.85),
-			melee_arc())
+	var yaw := atan2(forward.x, forward.z)
+	if melee_lane() > 0.0:
+		HitFx.stab(self, 0.6, yaw, melee_reach(), melee_lane() * 0.5, Color(1.0, 0.96, 0.85))
+	else:
+		HitFx.swing_arc(self, 0.5, yaw, melee_reach(), Color(1.0, 0.96, 0.85), melee_arc())
 
 
 ## Sword attack, standing or running: no clip (Kenney's melee clip twists the arm, so the blade pointed
@@ -526,9 +531,33 @@ func _melee_weapon() -> String:
 	return ""
 
 
-## Width in degrees of the melee hit wedge (`_melee_indicator`).
+## Width in degrees of the melee hit fan (0 for a lane weapon).
 func melee_arc() -> float:
-	return float(WEAPONS.get(_melee_weapon(), WEAPONS.sword).arc)
+	return float(WEAPONS.get(_melee_weapon(), WEAPONS.sword).get("arc", 0.0))
+
+
+## Width in m of the melee hit lane (the spear; 0 for a fan weapon).
+func melee_lane() -> float:
+	return float(WEAPONS.get(_melee_weapon(), WEAPONS.sword).get("lane", 0.0))
+
+
+## The melee hit area seen from above (x, z in the hero's space, +Z forward), starting at `back`: a fan to
+## `melee_reach()` (sword) or a lane with a pointed end (spear). Convex: the hit prism and the aim marker.
+func melee_outline(back: float) -> PackedVector2Array:
+	var reach := melee_reach()
+	var points := PackedVector2Array()
+	if melee_lane() > 0.0:
+		var half := melee_lane() * 0.5
+		var shoulder := reach - half * 1.1
+		points.append_array([Vector2(-half, back), Vector2(half, back), Vector2(half, shoulder), Vector2(0.0, reach),
+				Vector2(-half, shoulder)])
+		return points
+	var half_arc := deg_to_rad(melee_arc() * 0.5)
+	points.append(Vector2(0.0, back))
+	for i in 9:
+		var a := -half_arc + 2.0 * half_arc * i / 8.0
+		points.append(Vector2(sin(a), cos(a)) * reach)
+	return points
 
 
 ## The spear model in the right hand (carried like the orc spearmen), hidden unless the spear is in hand.
@@ -816,12 +845,9 @@ func _melee_query(direction: Vector3) -> PhysicsShapeQueryParameters3D:
 	if _melee_wedge == null or _melee_wedge_weapon != _melee_weapon():
 		_melee_wedge_weapon = _melee_weapon()
 		var points := PackedVector3Array()
-		var half := deg_to_rad(melee_arc() * 0.5)
 		for y in [0.05, GameConfig.HIT_HEIGHT + 0.3]:
-			points.append(Vector3(0.0, y, -0.3))
-			for i in 9:
-				var a := -half + 2.0 * half * i / 8.0
-				points.append(Vector3(sin(a) * melee_reach(), y, cos(a) * melee_reach()))
+			for corner in melee_outline(-0.3):
+				points.append(Vector3(corner.x, y, corner.y))
 		_melee_wedge = ConvexPolygonShape3D.new()
 		_melee_wedge.points = points
 	var query := PhysicsShapeQueryParameters3D.new()
@@ -832,24 +858,19 @@ func _melee_query(direction: Vector3) -> PhysicsShapeQueryParameters3D:
 	return query
 
 
-## Short orange wedge in front of the hero while aiming the melee weapon.
+## Orange marker of the hit area in front of the hero while aiming the melee weapon (fan / spear lane).
 func _build_melee_indicator() -> void:
 	var material := StandardMaterial3D.new()
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	material.albedo_color = Color(1.0, 0.62, 0.2, 0.45)
 	material.cull_mode = BaseMaterial3D.CULL_DISABLED
-	var reach := melee_reach()
 	var wedge := ImmediateMesh.new()
 	wedge.surface_begin(Mesh.PRIMITIVE_TRIANGLES, material)
-	var steps := 8
-	var half := deg_to_rad(melee_arc() * 0.5)
-	for i in steps:
-		var a0 := -half + 2.0 * half * i / steps
-		var a1 := -half + 2.0 * half * (i + 1) / steps
-		wedge.surface_add_vertex(Vector3(0, 0.05, 0.25))
-		wedge.surface_add_vertex(Vector3(sin(a0) * reach, 0.05, cos(a0) * reach))
-		wedge.surface_add_vertex(Vector3(sin(a1) * reach, 0.05, cos(a1) * reach))
+	var outline := melee_outline(0.25)
+	for i in range(1, outline.size() - 1):  # a fan over the convex outline
+		for corner in [outline[0], outline[i], outline[i + 1]]:
+			wedge.surface_add_vertex(Vector3(corner.x, 0.05, corner.y))
 	wedge.surface_end()
 	var part := MeshInstance3D.new()
 	part.mesh = wedge

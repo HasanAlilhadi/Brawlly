@@ -132,11 +132,11 @@ by touch index so the joystick and buttons work together with multi-touch.
   Graveyard Kit model skinned onto the human's armature by `tools/blender_keeper_rig.py` (same bones and clips).
 - Anything damageable implements `take_damage(amount, attacker = null, is_melee = true)`.
 - **Weapons**: `Player.WEAPONS` rows (melee: `arc` / `reach` / `cooldown`): sword (melee 40, 80° wedge, cleaves),
-  spear (thrust 35 = `spear_damage`, 28° × 2.4 m wedge: a piercing line), javelin (the spear thrown: `player_spear`
+  spear (stab 35 = `spear_damage`, a straight 0.7 m × 2.4 m lane with a pointed end that pierces a line; `HitFx.stab` streak, not the sword's sweep), javelin (the spear thrown: `player_spear`
   projectile, `spear_cooldown` 1 s), bow (arrows 25, 0.4 s). No ammo anywhere (no ammo pickups, shop items or counters).
   Sharp Blade boosts the sword, Keen Points arrows and spears (`is_upgrade_useful` hides the other class's).
   Chests are broken open by any weapon (group `breakable`, 60 hp), not opened by walking up. Shots fly at 0.55–0.7 m, so
-  anything hittable needs collision up to `GameConfig.HIT_HEIGHT` (1 m); aimed shots fly exactly where aimed (no snapping); a quick shot / tap with no aim auto-targets the nearest enemy. Melee hits exactly the aim wedge (`Player._melee_query`: `melee_arc()` wide, out to `melee_reach()`), aimed where the swing started (`Unit._melee_dir`); other units keep the sphere in `Unit._melee_query`. The player carries `Player.weapons` (from the class) and holds one
+  anything hittable needs collision up to `GameConfig.HIT_HEIGHT` (1 m); aimed shots fly exactly where aimed (no snapping); a quick shot / tap with no aim auto-targets the nearest enemy. Melee hits exactly the aim marker (`Player.melee_outline()` → `_melee_query` prism + `_melee_indicator`: a `melee_arc()` fan or a `melee_lane()` lane, out to `melee_reach()`), aimed where the swing started (`Unit._melee_dir`); other units keep the sphere in `Unit._melee_query`. The player carries `Player.weapons` (from the class) and holds one
   (`weapon_index`, replicated); `switch_weapon()` (server; E / Y / HUD button via `request_switch_weapon`). Melee / shoot
   functions refuse the weapon not in hand; attack keys and left mouse use the one in hand. The sword slash
   (`_sword_slash`) and the spear thrust (`_spear_thrust`, `THRUST_*` keys) are procedural; other units use clips.

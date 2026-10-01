@@ -58,16 +58,24 @@ func _mouse(button: MouseButton, pressed: bool, at: Vector2) -> void:
 	Input.parse_input_event(e)
 
 
-## Trees around the swing that just started: at the wedge's edge (just inside its half-width, just short of its
-## reach), point-blank, beside it (15° past its edge) and past its reach.
+## Trees around the swing that just started (x right, z forward): at the hit area's edge (just inside it), point-blank,
+## beside it and past its reach. Fan weapons (sword) by angle, lane weapons (spear) by width.
 func _spawn_test_trees() -> void:
 	var forward: Vector3 = player._melee_dir
-	var half := player.melee_arc() * 0.5
 	var reach := player.melee_reach()
-	for spot in [[half - 3.0, reach - 0.25], [0.0, 0.45], [half + 15.0, 1.2], [0.0, reach + 0.6]]:
+	var spots: Array[Vector2] = []
+	if player.melee_lane() > 0.0:
+		var half := player.melee_lane() * 0.5
+		spots = [Vector2(half - 0.15, reach - 0.75), Vector2(0.0, 0.45), Vector2(half + 0.55, 1.2), Vector2(0.0, reach + 0.6)]
+	else:
+		var half := player.melee_arc() * 0.5
+		for spot in [[half - 3.0, reach - 0.25], [0.0, 0.45], [half + 15.0, 1.2], [0.0, reach + 0.6]]:
+			spots.append(Vector2(sin(deg_to_rad(spot[0])), cos(deg_to_rad(spot[0]))) * spot[1])
+	var side := forward.cross(Vector3.UP)
+	for spot in spots:
 		var tree := preload("res://scenes/world/choppable_tree.tscn").instantiate() as ChoppableTree
 		main.add_child(tree)
-		tree.global_position = player.global_position + forward.rotated(Vector3.UP, deg_to_rad(spot[0])) * spot[1]
+		tree.global_position = player.global_position - side * spot.x + forward * spot.y
 		test_trees.append(tree)
 
 

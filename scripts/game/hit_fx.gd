@@ -126,12 +126,7 @@ static func swing_arc(parent: Node3D, height: float, yaw: float, radius: float, 
 		lifetime: float = 0.26) -> void:
 	if not is_instance_valid(parent) or not parent.is_inside_tree():
 		return
-	if _arc_material == null:
-		_arc_material = StandardMaterial3D.new()
-		_arc_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		_arc_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		_arc_material.vertex_color_use_as_albedo = true
-		_arc_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_ensure_trail_material()
 	var mesh := ImmediateMesh.new()
 	var ribbon := MeshInstance3D.new()
 	ribbon.mesh = mesh
@@ -142,6 +137,62 @@ static func swing_arc(parent: Node3D, height: float, yaw: float, radius: float, 
 	var tween := ribbon.create_tween()
 	tween.tween_method(func(t: float) -> void: _draw_arc(mesh, yaw, half, radius, color, t), 0.0, 1.0, lifetime)
 	tween.tween_callback(ribbon.queue_free)
+
+
+## Spear stab: a narrow streak that shoots straight out along `yaw` to `length` (the spear's lane), pointed at
+## the far end like the spearhead, then fades; a spark pops at the tip.
+static func stab(parent: Node3D, height: float, yaw: float, length: float, width: float, color: Color,
+		lifetime: float = 0.22) -> void:
+	if not is_instance_valid(parent) or not parent.is_inside_tree():
+		return
+	_ensure_trail_material()
+	var mesh := ImmediateMesh.new()
+	var streak := MeshInstance3D.new()
+	streak.mesh = mesh
+	streak.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(streak)
+	streak.position = Vector3(0, height, 0)
+	streak.rotation.y = yaw
+	var tween := streak.create_tween()
+	tween.tween_method(func(t: float) -> void: _draw_stab(mesh, length, width, color, t), 0.0, 1.0, lifetime)
+	tween.tween_callback(streak.queue_free)
+	var tip := parent.global_position + Vector3(sin(yaw), 0.0, cos(yaw)) * length + Vector3(0, height, 0)
+	parent.get_tree().create_timer(lifetime * 0.3).timeout.connect(func() -> void:
+		flash(tip, HIT_SPARK, Color(color, 0.9), 0.55, 0.14, Vector2(0.4, 1.0)))
+
+
+## Unshaded, vertex-colored, double-sided: shared by swing trails and stabs.
+static func _ensure_trail_material() -> void:
+	if _arc_material == null:
+		_arc_material = StandardMaterial3D.new()
+		_arc_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		_arc_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		_arc_material.vertex_color_use_as_albedo = true
+		_arc_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+
+
+static func _draw_stab(mesh: ImmediateMesh, length: float, width: float, color: Color, t: float) -> void:
+	mesh.clear_surfaces()
+	# The tip races out in the first 40%; the tail follows to just behind it; everything fades at the end.
+	var start := 0.35
+	var tip := lerpf(start, length, 1.0 - pow(1.0 - minf(t / 0.4, 1.0), 3.0))
+	var tail := lerpf(start, length * 0.55, clampf((t - 0.25) / 0.75, 0.0, 1.0))
+	if tip - tail < 0.05:
+		return
+	var fade := clampf((1.0 - t) / 0.4, 0.0, 1.0)
+	var head := maxf(tip - width * 0.9, tail)
+	mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES, _arc_material)
+	var back := Color(color, 0.0)
+	var mid := Color(color, 0.55 * fade)
+	var front := Color(color, 0.95 * fade)
+	var half := width * 0.5
+	for tri in [[Vector3(-half * 0.4, 0, tail), back, Vector3(half * 0.4, 0, tail), back, Vector3(half, 0, head), mid],
+			[Vector3(-half * 0.4, 0, tail), back, Vector3(half, 0, head), mid, Vector3(-half, 0, head), mid],
+			[Vector3(-half, 0, head), mid, Vector3(half, 0, head), mid, Vector3(0, 0, tip), front]]:
+		for i in 3:
+			mesh.surface_set_color(tri[i * 2 + 1])
+			mesh.surface_add_vertex(tri[i * 2])
+	mesh.surface_end()
 
 
 static func _draw_arc(mesh: ImmediateMesh, yaw: float, half: float, radius: float, color: Color, t: float) -> void:
