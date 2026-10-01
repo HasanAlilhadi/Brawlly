@@ -28,7 +28,8 @@ var failures := 0
 
 
 func _ready() -> void:
-	Net.open_solo_lobby()
+	Net.profile["class"] = &"bowman"  # the point-blank arrow checks
+	Net.open_offline_lobby()
 	Net.settings.seed = 12345
 	Net.set_setting("events", false)
 	get_tree().change_scene_to_file("res://scenes/main/main.tscn")
@@ -169,7 +170,6 @@ func _process(delta: float) -> void:
 			orc.set_physics_process(false)
 			set_meta(&"orc", orc)
 			set_meta(&"orc_health", orc.max_health)
-			player.buy_weapon("bow")
 			player._shoot_timer = 0.0
 			player.shoot(Vector3(1, 0, 0))
 			_next()

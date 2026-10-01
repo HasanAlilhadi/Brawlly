@@ -1,13 +1,10 @@
 class_name ChoppableTree
 extends StaticBody3D
-## Tree that can be chopped with melee hits (arrows just stick). Some drop arrows when they fall (arrow_chance).
+## Tree that can be chopped with melee hits (arrows and thrown spears just stick).
 ## Multiplayer: the server decides; the shake / fall play on every peer via RPC.
 
 @export var models: Array[PackedScene] = []
 @export var max_health: float = 60.0
-@export var arrow_drop: int = 3
-## Chance a felled tree drops its arrows (the rest give only wood chips).
-@export_range(0.0, 1.0) var arrow_chance: float = 0.5
 
 var health: float
 var is_dead: bool = false
@@ -32,8 +29,6 @@ func take_damage(amount: float, attacker: Node3D = null, is_melee: bool = true, 
 	health -= amount
 	if health <= 0.0:
 		MatchStats.add(GameConfig.owner_peer_of(attacker), &"trees")
-		if randf() < arrow_chance:
-			Pickup.drop(get_parent(), global_position, Pickup.Kind.ARROWS, arrow_drop)
 		_net_fall.rpc()
 	else:
 		_net_shake.rpc()

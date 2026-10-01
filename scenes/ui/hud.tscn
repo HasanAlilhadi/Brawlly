@@ -5,7 +5,6 @@
 [ext_resource type="Script" path="res://scripts/components/touch_button.gd" id="3_button"]
 [ext_resource type="Script" path="res://scenes/ui/minimap.gd" id="4_minimap"]
 [ext_resource type="Texture2D" path="res://assets/ui/icons/potion.png" id="5_potion"]
-[ext_resource type="Texture2D" path="res://assets/ui/icons/arrow.png" id="6_arrow"]
 [ext_resource type="Texture2D" path="res://assets/ui/icons/soldier.png" id="7_soldier"]
 [ext_resource type="Texture2D" path="res://assets/ui/icons/camp.png" id="8_camp"]
 [ext_resource type="Texture2D" path="res://assets/ui/icons/bow.png" id="9_bow"]
@@ -131,23 +130,6 @@ show_percentage = false
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/separation = 6
-
-[node name="ArrowIcon" type="TextureRect" parent="Root/TopLeft/Rows/InfoRow"]
-custom_minimum_size = Vector2(30, 30)
-layout_mode = 2
-mouse_filter = 2
-texture = ExtResource("6_arrow")
-expand_mode = 1
-stretch_mode = 5
-
-[node name="ArrowsLabel" type="Label" parent="Root/TopLeft/Rows/InfoRow"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(64, 0)
-layout_mode = 2
-theme_type_variation = &"LabelLight"
-theme_override_constants/outline_size = 6
-theme_override_font_sizes/font_size = 24
-text = "15"
 
 [node name="CoinIcon" type="TextureRect" parent="Root/TopLeft/Rows/InfoRow"]
 custom_minimum_size = Vector2(30, 30)

@@ -1,5 +1,5 @@
 extends Node3D
-## Game entry point for solo and multiplayer matches.
+## Game entry point for multiplayer matches (every player's hero is of the class picked in the lobby).
 ## - Every peer builds the same world from the shared seed in Net.settings.
 ## - The server waits until every peer has built it, then spawns one Player per peer and starts the camps.
 ## - Local input (HUD touch controls / keyboard) goes to the local Player on the server.
@@ -24,7 +24,7 @@ const DESKTOP_CAMERA_ZOOM: float = 1.25
 ## Default camera zoom-out on top of that (1.2 = 20% further than the camera's offset).
 const CAMERA_ZOOM: float = 1.2
 ## Extra zoom-out while holding a ranged weapon, so you see further where you shoot.
-const WEAPON_CAMERA_ZOOM: Dictionary = {"spear": 0.1, "bow": 0.2}
+const WEAPON_CAMERA_ZOOM: Dictionary = {"spear": 0.05, "javelin": 0.1, "bow": 0.2}
 ## Army orders from the keyboard / buttons without a cursor point: this far in front of the player.
 const ORDER_AHEAD: float = 9.0
 
@@ -85,8 +85,8 @@ var _last_ping_ms: Dictionary = {}  # peer -> time of their last ping (server)
 
 func _ready() -> void:
 	if Net.players.is_empty():
-		# Scene run directly (e.g. from the editor): solo with default settings.
-		Net.open_solo_lobby()
+		# Scene run directly (e.g. from the editor): offline with default settings.
+		Net.open_offline_lobby()
 		Net.settings.seed = randi()
 	var settings := Net.settings
 	seed(settings.seed)
@@ -201,10 +201,12 @@ func _spawn_unit(data: Dictionary) -> Node:
 			var player := PLAYER_SCENE.instantiate() as Player
 			player.peer_id = data.peer
 			player.display_name = data.display_name
+			player.set_class(data.get("class", &""))
 			player.coins = data.get("start_coins", 0)
 			unit = player
 		&"ally":
 			var ally := ALLY_SCENE.instantiate() as Ally
+			ally.weapon = data.get("weapon", "sword")
 			if data.has("pen"):
 				ally.pen = get_node_or_null(data.pen) as ShopStation
 				ally.penned = true
@@ -265,6 +267,7 @@ func _spawn_player(peer: int) -> void:
 	var player := NetSpawn.unit(&"player", game_mode.spawn_point_for(peer), {
 		"peer": peer,
 		"display_name": Net.name_of(peer),
+		"class": Net.class_of(peer),
 		"team": Net.team_of(peer),
 		"color": Net.color_of(peer),
 		"start_coins": int(Net.settings.start_coins),
@@ -324,10 +327,10 @@ func _on_peer_left(peer: int) -> void:
 
 
 # --- Input ---------------------------------------------------------------------
-# Desktop: WASD / arrows / left stick move. One weapon in hand (Q / Y switch): left mouse swings the sword
-# toward the cursor, or with the bow aims at the cursor (left or right mouse, release to shoot). J / RB and
-# Space / K / RT use the weapon on the nearest enemy (the bow at the right-stick direction when aiming).
-# Touch: HUD joystick + the stick of the weapon in hand + a switch button.
+# Desktop: WASD / arrows / left stick move. The class's weapon in hand (Spearman: E / Y switch thrust <-> throw):
+# left mouse swings / thrusts toward the cursor, or with a ranged weapon aims at the cursor (left or right
+# mouse, release to shoot). J / RB and Space / K / RT use the weapon on the nearest enemy (ranged: at the
+# right-stick direction when aiming). Touch: HUD joystick + the stick of the weapon in hand + a switch button.
 
 func _physics_process(delta: float) -> void:
 	if _game_over or local_player == null or not is_instance_valid(local_player):
@@ -478,7 +481,7 @@ func _cursor_direction() -> Vector3:
 	return direction.normalized() if direction.length() > 0.15 else local_player.facing()
 
 
-## Q / Y / the HUD switch button: next weapon in hand (drops any aim in progress).
+## E / Y / the HUD switch button: next weapon in hand (drops any aim in progress).
 func _switch_weapon() -> void:
 	if local_player == null or _game_over or local_player.is_dead:
 		return

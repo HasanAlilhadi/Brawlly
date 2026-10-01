@@ -6,7 +6,6 @@ var main: Node
 var player: Player
 var hud: Hud
 var camp: Camp
-var arrows_before := 0
 
 func _ready() -> void:
 	get_tree().change_scene_to_file("res://scenes/main/main.tscn")
@@ -51,8 +50,6 @@ func _tick(delta: float) -> bool:
 						or float(next.health) <= float(current.health) or next.color == current.color:
 					printerr("FAILED chest rarity progression at tier %d" % i)
 			player.max_health = 1e6; player.health = 1e6
-			player.buy_weapon("bow"); player.switch_weapon()  # carry the bow (arrows), sword in hand
-			arrows_before = player.arrows
 			_next("solo started: players=%d camps=%d orcs=%d peer=%d team=%d" % [players.size(), get_tree().get_nodes_in_group(&"camps").size(), get_tree().get_nodes_in_group(&"enemies").size(), player.peer_id, player.team_id])
 		1:
 			var chest: Node3D = null
@@ -60,11 +57,11 @@ func _tick(delta: float) -> bool:
 				if c is Chest and (chest == null or c.global_position.distance_to(player.global_position) < chest.global_position.distance_to(player.global_position)): chest = c
 			# Break it open with the sword.
 			if is_instance_valid(chest) and _drive(chest.global_position, 1.0): player.attack_melee_toward(chest.global_position - player.global_position)
-			if pt > 5: _next("chest: arrows %d -> %d, coins %d" % [arrows_before, player.arrows, player.coins]); arrows_before = player.arrows
+			if pt > 5: _next("chest: coins %d" % player.coins)
 		2:
 			var tree := _nearest(&"choppable")
 			if tree and _drive(tree.global_position, 1.1): player.attack_melee()
-			if pt > 6: _next("chop: arrows %d -> %d" % [arrows_before, player.arrows])
+			if pt > 6: _next("chop: tree %s" % ("felled" if tree == null or tree.is_dead else "standing"))
 		3:
 			camp = _nearest(&"camps")
 			player.global_position = camp.global_position + Vector3(0, 0, camp.radius + 3)

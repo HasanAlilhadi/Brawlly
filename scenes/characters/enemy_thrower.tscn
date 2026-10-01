@@ -54,7 +54,6 @@ projectile_scene = ExtResource("4_projectile")
 throw_range = 8.0
 throw_cooldown = 2.8
 throw_damage = 10.0
-arrow_drop_chance = 0.6
 coin_drop_min = 3
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]

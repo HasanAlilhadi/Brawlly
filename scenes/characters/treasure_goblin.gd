@@ -125,8 +125,6 @@ func _on_died() -> void:
 	for i in 6:
 		Pickup.drop(get_parent(), global_position, Pickup.Kind.COIN, total / 6 + (1 if i < total % 6 else 0))
 	Pickup.drop(get_parent(), global_position, Pickup.Kind.HEALTH, 40)
-	Pickup.drop(get_parent(), global_position, Pickup.Kind.ARROWS, 8)
-	Pickup.drop(get_parent(), global_position, Pickup.Kind.SPEARS, 3)
 	finished.emit(self, true, last_attacker_peer)
 
 

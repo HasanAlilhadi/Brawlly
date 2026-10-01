@@ -101,7 +101,8 @@ by touch index so the joystick and buttons work together with multi-touch.
   points at the ground): `Player._sword_slash` keeps the arm held and sweeps it (left to right) with `BonePoseOverride3D.pose_offset`
   (`SLASH_*` keys: arm sweep / raise, body twist / lunge, and blade directions in the body's space — the grip is
   solved from them each frame, turning around `sword_grip_point` so the handle stays in the fist). Player colors: `recolor_*` exports + `assets/shaders/palette_recolor.gdshader`
-  replace one palette hue (soldier crest h≈0.015, archer hat h≈0.38); new unit types need their own key hue.
+  replace one palette hue (soldier crest h≈0.015; per class in its ClassDef: archer hat h≈0.38, human shirt h≈0.65,
+  keeper overalls h≈0.435); new unit types need their own key hue. Weapons in hand (under a BoneAttachment3D) are never recolored.
 - In-game HUD is deliberately compact (PanelCompact / PanelInsetCompact styles) and follows the **HUD design system**:
   every size, gap and font size comes from `HudStyle` (`scenes/ui/hud_style.gd`) — no numbers in hud.gd / hud.tscn.
   `Hud._apply_design()` stacks the HUD into a left column (stats, square buttons) and a right column (minimap,
@@ -118,18 +119,28 @@ by touch index so the joystick and buttons work together with multi-touch.
   when adding more). Input prompts: `UiKit.prompt("keyboard/w" | "mouse/left" | "xbox/rt" | "touch/tap")` from
   `assets/ui/prompts/` (Kenney Input Prompts, Double size; copy more from pre-assets when needed). Cursors: gauntlet in
   menus (Project Settings), gold sword in matches (main.gd).
-- Flow: `main_menu.tscn` (run scene) → `main.tscn`; `PauseMenu` in `main.tscn`, disabled on game over.
+- Flow: `main_menu.tscn` (run scene) → Multiplayer → lobby → `main.tscn`; `PauseMenu` in `main.tscn`, disabled on game over.
+  **Multiplayer only**: no single player in any menu. `Net.open_offline_lobby()` (offline peer) exists only for tests and
+  running `main.tscn` directly from the editor.
+- **Classes** (`ClassDef` resources in `resources/data/classes/`, listed in `class_catalog.tres`): Swordsman (`human.glb`,
+  sword), Spearman (`keeper.glb`, spear thrust + javelin throw, E / Y toggles), Bowman (`archer.glb`, bow). Picked with
+  `ClassPicker` (multiplayer menu + lobby) → `Net.set_class()` → profile `class` + `Net.players[peer].class` → spawn data
+  `class` → `Player.set_class()` (every peer, before entering the tree: swaps the Model, sets `weapons`, hand items,
+  recolor hue, `hand_offset`). Soldiers carry `ClassDef.ally_weapon` (`Ally.weapon` from spawn data, `Ally.WEAPON_STATS`;
+  archers stop at `shoot_range` and shoot arrows). A class is locked to its weapons; nothing has ammo. Planned, not built:
+  per-class upgrades and one special ability per class (the Spearman's throw becomes a purchase). `keeper.glb` is a rigid
+  Graveyard Kit model skinned onto the human's armature by `tools/blender_keeper_rig.py` (same bones and clips).
 - Anything damageable implements `take_damage(amount, attacker = null, is_melee = true)`.
-- **Weapons**: the player starts with the sword and can buy the bow and the spear (shop items `weapon_bow` /
-  `weapon_spear`, 500 coins each; `Player.buy_weapon()` keeps what was bought, so Q cycles all of them). Base damage: sword 40, bow 25 (arrows),
-  spear 35 (thrown `player_spear` projectile, uses `spears`, `spear_cooldown` 1 s vs bow 0.4 s). Sharp Blade boosts the
-  sword, Keen Points the bow and spear. Ammo: arrows (bow) and `spears` (max 8, 6 when bought); ammo pickups
-  (`Pickup.Kind.ARROWS` / `SPEARS`) only go to players carrying that weapon (`Player.can_collect`). Chests are
-  broken open by any weapon (group `breakable`, 60 hp), not opened by walking up. Shots fly at 0.55–0.7 m, so
-  anything hittable needs collision up to `GameConfig.HIT_HEIGHT` (1 m); aimed shots fly exactly where aimed (no snapping); a quick shot / tap with no aim auto-targets the nearest enemy. The sword hits exactly the aim wedge (`Player._melee_query`: `MELEE_ARC_DEGREES` wide, out to `melee_reach()`), aimed where the swing started (`Unit._melee_dir`); other units keep the sphere in `Unit._melee_query`. The player carries `Player.weapons` (≤ `MAX_WEAPONS` = 3, ids from `Player.WEAPONS`) and holds one
-  (`weapon_index`, replicated); `switch_weapon()` (server; Q / Y / HUD button via `request_switch_weapon`), `give_weapon(id)`
-  for pickups. Melee / shoot functions refuse the weapon not in hand; attack keys and left mouse use the one in hand.
-  New weapon (e.g. spear) = a `WEAPONS` row + its model in `_weapon_items` + an icon in `Hud._weapon_icons`.
+- **Weapons**: `Player.WEAPONS` rows (melee: `arc` / `reach` / `cooldown`): sword (melee 40, 80° wedge, cleaves),
+  spear (thrust 35 = `spear_damage`, 28° × 2.4 m wedge: a piercing line), javelin (the spear thrown: `player_spear`
+  projectile, `spear_cooldown` 1 s), bow (arrows 25, 0.4 s). No ammo anywhere (no ammo pickups, shop items or counters).
+  Sharp Blade boosts the sword, Keen Points arrows and spears (`is_upgrade_useful` hides the other class's).
+  Chests are broken open by any weapon (group `breakable`, 60 hp), not opened by walking up. Shots fly at 0.55–0.7 m, so
+  anything hittable needs collision up to `GameConfig.HIT_HEIGHT` (1 m); aimed shots fly exactly where aimed (no snapping); a quick shot / tap with no aim auto-targets the nearest enemy. Melee hits exactly the aim wedge (`Player._melee_query`: `melee_arc()` wide, out to `melee_reach()`), aimed where the swing started (`Unit._melee_dir`); other units keep the sphere in `Unit._melee_query`. The player carries `Player.weapons` (from the class) and holds one
+  (`weapon_index`, replicated); `switch_weapon()` (server; E / Y / HUD button via `request_switch_weapon`). Melee / shoot
+  functions refuse the weapon not in hand; attack keys and left mouse use the one in hand. The sword slash
+  (`_sword_slash`) and the spear thrust (`_spear_thrust`, `THRUST_*` keys) are procedural; other units use clips.
+  New weapon = a `WEAPONS` row + its model in `_weapon_items` + an icon in `Hud._weapon_icons` + a class that carries it.
 - **VFX**: `HitFx.flash(at, texture, color, size, …)` pops a billboard sprite from `assets/vfx/particles/` (Kenney Particle Pack;
   additive, or `additive = false` for smoke). Used for hit sparks, death / camp smoke, combo ring, revive sparkle. Ground
   decals use `assets/vfx/light_masks/` (revive range ring). Touch controls are skinned from `assets/ui/touch/` (set in `hud.gd`).
@@ -140,7 +151,7 @@ by touch index so the joystick and buttons work together with multi-touch.
   are sold at **trading post stalls** (`ShopStation`) in the **town** at every spawn point: one fixed layout, never
   turned (`tools/blender_town.py` → `assets/environment/buildings/town.tscn`: paved square + mosaic at the spawn, decor
   with its collision, markers `Stall_<id>` / `StarterChest` / `Tree_<n>`: the town's trees are the normal choppable
-  trees). A felled tree drops arrows only with `ChoppableTree.arrow_chance` (0.5). `WorldBuilder._add_towns()` instances it and puts a stall
+  trees). `WorldBuilder._add_towns()` instances it and puts a stall
   on each marker; `WorldBuilder.TOWN_RADIUS` stays free of trees / camps / scatter, no camp within
   `stall_safe_distance` of a stall. Move a building = change `STALLS` in the town script and rebuild; deathmatch spreads
   its per-player towns so they never overlap (`GameMode.setup`). `UpgradeDef.stalls` lists the stalls that sell an item;
@@ -173,11 +184,9 @@ by touch index so the joystick and buttons work together with multi-touch.
   (`is_downed`, crawl speed, out of `player_units`). `GameConfig.is_gone()` treats downed units as gone, so AI and
   aim assist skip them. Revive = teammate within `Player.REVIVE_RANGE` for `REVIVE_TIME`. Only hostile
   player-owned damage finishes a downed player. Signals `went_down` / `revived` → main.gd (announce, Help ping).
-- **Death drops** (online only, real death — not downed): `Player._drop_items()` drops the bow / spear you carry
-  (`Pickup.Kind.WEAPON_*`, never expire) plus their ammo; coins and the sword stay. Anyone without that weapon
-  picks it up (goes into the carried list, the weapon in hand doesn't change).
+- **Deaths drop nothing**: weapons come from the class and coins stay.
   Clips `crawl` (moving) / `downed` (still) come from `assets/characters/animations/archer_downed.glb` (made in Blender on
-  the archer armature, copied into the archer library by `Player._add_downed_anims()`); while downed the arm holds stay off and the sword / bow are hidden.
+  the archer armature, copied into each class model's library by `Player._add_downed_anims()`, track paths re-rooted); while downed the arm holds stay off and the sword / bow are hidden.
 - **World events** (`WorldEvents`, setting `events`): `spawn_goblin()` / `spawn_warlord()` (server; tests call them
   directly). `TreasureGoblin` (NetSpawn kind `goblin`, orc team, flees), `Warlord` (extends `Enemy`, warband orcs
   have `Enemy.warlord` set and follow via `follow_point()`, its warband is routed when it falls).
@@ -198,7 +207,7 @@ by touch index so the joystick and buttons work together with multi-touch.
 - **Pings**: `main._ping()` → server `_on_ping()` (rate-limited) → teammates' `PingMarker`. Things that should get a
   screen-edge arrow + minimap diamond join group `tracked` with metas `marker_color` / `marker_label`.
 - Balance reference (base stats, before camp tier 0.75–1.35×): player 150hp, sword 40 (cleaves), arrow 25, spear 35, regen 6/s;
-  soldier 80hp/12; spearman 80/10; swordsman 95/11; thrower 55hp, spear 10; giant 500/26.
+  soldier 80hp/12 (sword), 80/11 (spear, 1.45 reach), 65/9 (bow, arrows from 7 m); orc spearman 80/10; swordsman 95/11; thrower 55hp, spear 10; giant 500/26.
 - Use `GameConfig.is_gone(node)` for target checks (handles freed nodes).
 - AI targeting is sticky: pick targets with `Unit.choose_target(current, candidate, keep_range)` (keeps the current
   one for `TARGET_LOCK_TIME` and switches only to a much closer one). `Enemy.provoke(attacker, direct)`: squad alerts
@@ -216,7 +225,7 @@ by touch index so the joystick and buttons work together with multi-touch.
 
 ## Multiplayer architecture (read before changing gameplay code)
 
-- **Server-authoritative.** The host (or solo, via `OfflineMultiplayerPeer`, id 1) runs ALL gameplay: AI, damage,
+- **Server-authoritative.** The host (or the offline test peer, `OfflineMultiplayerPeer`, id 1) runs ALL gameplay: AI, damage,
   pickups, camps, scoring. Guard gameplay with `multiplayer.is_server()`; clients only display.
 - **Spawning**: never `add_child` gameplay objects directly. Use `NetSpawn.unit(kind, pos, extra)`,
   `NetSpawn.pickup()`, `NetSpawn.projectile()` (server only); `main.gd` spawn functions build them on every peer.
@@ -236,10 +245,11 @@ by touch index so the joystick and buttons work together with multi-touch.
   `active_enemies`, `camps`, `units`. `owner_peer` = controlling player (kill/camp credit).
 - **Input**: `main.gd` reads HUD/keyboard and calls `Player.set_input/attack_melee/shoot` on the server, or the
   `Player.net_*` RPCs from clients (validated by sender). Shop purchases: `Player.request_buy()`.
-- **Match flow**: menu → lobby (`Net.open_solo_lobby()` / `host()` / `join()`) → `Net.start_game()` loads main on
+- **Match flow**: menu → lobby (`Net.host()` / `join()`; tests: `open_offline_lobby()`) → `Net.start_game()` loads main on
   all peers → server waits for every peer's world → spawns players. `Net.return_to_lobby()` after a match.
 - **Testing multiplayer**: `-s script` runs skip autoloads (no `Net`), so use a runner scene that starts normally and
-  attaches a driver Node — see `tests/` (`tests/README.md`): solo test + host/client pairs on 127.0.0.1.
+  attaches a driver Node — see `tests/` (`tests/README.md`): offline tests + host/client pairs on 127.0.0.1. Tests play a
+  Swordsman unless `--class=<id>` is passed to `test_runner.tscn`.
   Run them after gameplay changes.
 
 ## Template sync (important)

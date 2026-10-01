@@ -14,10 +14,10 @@ const TWO_COLUMNS_WIDTH: float = 1150.0
 ## key caps with that text. Icons are Game Icon Pack glyphs (assets/ui/icons/game/).
 const KEYBOARD: Array = [
 	["cursor_move", "Move", "", [["keyboard/w", "keyboard/a", "keyboard/s", "keyboard/d"], ["keyboard/arrows"]]],
-	["broadsword", "Switch weapon", "Sword ⇄ the bow or spear you bought", [["keyboard/q"]]],
+	["spear", "Spear: thrust ⇄ throw", "Spearman only", [["keyboard/e"]]],
 	["rotate_right", "Rotate camera", "Turns the view 90° around you", [["keyboard/r"]]],
-	["sword", "Sword", "Swings toward the cursor", [["mouse/left"]]],
-	["bow", "Bow / spear", "Hold to aim at the cursor, release to shoot or throw", [["mouse/left"], ["mouse/right"]]],
+	["sword", "Sword / spear", "Swings or thrusts toward the cursor", [["mouse/left"]]],
+	["bow", "Bow / spear throw", "Hold to aim at the cursor, release to shoot or throw", [["mouse/left"], ["mouse/right"]]],
 	["arrow", "Quick attack", "Weapon in hand on the nearest enemy", [["keyboard/j"], ["keyboard/k"]]],
 	["user_group", "Soldiers: follow", "They walk with you in formation", [["keyboard/1"]]],
 	["flag", "Soldiers: charge", "They run to the cursor and fight there", [["keyboard/2"]]],
@@ -25,14 +25,14 @@ const KEYBOARD: Array = [
 	["target", "Soldiers: kill", "They hunt the enemy under the cursor (none there: charge) · or click Kill, then the enemy", [["keyboard/4"]]],
 	["location", "Ping", "Attack! · Loot! · Here! for your team", [["G"], ["mouse/scroll"]]],
 	["heart", "Call for help", "", [["keyboard/h"]]],
-	["shop", "Use a stall", "Shop at a trading post stall you stand at", [["keyboard/e"], ["keyboard/b"]]],
+	["shop", "Use a stall", "Shop at a trading post stall you stand at", [["keyboard/b"]]],
 	["pause", "Pause", "", [["keyboard/escape"], ["keyboard/p"]]],
 	["expand", "Fullscreen", "", [["keyboard/f11"], ["keyboard/alt", "keyboard/enter"]]],
 ]
 const GAMEPAD: Array = [
 	["cursor_move", "Move", "", [["xbox/stick_l"]]],
-	["broadsword", "Switch weapon", "Sword ⇄ bow or spear", [["Y"]]],
-	["bow", "Aim the bow", "Then shoot with RT", [["xbox/stick_r"]]],
+	["spear", "Spear: thrust ⇄ throw", "Spearman only", [["Y"]]],
+	["bow", "Aim", "Bow / spear throw, then shoot with RT", [["xbox/stick_r"]]],
 	["arrow", "Attack", "Weapon in hand · the nearest enemy when not aiming", [["xbox/rt"], ["xbox/a"], ["xbox/rb"], ["xbox/x"]]],
 	["user_group", "Soldiers: follow", "", [["xbox/dpad_up"]]],
 	["flag", "Soldiers: charge", "In front of you", [["xbox/dpad_right"]]],
@@ -44,9 +44,9 @@ const GAMEPAD: Array = [
 ]
 const TOUCH: Array = [
 	["cursor_move", "Move", "Drag anywhere on the left side", [["touch/swipe_move"]]],
-	["broadsword", "Switch weapon", "The small button above the weapon stick", [["touch/tap"]]],
-	["sword", "Sword", "Sword stick: drag to swing that way · tap hits the nearest enemy", [["touch/swipe_move"], ["touch/tap"]]],
-	["bow", "Bow", "Bow stick: drag to aim, release to shoot · tap auto-aims", [["touch/swipe_move"], ["touch/tap"]]],
+	["spear", "Spear: thrust ⇄ throw", "Spearman: the small button above the weapon stick", [["touch/tap"]]],
+	["sword", "Sword / spear", "Weapon stick: drag to swing that way · tap hits the nearest enemy", [["touch/swipe_move"], ["touch/tap"]]],
+	["bow", "Bow / spear throw", "Aim stick: drag to aim, release to shoot · tap auto-aims", [["touch/swipe_move"], ["touch/tap"]]],
 	["user_group", "Soldier orders", "The buttons under your soldier count", [["Follow"], ["Charge"], ["Hold"], ["Kill"]]],
 	["location", "Ping", "Online games", [["!"]]],
 	["shop", "Use a stall", "Tap the stall button at the bottom", [["touch/tap"]]],

@@ -1,6 +1,7 @@
 extends Node
-## Networking, lobby and player profile (autoload "Net").
-## - Solo play uses the same game code with an offline peer (you are the server, id 1).
+## Networking, lobby and player profile (autoload "Net"). The game is multiplayer only.
+## - An offline peer (`open_offline_lobby()`, you are the server, id 1) is only for automated tests and
+##   running the match scene directly from the editor; no menu offers it.
 ## - Hosting opens an ENet server on the local network; joining connects by IP (or a discovered game).
 ## - The host owns the match settings and team assignment; clients get them via `_sync_lobby`.
 ## - Hosts announce themselves with a UDP broadcast so nearby players can find the game.
@@ -45,8 +46,8 @@ const PLAYER_COLORS: Array[Color] = [
 const TEAM_NAMES: PackedStringArray = ["Red", "Blue", "Green", "Yellow"]
 const TEAM_COLORS: Array[Color] = [Color("e8483c"), Color("3c8ee8"), Color("46c04c"), Color("f2c230")]
 
-var profile: Dictionary = {"name": "Archer", "color": 0}
-## peer id -> {"name": String, "color": int, "team": int}
+var profile: Dictionary = {"name": "Player", "color": 0, "class": &"swordsman"}
+## peer id -> {"name": String, "color": int, "team": int, "class": StringName (ClassDef.id)}
 var players: Dictionary = {}
 var settings: Dictionary = default_settings()
 ## Discovered games: ip -> {"name", "players", "max", "mode", "port", "in_game", "seen"}
@@ -126,6 +127,11 @@ func name_of(peer: int) -> String:
 	return players.get(peer, {}).get("name", "Player")
 
 
+## The ClassDef id a player picked.
+func class_of(peer: int) -> StringName:
+	return StringName(players.get(peer, {}).get("class", &""))
+
+
 ## Local IPv4 addresses (shown in the lobby so others can join by IP).
 func local_addresses() -> PackedStringArray:
 	var result := PackedStringArray()
@@ -138,41 +144,54 @@ func local_addresses() -> PackedStringArray:
 # --- Profile -------------------------------------------------------------------
 
 func set_profile(player_name: String, color_index: int) -> void:
-	profile = {"name": _clean_name(player_name), "color": clampi(color_index, 0, PLAYER_COLORS.size() - 1)}
+	profile.name = _clean_name(player_name)
+	profile.color = clampi(color_index, 0, PLAYER_COLORS.size() - 1)
+	_profile_changed()
+
+
+## Your class (ClassDef id), remembered for the next game and sent to the host while in a lobby.
+func set_class(class_id: StringName) -> void:
+	profile["class"] = ClassDef.find(class_id).id
+	_profile_changed()
+
+
+func _profile_changed() -> void:
 	_save_profile()
 	if multiplayer.has_multiplayer_peer() and not game_in_progress and players.has(my_id()):
 		if is_host():
-			_update_player(1, profile.name, profile.color)
+			_update_player(1, profile.name, profile.color, profile["class"])
 		else:
-			_request_profile.rpc_id(1, profile.name, profile.color)
+			_request_profile.rpc_id(1, profile.name, profile.color, profile["class"])
 
 
 func _load_profile() -> void:
 	var config := ConfigFile.new()
 	if config.load(PROFILE_PATH) == OK:
-		profile.name = _clean_name(config.get_value("profile", "name", "Archer"))
+		profile.name = _clean_name(config.get_value("profile", "name", "Player"))
 		profile.color = clampi(config.get_value("profile", "color", 0), 0, PLAYER_COLORS.size() - 1)
+		profile["class"] = ClassDef.find(StringName(config.get_value("profile", "class", ""))).id
 
 
 func _save_profile() -> void:
 	var config := ConfigFile.new()
 	config.set_value("profile", "name", profile.name)
 	config.set_value("profile", "color", profile.color)
+	config.set_value("profile", "class", String(profile["class"]))
 	config.save(PROFILE_PATH)
 
 
 static func _clean_name(value: String) -> String:
 	var cleaned := value.strip_edges().substr(0, 16)
-	return cleaned if cleaned != "" else "Archer"
+	return cleaned if cleaned != "" else "Player"
 
 
 # --- Session -------------------------------------------------------------------
 
-## Solo: a local "lobby" with editable settings and no network.
-func open_solo_lobby() -> void:
+## Tests / running main.tscn directly only: a local "lobby" with no network (players always host or join).
+func open_offline_lobby() -> void:
 	_reset()
 	multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
-	players = {1: _entry(profile.name, profile.color, 0)}
+	players = {1: _entry(profile.name, profile.color, 0, profile["class"])}
 	lobby_changed.emit()
 
 
@@ -184,7 +203,7 @@ func host() -> Error:
 		return err
 	multiplayer.multiplayer_peer = peer
 	_online = true
-	players = {1: _entry(profile.name, profile.color, 0)}
+	players = {1: _entry(profile.name, profile.color, 0, profile["class"])}
 	_start_broadcast()
 	lobby_changed.emit()
 	return OK
@@ -251,8 +270,8 @@ func request_team(team: int) -> void:
 		_request_team.rpc_id(1, team)
 
 
-## Host: count down in every lobby, then load the match (`countdown` false = load right away,
-## e.g. "Play again" in solo).
+## Host: count down in every lobby, then load the match (`countdown` false = load right away, e.g.
+## "Play again" offline in tests).
 func start_game(countdown: bool = true) -> void:
 	if not is_host() or counting_down:
 		return
@@ -283,15 +302,16 @@ func _balance_teams() -> void:
 		team += 1
 
 
-func _entry(player_name: String, color_index: int, team: int) -> Dictionary:
-	return {"name": _clean_name(player_name), "color": color_index, "team": team}
+func _entry(player_name: String, color_index: int, team: int, class_id: StringName) -> Dictionary:
+	return {"name": _clean_name(player_name), "color": color_index, "team": team, "class": ClassDef.find(class_id).id}
 
 
-func _update_player(peer: int, player_name: String, color_index: int) -> void:
+func _update_player(peer: int, player_name: String, color_index: int, class_id: StringName) -> void:
 	if not players.has(peer):
 		return
 	players[peer]["name"] = _clean_name(player_name)
 	players[peer]["color"] = clampi(color_index, 0, PLAYER_COLORS.size() - 1)
+	players[peer]["class"] = ClassDef.find(class_id).id
 	_broadcast_lobby()
 
 
@@ -304,7 +324,7 @@ func _broadcast_lobby() -> void:
 # --- RPCs ------------------------------------------------------------------------
 
 @rpc("any_peer", "call_remote", "reliable")
-func _register(player_name: String, color_index: int) -> void:
+func _register(player_name: String, color_index: int, class_id: StringName) -> void:
 	if not is_host():
 		return
 	var peer := multiplayer.get_remote_sender_id()
@@ -319,14 +339,14 @@ func _register(player_name: String, color_index: int) -> void:
 	for t in settings.team_count:
 		if counts.get(t, 0) < counts.get(team, 0):
 			team = t
-	players[peer] = _entry(player_name, color_index, team)
+	players[peer] = _entry(player_name, color_index, team, class_id)
 	_broadcast_lobby()
 
 
 @rpc("any_peer", "call_remote", "reliable")
-func _request_profile(player_name: String, color_index: int) -> void:
+func _request_profile(player_name: String, color_index: int, class_id: StringName) -> void:
 	if is_host() and not game_in_progress:
-		_update_player(multiplayer.get_remote_sender_id(), player_name, color_index)
+		_update_player(multiplayer.get_remote_sender_id(), player_name, color_index, class_id)
 
 
 @rpc("any_peer", "call_remote", "reliable")
@@ -390,7 +410,7 @@ func _on_peer_disconnected(peer: int) -> void:
 
 
 func _on_connected() -> void:
-	_register.rpc_id(1, profile.name, profile.color)
+	_register.rpc_id(1, profile.name, profile.color, profile["class"])
 
 
 func _on_connection_failed() -> void:

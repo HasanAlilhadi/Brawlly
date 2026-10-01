@@ -1,8 +1,8 @@
 extends Node
-## Desktop controls: WASD moves, left mouse swings toward the cursor (hits exactly the aim wedge), Q switches to the bow, right mouse aims + shoots on release,
-## K shoots at the nearest enemy (Space does nothing), E does nothing away from a stall and opens / closes the Blacksmith's shop at it,
-## and touch controls stay hidden.
-##   "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/desktop_input_test.gd
+## Desktop controls, as a Spearman: WASD moves, left mouse thrusts toward the cursor (hits exactly the aim wedge), E switches
+## to throwing, right mouse aims + throws on release, K throws at the nearest enemy (Space does nothing), B does nothing away
+## from a stall and opens / closes the Blacksmith's shop at it, and touch controls stay hidden.
+##   "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/desktop_input_test.gd --class=spearman
 
 var t := 0.0
 var phase := 0
@@ -12,7 +12,7 @@ var main: Node
 var player: Player
 var hud: Hud
 var start_pos: Vector3
-var arrows_before := 0
+var shots_before := ""
 var at_stall := false
 var failures := 0
 var test_trees: Array[ChoppableTree] = []
@@ -58,11 +58,13 @@ func _mouse(button: MouseButton, pressed: bool, at: Vector2) -> void:
 	Input.parse_input_event(e)
 
 
-## Trees around the swing that just started: at the wedge's edge (35° off, 1.35 m), point-blank, beside
-## it (70° off) and past its reach (2.2 m).
+## Trees around the swing that just started: at the wedge's edge (just inside its half-width, just short of its
+## reach), point-blank, beside it (15° past its edge) and past its reach.
 func _spawn_test_trees() -> void:
 	var forward: Vector3 = player._melee_dir
-	for spot in [[35.0, 1.35], [0.0, 0.45], [70.0, 1.2], [0.0, 2.2]]:
+	var half := player.melee_arc() * 0.5
+	var reach := player.melee_reach()
+	for spot in [[half - 3.0, reach - 0.25], [0.0, 0.45], [half + 15.0, 1.2], [0.0, reach + 0.6]]:
 		var tree := preload("res://scenes/world/choppable_tree.tscn").instantiate() as ChoppableTree
 		main.add_child(tree)
 		tree.global_position = player.global_position + forward.rotated(Vector3.UP, deg_to_rad(spot[0])) * spot[1]
@@ -119,12 +121,10 @@ func _process(delta: float) -> void:
 				return
 			player.max_health = 1e6
 			player.health = 1e6
-			_check(player.weapons == PackedStringArray(["sword"]), "starts with the sword only")
-			player.buy_weapon("bow")  # as if bought in the shop
-			player.switch_weapon()  # back to the sword
+			_check(player.weapons == PackedStringArray(["spear", "javelin"]), "the Spearman carries the spear (thrust + throw)")
 			_check(not Platform.mobile_layout, "desktop layout")
 			_check(not hud.joystick.visible and not hud.bow_stick.visible, "touch controls hidden")
-			_check(is_equal_approx(main.camera.zoom, main.CAMERA_ZOOM), "default camera zoom with the sword (%.2f)" % main.camera.zoom)
+			_check(is_equal_approx(main.camera.zoom, main.CAMERA_ZOOM + 0.05), "spear thrust: nearly the default camera zoom (%.2f)" % main.camera.zoom)
 			start_pos = player.global_position
 			_key(KEY_D, true)
 			_next()
@@ -136,10 +136,10 @@ func _process(delta: float) -> void:
 				_next()
 		2:
 			if pt > 0.1 and test_trees.is_empty():
-				_check(player.facing().x > 0.8, "left mouse swings toward the cursor (facing %s)" % player.facing())
+				_check(player.facing().x > 0.8, "left mouse thrusts toward the cursor (facing %s)" % player.facing())
 				_mouse(MOUSE_BUTTON_LEFT, false, _right_of_player())
-				_check(player.holds_melee() and player._right_item.visible and not player._left_item.visible,
-						"starts with the sword in hand, bow put away")
+				_check(player.holds_melee() and player._weapon_items.spear.visible and player._right_item == null \
+						and player._left_item == null, "the spear in hand, no sword or bow")
 				_spawn_test_trees()
 			elif pt > 0.45 and not test_trees.is_empty():
 				# Damage lands 0.24 s into the swing: everything inside the aim wedge, nothing outside it.
@@ -148,43 +148,43 @@ func _process(delta: float) -> void:
 					hit.append(tree.health < tree.max_health)
 					tree.queue_free()
 				_check(hit == [true, true, false, false],
-						"the sword hits trees in the wedge (edge, point-blank) and not outside it (side, too far): %s" % [hit])
-				_key(KEY_Q, true)
-				_key(KEY_Q, false)
+						"the spear hits trees in the wedge (edge, point-blank) and not outside it (side, too far): %s" % [hit])
+				_key(KEY_E, true)
+				_key(KEY_E, false)
 				_next()
 		3:
 			if pt > 0.15 and not switched:
 				switched = true
-				_check(player.holds_ranged() and player._left_item.visible and not player._right_item.visible,
-						"Q switches to the bow (sword put away)")
-				_check(is_equal_approx(main.camera.zoom, main.CAMERA_ZOOM + 0.2), "the bow zooms the camera out by 0.2 (%.2f)" % main.camera.zoom)
-				arrows_before = player.arrows
+				_check(player.holds_ranged() and player.current_weapon() == "javelin" and player._weapon_items.javelin.visible,
+						"E switches to throwing (spear still in hand)")
+				_check(is_equal_approx(main.camera.zoom, main.CAMERA_ZOOM + 0.1), "throwing zooms the camera out by 0.1 (%.2f)" % main.camera.zoom)
+				shots_before = player.action_token
 				_mouse(MOUSE_BUTTON_RIGHT, true, _right_of_player())
 				pt = 0.0
 			elif switched and pt > 0.3:
-				_check(player.is_aiming(), "right mouse aims the bow")
+				_check(player.is_aiming(), "right mouse aims the throw")
 				_mouse(MOUSE_BUTTON_RIGHT, false, _right_of_player())
 				_next()
 		4:
-			if pt > 0.3:
-				_check(player.arrows == arrows_before - 1 and not player.is_aiming(), "release shoots (%d -> %d arrows)" % [arrows_before, player.arrows])
-				arrows_before = player.arrows
+			if pt > 1.2:  # the throw cooldown is over
+				_check(player.action_token != shots_before and not player.is_aiming(), "release throws (no ammo needed)")
+				shots_before = player.action_token
 				_key(KEY_K, true)
 				_next()
 		5:
 			if pt > 0.1:
 				_key(KEY_K, false)
-				_check(player.arrows < arrows_before, "K shoots")
+				_check(player.action_token != shots_before, "K throws")
 				var space := InputEventKey.new()
 				space.physical_keycode = KEY_SPACE
 				_check(InputMap.get_actions().all(func(action: StringName) -> bool:
 						return action.begins_with("ui_") or not InputMap.event_is_action(space, action)), "Space is not bound to any game action")
-				_key(KEY_E, true)
-				_key(KEY_E, false)
+				_key(KEY_B, true)
+				_key(KEY_B, false)
 				_next()
 		6:
 			if pt > 0.2 and not at_stall:
-				_check(not main.shop_menu.visible and not hud._stall_prompt.visible, "E does nothing away from a stall")
+				_check(not main.shop_menu.visible and not hud._stall_prompt.visible, "B does nothing away from a stall")
 				_check_stall_sides()
 				for stall: ShopStation in get_tree().get_nodes_in_group(&"shop_stations"):
 					if stall.stall_id == &"blacksmith":
@@ -194,20 +194,20 @@ func _process(delta: float) -> void:
 				pt = 0.0
 			elif at_stall and pt > 0.3:
 				_check(hud._stall_prompt.visible, "the stall prompt shows at the Blacksmith")
-				_key(KEY_E, true)
-				_key(KEY_E, false)
+				_key(KEY_B, true)
+				_key(KEY_B, false)
 				_next()
 		7:
 			if pt > 0.2:
-				_check(main.shop_menu.visible and main.shop_menu._title.text == "Blacksmith", "E opens the Blacksmith's shop")
+				_check(main.shop_menu.visible and main.shop_menu._title.text == "Blacksmith", "B opens the Blacksmith's shop")
 				var rows: Array = main.shop_menu._rows.filter(func(r: Dictionary) -> bool: return (r.panel as Control).visible)
 				_check(rows.size() == 1 and rows[0].def.id == &"blade", "it only sells the Sharp Blade")
-				_key(KEY_E, true)
-				_key(KEY_E, false)
+				_key(KEY_B, true)
+				_key(KEY_B, false)
 				_next()
 		8:
 			if pt > 0.2:
-				_check(not main.shop_menu.visible, "E closes the shop")
+				_check(not main.shop_menu.visible, "B closes the shop")
 				var touch := InputEventScreenTouch.new()
 				touch.pressed = true
 				touch.position = Vector2(50, 50)

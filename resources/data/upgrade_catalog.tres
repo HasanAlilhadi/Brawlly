@@ -2,36 +2,12 @@
 
 [ext_resource type="Script" uid="uid://dfqixa0m5f1q4" path="res://scripts/game/upgrade_catalog.gd" id="1_catalog"]
 [ext_resource type="Script" uid="uid://bofqa8lkh8430" path="res://scripts/game/upgrade_def.gd" id="2_def"]
-[ext_resource type="Texture2D" uid="uid://dck887g7cqhqy" path="res://assets/ui/icons/arrow.png" id="icon_arrow"]
 [ext_resource type="Texture2D" uid="uid://cij7p2003q5jv" path="res://assets/ui/icons/banner.png" id="icon_banner"]
 [ext_resource type="Texture2D" uid="uid://cth77lrtb3huw" path="res://assets/ui/icons/bow.png" id="icon_bow"]
 [ext_resource type="Texture2D" uid="uid://c8jbhlg8oj0es" path="res://assets/ui/icons/potion.png" id="icon_potion"]
 [ext_resource type="Texture2D" uid="uid://87gmfgn5duiw" path="res://assets/ui/icons/shield.png" id="icon_shield"]
 [ext_resource type="Texture2D" uid="uid://nlolsqkgsmsa" path="res://assets/ui/icons/soldier.png" id="icon_soldier"]
-[ext_resource type="Texture2D" uid="uid://bklviwl06t4q3" path="res://assets/ui/icons/spear.svg" id="icon_spear"]
 [ext_resource type="Texture2D" uid="uid://ib1w2l0ncgy6" path="res://assets/ui/icons/sword.png" id="icon_sword"]
-
-[sub_resource type="Resource" id="Upgrade_weapon_bow"]
-script = ExtResource("2_def")
-id = &"weapon_bow"
-title = "Bow"
-description = "Unlocks the bow: fast arrow shots (uses arrows). Q switches weapons."
-icon = ExtResource("icon_bow")
-base_cost = 500
-cost_growth = 1.0
-max_level = 0
-stalls = Array[StringName]([&"armory"])
-
-[sub_resource type="Resource" id="Upgrade_weapon_spear"]
-script = ExtResource("2_def")
-id = &"weapon_spear"
-title = "Spear"
-description = "Unlocks the spear: slower, harder-hitting throws (uses spears). Q switches weapons."
-icon = ExtResource("icon_spear")
-base_cost = 500
-cost_growth = 1.0
-max_level = 0
-stalls = Array[StringName]([&"armory"])
 
 [sub_resource type="Resource" id="Upgrade_vitality"]
 script = ExtResource("2_def")
@@ -60,21 +36,11 @@ stalls = Array[StringName]([&"blacksmith"])
 script = ExtResource("2_def")
 id = &"archery"
 title = "Keen Points"
-description = "+20% bow and spear damage"
+description = "+20% arrow and spear damage"
 icon = ExtResource("icon_bow")
 base_cost = 40
 max_level = 8
 amount = 0.2
-stalls = Array[StringName]([&"armory"])
-
-[sub_resource type="Resource" id="Upgrade_quiver"]
-script = ExtResource("2_def")
-id = &"quiver"
-title = "Big Quiver"
-description = "+20 max arrows (and 15 arrows now)"
-icon = ExtResource("icon_arrow")
-cost_growth = 1.4
-amount = 20.0
 stalls = Array[StringName]([&"armory"])
 
 [sub_resource type="Resource" id="Upgrade_recruit"]
@@ -123,30 +89,6 @@ max_level = 0
 amount = 60.0
 stalls = Array[StringName]([&"healer"])
 
-[sub_resource type="Resource" id="Upgrade_arrows"]
-script = ExtResource("2_def")
-id = &"arrows"
-title = "Arrow Bundle"
-description = "+20 arrows"
-icon = ExtResource("icon_arrow")
-base_cost = 15
-cost_growth = 1.05
-max_level = 0
-amount = 20.0
-stalls = Array[StringName]([&"armory"])
-
-[sub_resource type="Resource" id="Upgrade_spears"]
-script = ExtResource("2_def")
-id = &"spears"
-title = "Spear Bundle"
-description = "+4 spears"
-icon = ExtResource("icon_spear")
-base_cost = 25
-cost_growth = 1.1
-max_level = 0
-amount = 4.0
-stalls = Array[StringName]([&"armory"])
-
 [resource]
 script = ExtResource("1_catalog")
-upgrades = Array[ExtResource("2_def")]([SubResource("Upgrade_weapon_bow"), SubResource("Upgrade_weapon_spear"), SubResource("Upgrade_vitality"), SubResource("Upgrade_blade"), SubResource("Upgrade_archery"), SubResource("Upgrade_quiver"), SubResource("Upgrade_recruit"), SubResource("Upgrade_command"), SubResource("Upgrade_drill"), SubResource("Upgrade_potion"), SubResource("Upgrade_arrows"), SubResource("Upgrade_spears")])
+upgrades = Array[ExtResource("2_def")]([SubResource("Upgrade_vitality"), SubResource("Upgrade_blade"), SubResource("Upgrade_archery"), SubResource("Upgrade_recruit"), SubResource("Upgrade_command"), SubResource("Upgrade_drill"), SubResource("Upgrade_potion")])

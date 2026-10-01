@@ -1,6 +1,6 @@
 class_name Hud
 extends CanvasLayer
-## On-screen UI: health, arrows, allies, camps left, minimap, touch controls and the end screen.
+## On-screen UI: health, coins, allies, camps left, minimap, touch controls and the end screen.
 ## Touch controls only show in `Platform.touch_mode` (phones, or a touchscreen on desktop).
 ## Also: off-screen arrows (goblin, Warlord, downed teammates, pings), the Warlord's health bar, army
 ## order buttons, a ping button (online), the "You're down" / revive messages and the match awards.
@@ -34,7 +34,6 @@ const SPEAR_ICON := preload("res://assets/ui/icons/game/spear.svg")
 @onready var melee_button: TouchAimStick = %MeleeButton
 @onready var bow_stick: TouchAimStick = %BowStick
 @onready var health_bar: ProgressBar = %HealthBar
-@onready var arrows_label: Label = %ArrowsLabel
 @onready var allies_label: Label = %AlliesLabel
 @onready var camps_label: Label = %CampsLabel
 @onready var minimap: Minimap = %Minimap
@@ -71,8 +70,6 @@ var _stall_label: Label
 var _weapon_bar: PanelContainer
 var _weapon_slots: HBoxContainer
 var _weapon_icons: Dictionary = {}  # weapon id -> texture for the touch buttons
-var _arrow_icon: TextureRect
-var _arrow_texture: Texture2D
 var _downed_panel: PanelContainer
 var _downed_title: Label
 var _downed_seconds: Label
@@ -101,8 +98,6 @@ func _ready() -> void:
 		stick.button_texture = TOUCH_BUTTON
 		stick.held_texture = TOUCH_BUTTON_HELD
 		stick.knob_texture = TOUCH_NUB
-	_arrow_icon = get_node("Root/TopLeft/Rows/InfoRow/ArrowIcon") as TextureRect
-	_arrow_texture = _arrow_icon.texture
 	Platform.touch_mode_changed.connect(_show_touch_controls)
 	_show_touch_controls(Platform.touch_mode)
 	_build_extras()
@@ -123,13 +118,10 @@ func setup(player: Player, camps: Array[Camp]) -> void:
 	player.weapon_changed.connect(func(_weapon: String) -> void: _update_weapon_controls())
 	_update_weapon_controls()
 	player.health_changed.connect(_on_health_changed)
-	player.arrows_changed.connect(_on_arrows_changed)
-	player.spears_changed.connect(_on_arrows_changed)
 	player.coins_changed.connect(_on_coins_changed)
 	player.soldier_ready.connect(func() -> void: show_toast("A soldier is ready at the barracks"))
 	_on_coins_changed(player.coins)
 	_on_health_changed(player.health, player.max_health)
-	_on_arrows_changed(player.arrows)
 	minimap.setup(player, camps)
 	markers.origin = player
 	player.army_order_changed.connect(_on_army_order_changed)
@@ -254,24 +246,6 @@ func _on_coins_changed(count: int) -> void:
 func _on_health_changed(current: float, maximum: float) -> void:
 	health_bar.max_value = maximum
 	health_bar.value = current
-
-
-## Ammo of the ranged weapon you carry (arrows for the bow, spears for the spear; hidden with the
-## sword alone). Connected to both ammo signals, so the count argument is ignored.
-func _on_arrows_changed(_count: int = 0) -> void:
-	if _player == null:
-		return
-	# Ammo of the ranged weapon in hand; with the sword in hand, of the carried one (bow first).
-	var held := _player.current_weapon()
-	var spear := held == "spear" or (held != "bow" and not _player.weapons.has("bow") and _player.weapons.has("spear"))
-	var ammo := _player.spears if spear else _player.arrows
-	var ranged := _player.weapons.has("spear") or _player.weapons.has("bow")
-	arrows_label.text = str(ammo)
-	arrows_label.visible = ranged
-	_arrow_icon.visible = ranged
-	_arrow_icon.texture = SPEAR_ICON if spear else _arrow_texture
-	bow_stick.badge = str(ammo)
-	bow_stick.disabled = ammo <= 0
 
 
 ## Keeps UI away from notches / rounded corners on phones.
@@ -425,7 +399,7 @@ func set_stall(stall: ShopStation, take_soldiers: int = 0) -> void:
 	_stall_prompt.visible = stall != null and not _ended
 	if not _stall_prompt.visible:
 		return
-	var key := "touch/tap" if Platform.touch_mode else "keyboard/e"
+	var key := "touch/tap" if Platform.touch_mode else "keyboard/b"
 	var allowed := stall.can_access(_player)
 	var text := stall.title_for(_player)
 	var ready := _player.penned_soldiers().size() if allowed and stall.stall_id == ShopStation.BARRACKS else 0
@@ -652,12 +626,13 @@ func _award_card(award: Dictionary) -> Control:
 # --- Weapons ------------------------------------------------------------------------
 
 ## Touch: the stick of the weapon in hand sits in the big slot, a small button above it switches.
-## Desktop: a weapon bar at the bottom right (both slots, the one in hand lit, Q to switch).
+## Desktop: a weapon bar at the bottom right (the class's weapons, the one in hand lit, E to switch).
 func _build_weapon_controls() -> void:
 	# The glyph is tight (no padding like the 64 px RPG icons), so the touch stick gets a 44 px copy.
 	var spear_image := SPEAR_ICON.get_image()
 	spear_image.resize(44, 44, Image.INTERPOLATE_LANCZOS)
-	_weapon_icons = {"sword": melee_button.icon, "bow": bow_stick.icon, "spear": ImageTexture.create_from_image(spear_image)}
+	var spear_icon := ImageTexture.create_from_image(spear_image)
+	_weapon_icons = {"sword": melee_button.icon, "bow": bow_stick.icon, "spear": spear_icon, "javelin": spear_icon}
 	for side in [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]:
 		melee_button.set_offset(side, bow_stick.get_offset(side))
 	melee_button.drag_radius = bow_stick.drag_radius
@@ -700,10 +675,11 @@ func _update_weapon_controls() -> void:
 	var melee := _player == null or _player.holds_melee()
 	melee_button.visible = touch and melee
 	bow_stick.visible = touch and not melee
-	# The aim stick serves every ranged weapon: its icon, and the arrow count only for the bow.
+	# One stick for every melee weapon, one for every ranged one: the icon of the weapon in hand.
 	if _player:
-		bow_stick.icon = _weapon_icons.get(_player.current_weapon(), bow_stick.icon)
-		_on_arrows_changed(_player.arrows)
+		var stick := melee_button if melee else bow_stick
+		stick.icon = _weapon_icons.get(_player.current_weapon(), stick.icon)
+		bow_stick.badge = ""
 	var other := _player.other_weapon() if _player else ""
 	_switch_button.visible = touch and other != ""
 	_switch_button.icon = _weapon_icons.get(other)
@@ -721,7 +697,7 @@ func _update_weapon_controls() -> void:
 			(part as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_weapon_slots.add_child(badge)
 	if _player.weapons.size() > 1:
-		var key := UiKit.prompt("keyboard/q", HudStyle.KEY)
+		var key := UiKit.prompt("keyboard/e", HudStyle.KEY)
 		key.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		key.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		_weapon_slots.add_child(key)
@@ -746,8 +722,7 @@ func _apply_design() -> void:
 		button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 		button.add_theme_font_size_override("font_size", HudStyle.FONT_TITLE)
 	health_bar.custom_minimum_size.y = HudStyle.BAR_HEIGHT
-	for label: Label in [arrows_label, coins_label]:
-		label.add_theme_font_size_override("font_size", HudStyle.FONT_TITLE)
+	coins_label.add_theme_font_size_override("font_size", HudStyle.FONT_TITLE)
 	_size_icons(top_left, HudStyle.ICON)
 
 	var right := _column(true)

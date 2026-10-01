@@ -50,7 +50,7 @@ custom_minimum_size = Vector2(0, 72)
 layout_mode = 2
 theme_override_font_sizes/font_size = 32
 max_length = 16
-placeholder_text = "Archer"
+placeholder_text = "Player"
 
 [node name="ColorLabel" type="Label" parent="UI/Panel/Scroll/Box"]
 layout_mode = 2

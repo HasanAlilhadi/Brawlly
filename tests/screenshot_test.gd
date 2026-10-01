@@ -56,7 +56,7 @@ func _next() -> void:
 	_wait = STEPS[_step][2]
 	match target:
 		"lobby":
-			Net.open_solo_lobby()
+			Net.host()
 			get_tree().change_scene_to_file("res://scenes/ui/lobby.tscn")
 		"barracks":
 			var barracks: ShopStation = get_tree().get_nodes_in_group(&"shop_stations").filter(

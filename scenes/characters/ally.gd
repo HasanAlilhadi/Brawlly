@@ -9,6 +9,8 @@ extends Unit
 ## soldier–soldier collision or separation push, so a crowded courtyard never jams); walls and buildings
 ## still block them. Outside, soldiers collide with each other again.
 ## Once dead, it is gone for good.
+## Soldiers carry their player's class weapon (`weapon`, see WEAPON_STATS): sword and shield, a long
+## spear, or a bow — archers stop at `shoot_range` and shoot arrows instead of closing in.
 ## The player's army order (Player.army_order) changes where the formation stands: around the player
 ## (FOLLOW), or around Player.army_point, where they fight everything nearby (CHARGE) or guard it (HOLD);
 ## KILL hunts Player.army_target down (then CHARGE where it fell). Orders are always obeyed: on every new
@@ -19,6 +21,15 @@ const TARGET_GROUPS: Array[StringName] = [&"active_enemies", &"player_units"]
 const CAMP_GROUPS: Array[StringName] = [&"camps"]
 ## Soldiers waiting in the barracks courtyard are drawn this much smaller (every peer; visual only).
 const PENNED_SCALE: float = 0.7
+const SPEAR_SCENE := preload("res://assets/items/dungeon/spear.glb")
+const BOW_SCENE := preload("res://assets/items/forest/bow.glb")
+## Weapon id (ClassDef.ally_weapon) -> stats over the scene's (the sword soldier). `damage` is per hit
+## (an arrow for the bow).
+const WEAPON_STATS: Dictionary = {
+	"sword": {},
+	"spear": {"damage": 11.0, "range": 1.45, "cooldown": 1.1},
+	"bow": {"damage": 9.0, "health": 65.0, "cooldown": 1.4},
+}
 
 @export var aggro_range: float = 6.0
 ## Stop chasing when this far from the player.
@@ -33,6 +44,11 @@ const PENNED_SCALE: float = 0.7
 @export var regroup_time: float = 6.0
 ## Regrouping ends this close to the soldier's slot (then it fights normally again).
 @export var regroup_arrive: float = 2.5
+## Archers shoot from up to this far (from the target's surface).
+@export var shoot_range: float = 7.0
+
+## The weapon it fights with (from the spawn data, every peer, before entering the tree).
+var weapon: String = "sword"
 
 var leader: Player
 var target: Node3D
@@ -75,6 +91,7 @@ var _base_damage: float
 
 
 func _ready() -> void:
+	_apply_weapon_stats()
 	super()
 	_apply_pen_scale(false)
 	chase_avoid_mask = GameConfig.LAYER_ENEMIES  # go around orcs in the way to the one we're after
@@ -88,6 +105,32 @@ func _ready() -> void:
 	_base_damage = melee_damage
 	_find_leader()
 	refresh_army_bonus()
+
+
+## Hands and stats for `weapon` (before Unit._ready() attaches the hand items).
+func _apply_weapon_stats() -> void:
+	var stats: Dictionary = WEAPON_STATS.get(weapon, {})
+	melee_damage = stats.get("damage", melee_damage)
+	melee_range = stats.get("range", melee_range)
+	melee_cooldown = stats.get("cooldown", melee_cooldown)
+	max_health = stats.get("health", max_health)
+	match weapon:
+		"spear":
+			# Carried like the orc spearmen.
+			right_hand_item = SPEAR_SCENE
+			right_hand_offset = Vector3(-0.27, -0.2, 0.0)
+			right_hand_rotation = Vector3.ZERO
+			left_hand_item = null
+		"bow":
+			right_hand_item = null
+			hold_right_arm = false
+			left_hand_item = BOW_SCENE
+			left_hand_offset = Vector3(0.27, -0.24, 0.0)
+			hold_left_arm = true
+
+
+func is_archer() -> bool:
+	return weapon == "bow"
 
 
 func _find_leader() -> void:
@@ -165,7 +208,7 @@ func _get_move_input(delta: float) -> Vector3:
 		var via := _route(target.global_position)
 		if via != target.global_position:
 			return _walk_to(via, delta)
-		return engage(target, delta)
+		return _shoot_at(delta) if is_archer() else engage(target, delta)
 	var order := _order()
 	if order == Player.Order.FOLLOW and GameConfig.is_gone(leader):
 		return Vector3.ZERO
@@ -182,6 +225,36 @@ func _get_move_input(delta: float) -> Vector3:
 		return _separation * 0.5
 	# Hurry when far behind, stroll when close.
 	return steer(to_slot.normalized() * clampf(dist / 3.0, 0.3, 1.0), delta)
+
+
+## Archer: walk up until the target is in range, then stand and shoot (leading it a little).
+func _shoot_at(delta: float) -> Vector3:
+	var to := target.global_position - global_position
+	to.y = 0.0
+	if to.length() - Unit.target_radius(target) > shoot_range:
+		return steer(to, delta, target, true)
+	face(to, delta * 2.0)
+	if _melee_timer <= 0.0 and _action_time <= 0.0:
+		_melee_timer = melee_cooldown * randf_range(0.9, 1.1)
+		play_action("holding-left-shoot", 0.3, ARM_LEFT)
+		get_tree().create_timer(0.12).timeout.connect(_release_arrow)
+	return _separation * 0.5
+
+
+func _release_arrow() -> void:
+	if is_dead or GameConfig.is_gone(target):
+		return
+	var from := global_position + Vector3(0, 0.55, 0)
+	var aim := target.global_position
+	if target is CharacterBody3D:
+		aim += (target as CharacterBody3D).velocity * 0.2
+	var direction := aim - from
+	direction.y = 0.0
+	if direction.length_squared() < 0.0001:
+		return
+	direction = direction.normalized()
+	face_now(direction)
+	NetSpawn.projectile(&"arrow", from + direction * 0.4, direction, melee_damage, self)
 
 
 ## Soldier–soldier collision only outside barracks compounds: inside (walls included, so the gate

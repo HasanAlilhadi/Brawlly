@@ -4,11 +4,18 @@ Windows PC game (desktop first) that also runs on Android / iOS, built with Godo
 
 ## The game
 
-Single-player archer vs. orc camps in a big procedural world (3D, Kenney mini packs). Landscape on PC, portrait on phones.
+Multiplayer heroes vs. orc camps (and each other) in a big procedural world (3D, Kenney mini packs). Landscape on PC,
+portrait on phones. There is no single player: host a game (alone is fine) or join one.
 
-- **Player** (archer): sword + bow with limited arrows. Both are aim sticks: sword = drag to keep swinging toward a direction
-  (independent of movement); bow = drag to aim, release to shoot. A tap on either auto-targets the nearest enemy.
-- **Arrows** come from chests, chopped trees and orc drops. **Health** comes from potions (orc drops, chests).
+- **Classes** (picked in the multiplayer menu / lobby; `resources/data/classes/*.tres`, `ClassDef`): each hero fights
+  only with its class's weapon, and nothing needs ammo.
+  - **Swordsman** (`human.glb`): wide sword swings that cut through crowds. Soldiers: sword and shield.
+  - **Spearman** (`keeper.glb`): long, narrow spear thrusts that pierce a line; **E** switches to throwing spears
+    (to become a purchase later). Soldiers: spears (longer reach).
+  - **Bowman** (`archer.glb`): fast arrows. Soldiers: archers that stop at range and shoot.
+  - Planned, not built yet: per-class upgrades and one special ability per class.
+- Melee weapons are aim sticks (drag to keep swinging toward a direction, independent of movement); ranged = drag to
+  aim, release to shoot. A tap auto-targets the nearest enemy. **Health** comes from potions (orc drops, chests).
 - **Chests** have five rarities: Common (gray), Uncommon (green), Rare (blue), Epic (purple), and Legendary (gold).
   Higher rarities are tougher and drop progressively more ammo, healing, and coins. Town starter chests are always
   Uncommon so every player/team begins with the same reward; world chests roll 55% / 25% / 12% / 6% / 2%.
@@ -27,9 +34,9 @@ Single-player archer vs. orc camps in a big procedural world (3D, Kenney mini pa
   They chase the attacker faster and much farther than usual, and give up only after losing sight for ~10 s.
 - **Coins & the town**: orcs, chests and destroyed camps give coins. Each spawn is a town (always the same layout:
   a paved square with the Barracks north, Blacksmith + Healer west, Bows & Spears east; kept away from orc camps)
-  with one stall per trade: Blacksmith (Sharp Blade), Bows & Spears (bow, spear, Keen Points,
-  Big Quiver, arrows, spears), Healer (Potion, Vitality) and Barracks (Recruit, Drill Soldiers, Command).
-  Walk up to a stall and press E (or tap its button) to open its shop (pauses the game in solo). Items are data:
+  with one stall per trade: Blacksmith (Sharp Blade: sword), Bows & Spears (Keen Points: arrows and spears),
+  Healer (Potion, Vitality) and Barracks (Recruit, Drill Soldiers, Command).
+  Walk up to a stall and press B (or tap its button) to open its shop. Items are data:
   `resources/data/upgrade_catalog.tres` (`stalls` = which stalls sell it); stalls are `scenes/world/shop_station.gd`.
 - **Difficulty curve**: each camp has a tier (distance from the start). Orcs are 0.75× strength near the start up to
   1.35× at the edges; squads grow from ~4 to ~24. The house shows how many orcs are still alive; bigger camps are
@@ -39,13 +46,13 @@ Single-player archer vs. orc camps in a big procedural world (3D, Kenney mini pa
 
 ### Multiplayer (local Wi-Fi)
 
-- **Main menu → Multiplayer**: set your **name** and **color** (recolors your archer's hat and your soldiers' crests —
-  a live preview shows your army), then
+- **Main menu → Multiplayer**: set your **name**, **color** (recolors your hero and your soldiers' crests) and
+  **class** — a live preview shows your hero and soldiers — then
   **Host Game** or **Join** — pick a game found on your Wi-Fi, or type the host's IP (shown in the host's lobby).
 - **Lobby**: when the host presses Start, everyone sees a **3-2-1 countdown**, then the screen fades into the match
-  (it fades in once your archer has spawned). The host sets **mode**, **orc camps** (0–60), **difficulty** (Easy/Normal/Hard/Brutal),
+  (it fades in once your hero has spawned). The host sets **mode**, **orc camps** (0–60), **difficulty** (Easy/Normal/Hard/Brutal),
   **starting coins**, and for versus modes **teams** (2–4), **score to win** and **time limit**. Players pick teams
-  in team modes. **Play** (solo) uses the same lobby offline.
+  in team modes, and everyone can still change class (each player's class shows in the list).
 - **Modes**: Co-op vs Orcs · Deathmatch · Team Deathmatch · Capture the Flag · King of the Hill. Orcs stay in every
   mode and fight everyone. Destroying a camp gives its soldiers to whoever landed the last hit.
 - **Towns in multiplayer**: co-op uses one shared town, Deathmatch gives every player a private town, and team modes
@@ -59,9 +66,9 @@ Single-player archer vs. orc camps in a big procedural world (3D, Kenney mini pa
 
 - **Downed, not dead** (online co-op + team modes): at 0 health you crawl for 15 s ("HELP!" over you, a Help ping
   goes out automatically). A teammate standing next to you for 3 s revives you at 40% health (faster with two).
-  Orcs ignore downed archers; enemy players can finish you. Left alone you bleed out and respawn as usual.
-  Deathmatch and solo keep instant deaths.
-- **World events** (lobby → World events, on by default, also solo):
+  Orcs ignore downed players; enemy players can finish you. Left alone you bleed out and respawn as usual
+  (nothing drops). Deathmatch keeps instant deaths.
+- **World events** (lobby → World events, on by default):
   - **Treasure goblin** (~1–1.5 min in, then every ~3 min): a golden goblin near a player that runs from anyone close,
     spills coins with every hit and drops a jackpot when caught; it escapes after ~55 s.
   - **Orc Warlord** (~4–5 min in, then every ~8 min): a huge boss marching on a player (in versus modes on the leader)
@@ -83,7 +90,7 @@ Single-player archer vs. orc camps in a big procedural world (3D, Kenney mini pa
 ### Menus & UI
 
 - Starts at the **main menu** (`scenes/ui/main_menu.tscn`, 3D camp backdrop from `menu_backdrop.tscn`):
-  Play (solo lobby) · Multiplayer (`multiplayer_menu.tscn`) · Quit. Lobby: `lobby.tscn`.
+  Multiplayer (`multiplayer_menu.tscn`) · Controls · Quit. Lobby: `lobby.tscn`.
 - **Pause**: the II button (top left), Esc, or Android back → Resume / Restart / Main menu. Auto-pauses when the
   app goes to the background.
 - UI look: Kenney RPG UI pack via `resources/themes/rpg_theme.tres` (set as the project theme). Regenerate it with
@@ -98,18 +105,19 @@ Single-player archer vs. orc camps in a big procedural world (3D, Kenney mini pa
 | Action | Keyboard + mouse (PC) | Gamepad | Touch (phones) |
 |---|---|---|---|
 | Move | WASD / arrow keys | Left stick | Drag on the left side |
-| Sword | Left mouse — swings toward the cursor while held · J = nearest enemy | RB / X (nearest enemy) | Sword stick: drag = direction, tap = nearest |
-| Bow | Right mouse — hold to aim at the cursor, release to shoot | Right stick aims · RT / A shoots | Bow stick: drag to aim, release to shoot |
-| Quick shot (nearest enemy) | K | RT / A without aiming | Tap the bow stick |
-| Use a stall | E / B | LB / View | Stall button |
+| Sword / spear | Left mouse — swings / thrusts toward the cursor while held · J = nearest enemy | RB / X (nearest enemy) | Weapon stick: drag = direction, tap = nearest |
+| Bow / spear throw | Right mouse — hold to aim at the cursor, release to shoot | Right stick aims · RT / A shoots | Aim stick: drag to aim, release to shoot |
+| Quick shot (nearest enemy) | K | RT / A without aiming | Tap the aim stick |
+| Spearman: thrust ⇄ throw | E | Y | Small button above the weapon stick |
+| Use a stall | B | LB / View | Stall button |
 | Pause | Esc / P | Start | II button / Android back |
 | Army orders (follow / charge / hold) | 1 / 2 / 3 (charge / hold at the cursor) | D-pad up / right / down | Buttons under the soldier count |
-| Ping · call for help | Q or middle mouse · H | D-pad left | "!" button (online) |
+| Ping · call for help | G or middle mouse · H | D-pad left | "!" button (online) |
 | Fullscreen | F11 / Alt+Enter (remembered) | — | — |
 
 All bindings are listed in-game under **main menu → Controls** (`scenes/ui/controls_menu.gd` — update it when
 bindings change). Bindings are Input Map actions (Project Settings → Input Map): `move_*`, `aim_*`, `attack`, `aim_bow`, `shoot`,
-`interact`, `pause`, `toggle_fullscreen`, `army_follow` / `army_charge` / `army_hold`, `ping`, `ping_help`. Touch controls appear on a PC only when a touchscreen is used.
+`switch_weapon`, `interact`, `pause`, `toggle_fullscreen`, `army_follow` / `army_charge` / `army_hold`, `ping`, `ping_help`. Touch controls appear on a PC only when a touchscreen is used.
 
 ### Desktop vs. mobile (`scripts/autoload/platform.gd`, autoload `Platform`)
 

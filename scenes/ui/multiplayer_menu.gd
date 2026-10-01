@@ -1,5 +1,5 @@
 extends Node
-## Multiplayer menu: your name and color, Host a game, or Join one — from the list of games found on
+## Multiplayer menu: your name, color and class, Host a game, or Join one — from the list of games found on
 ## your Wi-Fi, or by typing the host's IP address (shown in the host's lobby).
 
 const LOBBY_SCENE := "res://scenes/ui/lobby.tscn"
@@ -17,6 +17,7 @@ const CONNECT_TIMEOUT: float = 8.0
 @onready var _back_button: Button = %BackButton
 
 var _color_index: int = 0
+var _class_picker: ClassPicker
 var _color_buttons: Array[Button] = []
 var _connecting: float = 0.0
 var _leaving: bool = false
@@ -29,6 +30,7 @@ func _ready() -> void:
 	for i in Net.PLAYER_COLORS.size():
 		_add_color_button(i)
 	_update_color_buttons()
+	_build_class_picker()
 	_name_edit.text_changed.connect(func(_text: String) -> void: _save_profile())
 	_host_button.pressed.connect(_host)
 	_join_button.pressed.connect(func() -> void: _join(_ip_edit.text))
@@ -51,6 +53,23 @@ func _process(delta: float) -> void:
 			Net.close_connection()
 			_status.text = "Could not reach that game."
 			_set_buttons_enabled(true)
+
+
+## "Your class" under the colors; the preview shows the class and its soldiers.
+func _build_class_picker() -> void:
+	var row := _colors.get_parent()
+	var label := Label.new()
+	label.text = "Your class"
+	row.get_parent().add_child(label)
+	row.get_parent().move_child(label, row.get_index() + 1)
+	_class_picker = ClassPicker.new()
+	row.get_parent().add_child(_class_picker)
+	row.get_parent().move_child(_class_picker, label.get_index() + 1)
+	_class_picker.select(Net.profile["class"])
+	_preview.set_class(Net.profile["class"])
+	_class_picker.picked.connect(func(class_id: StringName) -> void:
+		Net.set_class(class_id)
+		_preview.set_class(class_id))
 
 
 func _add_color_button(index: int) -> void:

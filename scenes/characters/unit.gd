@@ -588,13 +588,24 @@ func _apply_color() -> void:
 	add_child(_color_ring)
 	if recolor_key_hue < 0.0:
 		return
-	# Recolor the model's key hue (soldier crest, archer hat…) to the player's color.
+	# Recolor the model's key hue (soldier crest, archer hat…) to the player's color; not the weapons in hand.
 	for node in model.find_children("*", "MeshInstance3D", true, false):
 		var mesh_instance := node as MeshInstance3D
+		if _in_hand(mesh_instance):
+			continue
 		for surface in mesh_instance.mesh.get_surface_count():
 			var source := mesh_instance.mesh.surface_get_material(surface) as StandardMaterial3D
 			if source and source.albedo_texture:
 				mesh_instance.set_surface_override_material(surface, _recolor_material(source.albedo_texture))
+
+
+## True for meshes of an item attached to a bone (weapons, shields), which keep their own colors.
+func _in_hand(node: Node) -> bool:
+	while node and node != model:
+		if node is BoneAttachment3D:
+			return true
+		node = node.get_parent()
+	return false
 
 
 func _recolor_material(texture: Texture2D) -> ShaderMaterial:

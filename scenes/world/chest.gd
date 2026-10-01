@@ -1,27 +1,22 @@
 class_name Chest
 extends StaticBody3D
-## Treasure chest with five color-coded rarities. Break it open (sword, arrows or spears) to spill
-## tiered arrows, spears, coins and sometimes health, then it disappears.
+## Treasure chest with five color-coded rarities. Break it open (any weapon) to spill
+## tiered coins and sometimes health, then it disappears.
 ## Multiplayer: the server decides (any player can break it); the effects play on every peer via RPC.
 
 enum Rarity { COMMON, UNCOMMON, RARE, EPIC, LEGENDARY }
 
 const RARITY_WEIGHTS: PackedFloat32Array = [55.0, 25.0, 12.0, 6.0, 2.0]
 const DEFINITIONS: Array[Dictionary] = [
-	{"name": "Common", "color": Color("b8b0a3"), "health": 60.0,
-		"arrows": Vector2i(6, 10), "spears": Vector2i(1, 2), "heal_chance": 0.35,
+	{"name": "Common", "color": Color("b8b0a3"), "health": 60.0, "heal_chance": 0.35,
 		"heal": 25, "coins": Vector2i(8, 15)},
-	{"name": "Uncommon", "color": Color("45cf72"), "health": 75.0,
-		"arrows": Vector2i(9, 14), "spears": Vector2i(2, 4), "heal_chance": 0.6,
+	{"name": "Uncommon", "color": Color("45cf72"), "health": 75.0, "heal_chance": 0.6,
 		"heal": 30, "coins": Vector2i(16, 26)},
-	{"name": "Rare", "color": Color("3f8cff"), "health": 95.0,
-		"arrows": Vector2i(13, 20), "spears": Vector2i(4, 6), "heal_chance": 0.8,
+	{"name": "Rare", "color": Color("3f8cff"), "health": 95.0, "heal_chance": 0.8,
 		"heal": 40, "coins": Vector2i(30, 48)},
-	{"name": "Epic", "color": Color("a95cff"), "health": 125.0,
-		"arrows": Vector2i(19, 28), "spears": Vector2i(6, 9), "heal_chance": 1.0,
+	{"name": "Epic", "color": Color("a95cff"), "health": 125.0, "heal_chance": 1.0,
 		"heal": 55, "coins": Vector2i(55, 85)},
-	{"name": "Legendary", "color": Color("ffbd32"), "health": 170.0,
-		"arrows": Vector2i(28, 40), "spears": Vector2i(10, 14), "heal_chance": 1.0,
+	{"name": "Legendary", "color": Color("ffbd32"), "health": 170.0, "heal_chance": 1.0,
 		"heal": 80, "coins": Vector2i(110, 160)},
 ]
 const RARITY_GLOW := preload("res://assets/shaders/highlight_glow.gdshader")
@@ -81,11 +76,7 @@ func _break() -> void:
 	is_dead = true
 	var world := get_parent()
 	var loot := definition()
-	var arrows: Vector2i = loot.arrows
-	var spears: Vector2i = loot.spears
 	var coins: Vector2i = loot.coins
-	Pickup.drop(world, global_position, Pickup.Kind.ARROWS, randi_range(arrows.x, arrows.y))
-	Pickup.drop(world, global_position, Pickup.Kind.SPEARS, randi_range(spears.x, spears.y))
 	if randf() < float(loot.heal_chance):
 		Pickup.drop(world, global_position, Pickup.Kind.HEALTH, int(loot.heal))
 	Pickup.drop(world, global_position, Pickup.Kind.COIN, randi_range(coins.x, coins.y))

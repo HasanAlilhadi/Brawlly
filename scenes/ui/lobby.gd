@@ -1,7 +1,7 @@
 extends Node
-## Lobby for solo and multiplayer matches. The host (or the solo player) edits the match settings;
-## joined players see a plain summary of them and can pick a team in team modes. Everything shown here comes
-## from Net.players / Net.settings and refreshes on Net.lobby_changed.
+## Lobby of a multiplayer match. The host edits the match settings; joined players see a plain summary
+## of them and can pick a team in team modes. Everyone picks their class (ClassPicker) and sees the others'.
+## Everything shown here comes from Net.players / Net.settings and refreshes on Net.lobby_changed.
 
 ## Score limit range / default per mode (index = Net.Mode).
 const SCORE_LIMITS := [
@@ -31,11 +31,13 @@ var _sliders: Dictionary = {}  # key -> {slider, value_label, row}
 var _summary: VBoxContainer  # read-only settings for joined players
 var _countdown_overlay: Control
 var _countdown_number: Label
+var _class_picker: ClassPicker
 
 
 func _ready() -> void:
 	get_tree().paused = false
 	_build_settings()
+	_build_class_picker()
 	_start_button.pressed.connect(func() -> void: Net.start_game())
 	_leave_button.pressed.connect(func() -> void: Net.leave())
 	Net.lobby_changed.connect(_refresh)
@@ -87,6 +89,21 @@ func _show_countdown(seconds: int) -> void:
 		tween.tween_property(_countdown_number, "scale", Vector2.ONE, 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 		tween.tween_property(_countdown_number, "modulate:a", 1.0, 0.2)
 		await get_tree().create_timer(1.0).timeout
+
+
+## "Your class" right under the team buttons.
+func _build_class_picker() -> void:
+	var box := _team_row.get_parent()
+	var label := Label.new()
+	label.text = "Your class"
+	box.add_child(label)
+	box.move_child(label, _team_row.get_index() + 1)
+	_class_picker = ClassPicker.new()
+	box.add_child(_class_picker)
+	box.move_child(_class_picker, label.get_index() + 1)
+	_class_picker.picked.connect(func(class_id: StringName) -> void:
+		if not Net.game_in_progress:
+			Net.set_class(class_id))
 
 
 func _can_edit() -> bool:
@@ -211,24 +228,19 @@ func _refresh() -> void:
 	if not multiplayer.has_multiplayer_peer() or Net.players.is_empty():
 		return
 	_updating = true
-	var online := Net.is_online()
 	var settings := Net.settings
 	var match_mode: int = settings.mode
 	var team_mode := Net.is_team_mode(match_mode)
 
-	_title.text = "Lobby" if online else "Solo Game"
-	if online and Net.is_host():
+	_title.text = "Lobby"
+	if Net.is_host():
 		var addresses := Net.local_addresses()
 		_info.text = "Friends on your Wi-Fi can join from Multiplayer → Join.%s" % (
 				("\nYour IP: " + ", ".join(addresses)) if not addresses.is_empty() else "")
-	elif online:
-		_info.text = "Connected. The host picks the settings."
 	else:
-		_info.text = "Pick your settings, then start."
+		_info.text = "Connected. The host picks the settings."
 
 	# Players
-	_players_title.visible = online
-	_player_list.visible = online
 	for child in _player_list.get_children():
 		child.queue_free()
 	var peers := Net.players.keys()
@@ -239,7 +251,7 @@ func _refresh() -> void:
 	# Team buttons
 	for child in _team_row.get_children():
 		child.queue_free()
-	_team_row.visible = online and team_mode
+	_team_row.visible = team_mode
 	if _team_row.visible:
 		for team in settings.team_count:
 			var button := Button.new()
@@ -284,7 +296,8 @@ func _refresh() -> void:
 
 	_start_button.visible = Net.is_host()
 	_start_button.disabled = Net.game_in_progress
-	_start_button.text = "Start" if not online else "Start (%d players)" % Net.players.size()
+	_start_button.text = "Start (%d players)" % Net.players.size()
+	_class_picker.select(Net.class_of(Net.my_id()))
 	_waiting.visible = not Net.is_host()
 	_updating = false
 
@@ -305,6 +318,11 @@ func _player_row(peer: int, team_mode: bool) -> Control:
 	name_label.text = Net.name_of(peer) + ("  (%s)" % ", ".join(tags) if not tags.is_empty() else "")
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(name_label)
+	var hero := ClassDef.find(Net.class_of(peer))
+	var class_label := Label.new()
+	class_label.text = hero.display_name
+	class_label.add_theme_color_override("font_color", Color("8a4b1c"))
+	row.add_child(class_label)
 	if team_mode:
 		var team: int = Net.players[peer].get("team", 0)
 		var team_label := Label.new()

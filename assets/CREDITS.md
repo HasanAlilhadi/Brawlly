@@ -18,7 +18,7 @@
 | Town (own) | made for this game in Blender (`tools/blender_town.py`) | — | `environment/buildings/town.glb` + `town.tscn` (uses the Mini Forest palette + existing Kenney props) |
 | Blacksmith workshop (own) | made for this game in Blender (`tools/blender_blacksmith.py`) | — | `environment/buildings/blacksmith.glb` (uses the Mini Forest palette) |
 | Cube Pets 1.0 | [Kenney](https://www.kenney.nl) | CC0 1.0 | `characters/pets/` (24 animals, clips idle/walk/run/eat/dance/gesture-*), `textures/palettes/pets_colormap.png` |
-| Graveyard Kit 5.0 | [Kenney](https://www.kenney.nl) | CC0 1.0 | `characters/{ghost,keeper,skeleton,vampire,zombie}` (same rig and clips as the orc), `environment/graveyard/`, `items/graveyard/` (shovels), `textures/palettes/graveyard_colormap.png` |
+| Graveyard Kit 5.0 | [Kenney](https://www.kenney.nl) | CC0 1.0 | `characters/{ghost,keeper,skeleton,vampire,zombie}` (rigid models, same clips as the orc; `keeper.glb` is skinned onto the human's armature by `tools/blender_keeper_rig.py`), `environment/graveyard/`, `items/graveyard/` (shovels), `textures/palettes/graveyard_colormap.png` |
 | Spear icons (own) | made for this game | — | `ui/icons/spear.svg` (shop), `ui/icons/game/spear.svg` (white glyph, HUD) |
 
 CC0: free for personal and commercial use; credit is appreciated but not required.

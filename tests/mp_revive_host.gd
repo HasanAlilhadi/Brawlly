@@ -2,7 +2,7 @@ extends Node
 ## Downed + revive over the network (run with mp_revive_client.gd):
 ## the client's archer goes down instead of dying, the host revives them by standing close,
 ## orcs can't finish a downed archer, left alone they bleed out and respawn; pings reach teammates.
-## Dying drops the bow and its arrows (not the coins) and another player can pick them up.
+## Dying keeps the class weapons and the coins (nothing drops).
 var t := 0.0
 var step := 0
 var st := 0.0
@@ -74,8 +74,6 @@ func _process(delta: float) -> void:
 						"host revived the client (health %.0f/%.0f)" % [c.health, c.max_health])
 				_check(get_tree().current_scene.match_stats.stat(1, &"revives") == 1.0, "revive counted for the host")
 				h.global_position = Vector3(20, 0, 20)
-				c.buy_weapon("bow")
-				c.arrows = 12
 				c.coins = 100
 				c.take_damage(1e6)
 				step = 4
@@ -83,20 +81,12 @@ func _process(delta: float) -> void:
 		4:
 			if st > Player.BLEED_TIME + 1.0:
 				_check(c.is_dead, "left alone, the client bled out")
-				_check(c.weapons == PackedStringArray(["sword"]) and c.arrows == 0 and c.coins == 100,
-						"dying dropped the bow and arrows, kept the coins (%s, %d arrows, %d coins)" % [c.weapons, c.arrows, c.coins])
-				var bows := _pickups(Pickup.Kind.WEAPON_BOW)
-				var arrows := _pickups(Pickup.Kind.ARROWS).filter(func(n: Node) -> bool: return n.amount == 12)
-				_check(bows.size() == 1 and arrows.size() == 1, "bow and 12 arrows lie on the ground")
-				host_arrows = h.arrows
-				if bows.size() == 1:
-					h.global_position = (bows[0] as Node3D).global_position
+				_check(c.weapons == c.class_def.weapons and c.coins == 100,
+						"dying kept the class weapons and the coins (%s, %d coins)" % [c.weapons, c.coins])
 				step = 5
 				st = 0
 		5:
 			if st > get_tree().current_scene.game_mode.respawn_time() + 1.0:
 				_check(not c.is_dead and not c.is_downed, "client respawned")
-				_check(h.weapons.has("bow") and h.current_weapon() == "sword" and h.arrows == host_arrows + 12,
-						"host picked up the dropped bow (kept the sword in hand) and the arrows (%s, %d)" % [h.weapons, h.arrows])
 				_log("DONE failures=%d" % failures)
 				get_tree().quit(1 if failures > 0 else 0)

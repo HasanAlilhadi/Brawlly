@@ -3,7 +3,7 @@ extends Unit
 ## Orc that guards its camp: wanders near home and attacks the player or soldiers that come close.
 ## When it (or its camp) is attacked — even from range — the whole squad is provoked: they chase
 ## the attacker much farther and faster, until they lose them or get dragged too far from home.
-## Drops arrows / health when killed. With a `projectile_scene` set, the orc throws spears from range
+## Drops coins / health when killed. With a `projectile_scene` set, the orc throws spears from range
 ## (and backs off when the target gets close); otherwise it fights in melee.
 
 ## Orcs fight every player and every player's soldiers.
@@ -30,11 +30,6 @@ const WAVE_TARGET_GROUPS: Array[StringName] = [&"players"]
 ## Throwers step back when the target is closer than this.
 @export var keep_distance: float = 4.0
 @export_group("Drops")
-@export_range(0.0, 1.0) var arrow_drop_chance: float = 0.45
-@export var arrow_drop_min: int = 2
-@export var arrow_drop_max: int = 4
-## Spears are only picked up by players carrying the spear (arrows: the bow).
-@export_range(0.0, 1.0) var spear_drop_chance: float = 0.3
 @export_range(0.0, 1.0) var health_drop_chance: float = 0.25
 @export var health_drop_amount: int = 20
 @export var coin_drop_min: int = 2
@@ -277,10 +272,6 @@ func _calm_down() -> void:
 func _on_died() -> void:
 	_alert_label.hide()
 	var world := get_parent()
-	if randf() < arrow_drop_chance:
-		Pickup.drop(world, global_position, Pickup.Kind.ARROWS, randi_range(arrow_drop_min, arrow_drop_max))
-	if randf() < spear_drop_chance:
-		Pickup.drop(world, global_position, Pickup.Kind.SPEARS, randi_range(1, 2))
 	if randf() < health_drop_chance:
 		Pickup.drop(world, global_position, Pickup.Kind.HEALTH, health_drop_amount)
 	var coins := roundi(randi_range(coin_drop_min, coin_drop_max) * coin_multiplier)

@@ -1,8 +1,8 @@
 class_name ArmyPreview
 extends SubViewportContainer
-## Small 3D preview of the archer and two soldiers in a player color (used next to the color picker).
-## Each figure slowly turns in place.
-## Uses the real unit scenes with AI, networking and groups removed. Call `set_color()`.
+## Small 3D preview of your class hero and two of its soldiers in a player color (used next to the color
+## picker). Each figure slowly turns in place.
+## Uses the real unit scenes with AI, networking and groups removed. Call `set_color()` / `set_class()`.
 
 const PLAYER_SCENE := preload("res://scenes/characters/player.tscn")
 const ALLY_SCENE := preload("res://scenes/characters/ally.tscn")
@@ -12,6 +12,7 @@ const ALLY_SCENE := preload("res://scenes/characters/ally.tscn")
 var _viewport: SubViewport
 var _pivot: Node3D
 var _color: Color = Color.RED
+var _class: StringName = &""
 
 
 func _ready() -> void:
@@ -50,6 +51,12 @@ func set_color(color: Color) -> void:
 		_rebuild()
 
 
+func set_class(class_id: StringName) -> void:
+	_class = class_id
+	if is_node_ready():
+		_rebuild()
+
+
 func _process(delta: float) -> void:
 	if _pivot == null:
 		return
@@ -68,6 +75,10 @@ func _rebuild() -> void:
 
 func _add(scene: PackedScene, at: Vector3, yaw: float) -> void:
 	var unit := scene.instantiate() as Unit
+	if unit is Player:
+		(unit as Player).set_class(_class)
+	elif unit is Ally:
+		(unit as Ally).weapon = ClassDef.find(_class).ally_weapon
 	var sync := unit.get_node_or_null("Sync")
 	if sync:
 		unit.remove_child(sync)

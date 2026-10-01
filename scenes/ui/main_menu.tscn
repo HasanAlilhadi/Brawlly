@@ -52,19 +52,12 @@ layout_mode = 2
 alignment = 1
 theme_override_constants/separation = 20
 
-[node name="PlayButton" type="Button" parent="UI/Root/Menu/Box"]
+[node name="MultiplayerButton" type="Button" parent="UI/Root/Menu/Box"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(340, 110)
 layout_mode = 2
 size_flags_horizontal = 4
 theme_override_font_sizes/font_size = 48
-text = "Play"
-
-[node name="MultiplayerButton" type="Button" parent="UI/Root/Menu/Box"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(340, 96)
-layout_mode = 2
-size_flags_horizontal = 4
 text = "Multiplayer"
 
 [node name="ControlsButton" type="Button" parent="UI/Root/Menu/Box"]

@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="ClassDef" format=3]
+
+[ext_resource type="Script" path="res://scripts/game/class_def.gd" id="1_def"]
+[ext_resource type="PackedScene" path="res://assets/characters/archer.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_def")
+id = &"bowman"
+display_name = "Bowman"
+description = "Fast arrows from range. Soldiers are archers too."
+model = ExtResource("2_model")
+weapons = PackedStringArray("bow")
+ally_weapon = "bow"
+icon = "bow"
+recolor_key_hue = 0.38
+recolor_hue_range = 0.08
+recolor_min_saturation = 0.25
+recolor_reference_value = 0.75
