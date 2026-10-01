@@ -71,7 +71,7 @@ by touch index so the joystick and buttons work together with multi-touch.
 - **Desktop first**: design for 1920×1080 landscape with keyboard + mouse (and gamepad); phones must keep working
   (720×1280 portrait UI, touch controls). `Platform` (autoload) picks the layout: `Platform.mobile_layout`,
   `Platform.touch_mode` (+ `touch_mode_changed`). Test the phone layout on a PC with `-- --mobile`.
-- Input goes through Input Map actions (`move_*`, `aim_*`, `attack`, `aim_bow`, `shoot`, `switch_weapon`, `interact`, `pause`,
+- Input goes through Input Map actions (`move_*`, `aim_*`, `attack`, `aim_bow`, `block`, `shoot`, `switch_weapon`, `interact`, `pause`,
   `toggle_fullscreen`, `rotate_camera`, `army_*`, `ping*`) — add new bindings there, not as hard-coded keys, and list them on the
   Controls page (`scenes/ui/controls_menu.gd`, main menu → Controls). Mouse clicks for gameplay are taken in
   `_unhandled_input` (so clicks on HUD buttons don't attack); ignore events with `device == DEVICE_ID_EMULATION`.
@@ -186,6 +186,12 @@ by touch index so the joystick and buttons work together with multi-touch.
   (`is_downed`, crawl speed, out of `player_units`). `GameConfig.is_gone()` treats downed units as gone, so AI and
   aim assist skip them. Revive = teammate within `Player.REVIVE_RANGE` for `REVIVE_TIME`. Only hostile
   player-owned damage finishes a downed player. Signals `went_down` / `revived` → main.gd (announce, Help ping).
+- **Shields** (`ClassDef.shield` / `shield_health` / `shield_center`; Swordsman round 150, Spearman rectangle 200, on the
+  left arm): `block` action (right mouse / LT / `Hud.shield_button`) → `set_input(..., block)` / `net_input` →
+  `Player.shield_up` (replicated with `shield_health`). Up: `Player._shield_blocks` soaks every hit from within
+  `BLOCK_ARC` of the facing into `shield_health` (breaks at 0, back on `revive`; a shop item later), `BLOCK_SPEED`,
+  no attacks, the hero turns toward the cursor / right stick, the shield placed in front (`_place_shield`, body frame
+  after each skeleton update, like the bow). Right mouse with a ranged weapon in hand still aims. Test: `tests/shield_test.gd`.
 - **Deaths drop nothing**: weapons come from the class and coins stay.
   Clips `crawl` (moving) / `downed` (still) come from `assets/characters/animations/archer_downed.glb` (made in Blender on
   the archer armature, copied into each class model's library by `Player._add_downed_anims()`, track paths re-rooted); while downed the arm holds stay off and the sword / bow are hidden.

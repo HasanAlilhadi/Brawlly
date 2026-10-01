@@ -146,8 +146,8 @@ func _process(delta: float) -> void:
 			if pt > 0.1 and test_trees.is_empty():
 				_check(player.facing().x > 0.8, "left mouse thrusts toward the cursor (facing %s)" % player.facing())
 				_mouse(MOUSE_BUTTON_LEFT, false, _right_of_player())
-				_check(player.holds_melee() and player._weapon_items.spear.visible and player._right_item == null \
-						and player._left_item == null, "the spear in hand, no sword or bow")
+				_check(player.holds_melee() and player._weapon_items.spear.visible and player._weapon_items.sword == null \
+						and player._weapon_items.bow == null and player.has_shield(), "the spear in hand and a shield, no sword or bow")
 				_spawn_test_trees()
 			elif pt > 0.45 and not test_trees.is_empty():
 				# Damage lands 0.24 s into the swing: everything inside the aim wedge, nothing outside it.

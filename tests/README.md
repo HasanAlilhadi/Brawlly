@@ -25,6 +25,9 @@ Run from the project folder (`G` = the Godot binary). Tests start the game norma
 # Desktop controls (Spearman): WASD, mouse thrust (aim wedge) / E → throw, K, B at a trading post stall, camera zoom per weapon, R rotates the camera 90°, touch controls hidden until a real touch
 "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/desktop_input_test.gd --class=spearman
 
+# Shield (Swordsman, or --class=spearman): blocks from the front only while up, slower, no attacks, breaks, back on respawn
+"$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/shield_test.gd
+
 # Screenshots of every screen (needs a window, no --headless); add --mobile for the phone layout
 "$G" --path . res://tests/test_runner.tscn -- --test=res://tests/screenshot_test.gd --out=/tmp/shots
 "$G" --path . res://tests/test_runner.tscn -- --test=res://tests/screenshot_test.gd --out=/tmp/shots --mobile

@@ -28,6 +28,7 @@ const TOUCH_NUB_HELD := preload("res://assets/ui/touch/highlights/joystick_circl
 const TOUCH_BUTTON := preload("res://assets/ui/touch/button_circle.png")
 const TOUCH_BUTTON_HELD := preload("res://assets/ui/touch/highlights/button_circle_highlight.png")
 const SPEAR_ICON := preload("res://assets/ui/icons/game/spear.svg")
+const SHIELD_ICON := preload("res://assets/ui/icons/game/shield.svg")
 
 @onready var root: Control = $Root
 @onready var joystick: TouchJoystick = %Joystick
@@ -64,6 +65,8 @@ var _army_buttons: Array[Button] = []
 var _kill_picking: bool = false
 var _ping_button: Button
 var _switch_button: TouchButton
+## Touch: hold to raise the shield (Swordsman, Spearman with the spear in hand).
+var shield_button: TouchButton
 var _stall_prompt: Button
 var _stall_key: HBoxContainer
 var _stall_label: Label
@@ -116,6 +119,7 @@ func _show_touch_controls(enabled: bool) -> void:
 func setup(player: Player, camps: Array[Camp]) -> void:
 	_player = player
 	player.weapon_changed.connect(func(_weapon: String) -> void: _update_weapon_controls())
+	player.shield_changed.connect(_update_weapon_controls)
 	_update_weapon_controls()
 	player.health_changed.connect(_on_health_changed)
 	player.coins_changed.connect(_on_coins_changed)
@@ -160,6 +164,7 @@ func show_end(title: String, subtitle: String, restart_label: String = "Play aga
 	melee_button.hide()
 	bow_stick.hide()
 	_switch_button.hide()
+	shield_button.hide()
 	_weapon_bar.hide()
 	pause_button.hide()
 	_stall_prompt.hide()
@@ -177,6 +182,7 @@ func reset_touch_controls() -> void:
 	bow_stick.reset()
 	if _switch_button:
 		_switch_button.reset()
+		shield_button.reset()
 
 
 func _process(delta: float) -> void:
@@ -652,6 +658,24 @@ func _build_weapon_controls() -> void:
 	_switch_button.pressed.connect(weapon_switch_requested.emit)
 	root.add_child(_switch_button)
 
+	shield_button = TouchButton.new()
+	shield_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	shield_button.offset_left = -300.0
+	shield_button.offset_top = -176.0
+	shield_button.offset_right = -206.0
+	shield_button.offset_bottom = -82.0
+	shield_button.color = bow_stick.color
+	shield_button.held_color = bow_stick.held_color
+	shield_button.ring_color = bow_stick.ring_color
+	shield_button.button_texture = TOUCH_BUTTON
+	shield_button.held_texture = TOUCH_BUTTON_HELD
+	shield_button.icon_scale = 0.9
+	var shield_image := SHIELD_ICON.get_image()
+	shield_image.resize(44, 44, Image.INTERPOLATE_LANCZOS)
+	shield_button.icon = ImageTexture.create_from_image(shield_image)
+	shield_button.visible = false
+	root.add_child(shield_button)
+
 	_weapon_bar = PanelContainer.new()
 	_weapon_bar.theme_type_variation = &"PanelCompact"
 	_weapon_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -683,6 +707,9 @@ func _update_weapon_controls() -> void:
 	var other := _player.other_weapon() if _player else ""
 	_switch_button.visible = touch and other != ""
 	_switch_button.icon = _weapon_icons.get(other)
+	shield_button.visible = touch and _player != null and _player.can_block()
+	if not shield_button.visible:
+		shield_button.reset()
 	_weapon_bar.visible = not touch and not _ended and _player != null
 	if _player == null:
 		return
@@ -701,6 +728,18 @@ func _update_weapon_controls() -> void:
 		key.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		key.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		_weapon_slots.add_child(key)
+	# The shield: lit while up, dim while down, gone once broken; right mouse raises it.
+	if _player.has_shield():
+		var shield := UiKit.medal("shield", HudStyle.BADGE)
+		shield.modulate = HudStyle.SLOT_ACTIVE if _player.shield_up else HudStyle.SLOT_INACTIVE
+		shield.tooltip_text = "Shield %d" % ceili(_player.shield_health)
+		for part in [shield] + shield.find_children("*", "Control", true, false):
+			(part as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_weapon_slots.add_child(shield)
+		var mouse := UiKit.prompt("mouse/right", HudStyle.KEY)
+		mouse.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		mouse.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		_weapon_slots.add_child(mouse)
 
 
 # --- Design system -----------------------------------------------------------------

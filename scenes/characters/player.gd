@@ -26,6 +26,8 @@ signal army_order_changed(order: int)
 signal soldier_ready
 ## Every peer: the weapon in hand changed (id from WEAPONS).
 signal weapon_changed(weapon: String)
+## Every peer: the shield went up / down, took a hit, or broke (`shield_health` 0).
+signal shield_changed
 
 ## KILL: every soldier hunts `army_target` down (then they charge where it fell).
 enum Order { FOLLOW, CHARGE, HOLD, KILL }
@@ -95,6 +97,14 @@ const BOW_FIST: Vector3 = Vector3(0.0, 0.24, 0.0)
 const BOW_GRIP: Vector3 = Vector3(-0.04, 0.24, 0.15)
 const NOCK_POSITION: Vector3 = Vector3(-0.04, 0.24, 0.08)
 const ARROW_MODEL := preload("res://assets/items/forest/arrow.glb")
+## Shield (Swordsman, Spearman: ClassDef.shield): held up (right mouse / LT / the touch shield button) it blocks
+## every hit from within BLOCK_ARC degrees of where the hero faces, soaking the damage until `shield_health`
+## runs out and it breaks (back on respawn; buying a new one comes later). Up, it is raised in front of the
+## chest (SHIELD_BLOCK_AT, body space), the hero walks at BLOCK_SPEED and can't attack.
+const BLOCK_ARC: float = 150.0
+const BLOCK_SPEED: float = 0.45
+const SHIELD_BLOCK_AT: Vector3 = Vector3(0.06, 0.4, 0.27)
+const SHIELD_CARRY: Vector3 = Vector3(0.27, 0.0, 0.0)
 ## Downed player: the revive bar sits just above the lying body; "HELP!" and the name stack above it
 ## in screen space (Label3D offsets, pixels), so they never overlap however steep the camera is.
 const DOWNED_LABEL_HEIGHT: float = 1.05
@@ -196,6 +206,19 @@ var weapons: PackedStringArray = PackedStringArray(["sword"]):
 		weapons = value
 		if is_node_ready() and _melee_indicator:
 			_apply_weapon()
+## Replicated: the shield is held up (blocking).
+var shield_up: bool = false:
+	set(value):
+		if value != shield_up:
+			shield_up = value
+			if is_node_ready():
+				_apply_shield()
+## Replicated: damage the shield can still soak (0 = broken / none).
+var shield_health: float = 0.0:
+	set(value):
+		shield_health = value
+		if is_node_ready():
+			_apply_shield()
 var weapon_index: int = 0:
 	set(value):
 		if value != weapon_index:
@@ -252,8 +275,10 @@ func set_class(class_id: StringName) -> void:
 	if not weapons.has("sword"):
 		right_hand_item = null
 	if not weapons.has("bow"):
-		left_hand_item = null
-		hold_left_arm = false
+		left_hand_item = class_def.shield
+		left_hand_offset = SHIELD_CARRY
+		hold_left_arm = class_def.shield != null  # raised while blocking
+	shield_health = class_def.shield_health if class_def.shield else 0.0
 	right_hand_offset += class_def.hand_offset
 	right_swing_offset += class_def.hand_offset
 	left_hand_offset += class_def.hand_offset
@@ -289,8 +314,11 @@ func _ready() -> void:
 	_build_name_label()
 	_build_downed_visuals()
 	var spear := _attach_spear() if weapons.has("spear") or weapons.has("javelin") else null
-	_weapon_items = {"sword": _right_item, "bow": _left_item, "spear": spear, "javelin": spear}
+	# Hand items that are weapons (the left one can be a shield instead of the bow).
+	_weapon_items = {"sword": _right_item if weapons.has("sword") else null, "bow": _left_item if weapons.has("bow") else null,
+			"spear": spear, "javelin": spear}
 	_setup_bow()
+	_setup_shield()
 	_apply_weapon()
 	if is_downed:
 		_apply_downed()
@@ -390,6 +418,87 @@ func _place_bow(skeleton: Skeleton3D) -> void:
 	bow.basis = arm.basis.inverse() * body.basis
 	bow.position = left_hand_offset + BOW_FIST - bow.basis * BOW_GRIP
 	_nock_body = model.global_transform.affine_inverse() * bow.global_transform * NOCK_POSITION
+
+
+# --- Shield -------------------------------------------------------------------
+
+func has_shield() -> bool:
+	return class_def != null and class_def.shield != null and shield_health > 0.0
+
+
+## The shield can go up now: carried, not broken, a melee weapon in hand (thrown spears / the bow aim with
+## the same button), standing.
+func can_block() -> bool:
+	return has_shield() and holds_melee() and not is_dead and not is_downed
+
+
+## Server: raise / lower the shield.
+func set_block(up: bool) -> void:
+	shield_up = up and can_block()
+
+
+## Like the bow: placed in the body's frame after every skeleton update while it is up.
+func _setup_shield() -> void:
+	var skeleton := model.find_child("Skeleton3D", true, false) as Skeleton3D
+	if class_def.shield == null or _left_item == null or skeleton == null:
+		return
+	skeleton.skeleton_updated.connect(_place_shield.bind(skeleton))
+	_apply_shield()
+
+
+## Up: square in front of the chest, facing where the hero faces. Down: Unit's carry grip on the arm.
+func _place_shield(skeleton: Skeleton3D) -> void:
+	if not shield_up or _left_item == null or not _left_item.is_inside_tree():
+		return
+	var to_skeleton := skeleton.global_transform.affine_inverse()
+	var arm := (to_skeleton * (_left_item.get_parent() as Node3D).global_transform).orthonormalized()
+	var body := (to_skeleton * model.global_transform).orthonormalized()
+	var held := arm.affine_inverse() * body * Transform3D(Basis.IDENTITY, SHIELD_BLOCK_AT - class_def.shield_center)
+	_left_item.transform = held
+
+
+## Every peer: slower while blocking, the left arm up or down, the shield hidden once broken.
+func _apply_shield() -> void:
+	_update_move_speed()
+	if _left_item and class_def and class_def.shield:
+		_left_item.visible = shield_health > 0.0 and not is_downed
+	if shield_up:
+		set_melee_aim(Vector3.ZERO)
+	if (_left_hold or _right_hold) and _action_time <= 0.0:
+		_hold_arms()
+	shield_changed.emit()
+
+
+## Server: a hit from in front landed on the raised shield: it soaks the damage (and maybe breaks).
+func _shield_blocks(attacker: Node3D) -> bool:
+	if not shield_up or not has_shield():
+		return false
+	if not is_instance_valid(attacker):
+		return true
+	var to := attacker.global_position - global_position
+	to.y = 0.0
+	return to.length() < 0.05 or rad_to_deg(facing().angle_to(to)) <= BLOCK_ARC * 0.5
+
+
+func _block(amount: float) -> void:
+	shield_health = maxf(shield_health - amount, 0.0)
+	_since_hit = 0.0
+	if shield_health <= 0.0:
+		shield_up = false
+	_net_blocked.rpc(shield_health <= 0.0)
+
+
+@rpc("authority", "call_local", "reliable")
+func _net_blocked(broken: bool) -> void:
+	var at := global_position + facing() * 0.4 + Vector3(0, 0.55, 0)
+	HitFx.flash(at, HitFx.HIT_SPARK, Color(0.75, 0.88, 1.0), 1.0, 0.16)
+	if broken:
+		HitFx.flash(at, HitFx.DEATH_SMOKE, Color(0.8, 0.78, 0.72, 0.8), 1.2, 0.5, Vector2(0.5, 1.3), false)
+		FloatingText3D.spawn(get_parent(), global_position + Vector3(0, 1.9, 0), "Shield broken!", Color(1.0, 0.75, 0.4), 44)
+	elif _left_item:
+		var punch := create_tween()
+		_left_item.scale = Vector3.ONE * 0.85
+		punch.tween_property(_left_item, "scale", Vector3.ONE, 0.12)
 
 
 func _show_spear(shown: bool) -> void:
@@ -576,10 +685,13 @@ func _hold_arms(instant: bool = false) -> void:
 	super(instant)
 
 
-## Only the arm with the weapon in hand holds it; downed players crawl with both arms free. (Leaving the
-## free arm to Unit._hold_arms keeps the tween that brings the weapon arm back, e.g. after a bow shot.)
+## Only the arm with the weapon in hand holds it (and the left one while the shield is up); downed players
+## crawl with both arms free. (Leaving the free arm to Unit._hold_arms keeps the tween that brings the weapon
+## arm back, e.g. after a bow shot.)
 func _held_arms() -> int:
-	return 0 if is_downed else _weapon_hand()
+	if is_downed:
+		return 0
+	return _weapon_hand() | (ARM_LEFT if shield_up else 0)
 
 
 # --- Weapons ------------------------------------------------------------------
@@ -711,9 +823,15 @@ func _can_hit(target: Object) -> bool:
 
 # --- Input (called on the server) ---------------------------------------------
 
-## Continuous input for this frame: movement, bow aim and sword aim (Vector3.ZERO = not aiming).
-func set_input(move: Vector2, aim: Vector3, melee_aim: Vector3 = Vector3.ZERO) -> void:
+## Continuous input for this frame: movement, bow aim and sword aim (Vector3.ZERO = not aiming), shield up.
+## With the shield up, `aim` (the cursor / right stick) is where the hero turns to block.
+func set_input(move: Vector2, aim: Vector3, melee_aim: Vector3 = Vector3.ZERO, block: bool = false) -> void:
 	joystick_vector = move.limit_length(1.0)
+	set_block(block)
+	if shield_up:
+		aim.y = 0.0
+		look_override = aim.normalized() if aim.length_squared() > 0.0001 else Vector3.ZERO
+		return
 	set_melee_aim(melee_aim)
 	if melee_aim != Vector3.ZERO:
 		return  # the sword stick decides where we face
@@ -724,9 +842,9 @@ func set_input(move: Vector2, aim: Vector3, melee_aim: Vector3 = Vector3.ZERO) -
 
 
 @rpc("any_peer", "call_remote", "unreliable_ordered")
-func net_input(move: Vector2, aim: Vector3, melee_aim: Vector3) -> void:
+func net_input(move: Vector2, aim: Vector3, melee_aim: Vector3, block: bool) -> void:
 	if _from_owner():
-		set_input(move, aim, melee_aim)
+		set_input(move, aim, melee_aim, block)
 
 
 @rpc("any_peer", "call_remote", "reliable")
@@ -758,7 +876,7 @@ func _from_owner() -> bool:
 # --- Melee --------------------------------------------------------------------
 
 func attack_melee() -> void:
-	if is_dead or is_downed or _melee_timer > 0.0 or not holds_melee():
+	if is_dead or is_downed or shield_up or _melee_timer > 0.0 or not holds_melee():
 		return
 	var target := find_nearest(TARGET_GROUPS, 1.8, global_position, {&"camps": -0.8})
 	if target:
@@ -768,7 +886,7 @@ func attack_melee() -> void:
 
 ## Swing toward `direction` (sword stick), with a little aim assist. Movement is independent.
 func attack_melee_toward(direction: Vector3) -> void:
-	if is_dead or is_downed or _melee_timer > 0.0 or not holds_melee():
+	if is_dead or is_downed or shield_up or _melee_timer > 0.0 or not holds_melee():
 		return
 	direction.y = 0.0
 	var best := direction.normalized()
@@ -792,7 +910,7 @@ func attack_melee_toward(direction: Vector3) -> void:
 ## Sword stick aim: face `direction` (shows a short wedge for the local player). ZERO = released.
 func set_melee_aim(direction: Vector3) -> void:
 	direction.y = 0.0
-	if direction.length_squared() < 0.0001 or is_dead or is_downed or not holds_melee():
+	if direction.length_squared() < 0.0001 or is_dead or is_downed or shield_up or not holds_melee():
 		if _melee_aim != Vector3.ZERO:
 			_melee_aim = Vector3.ZERO
 			_melee_indicator.visible = false
@@ -1197,6 +1315,8 @@ func die() -> void:
 ## Respawn (server): back on your feet with your soldiers following again.
 func revive(at: Vector3) -> void:
 	is_downed = false
+	shield_up = false
+	shield_health = class_def.shield_health if class_def.shield else 0.0
 	army_order = Order.FOLLOW
 	army_target = null
 	army_target_path = NodePath()
@@ -1211,6 +1331,9 @@ func take_damage(amount: float, attacker: Node3D = null, is_melee: bool = true, 
 		if GameConfig.owner_peer_of(attacker) != 0 and GameConfig.is_hostile(self, attacker):
 			last_attacker_peer = GameConfig.owner_peer_of(attacker)
 			die()
+		return
+	if not is_dead and _shield_blocks(attacker):
+		_block(amount)
 		return
 	super(amount, attacker, is_melee, crit)
 
@@ -1272,9 +1395,18 @@ func _get_up(helpers: Array) -> void:
 	revived.emit(self, helpers)
 
 
+## Every peer: crawl speed while downed, slower behind a raised shield.
+func _update_move_speed() -> void:
+	if _base_move_speed > 0.0:
+		move_speed = _base_move_speed * (DOWNED_SPEED if is_downed else 1.0) * (BLOCK_SPEED if shield_up else 1.0)
+
+
 ## Every peer: crawl speed, "HELP!" label + revive bar, off-screen marker for teammates.
 func _apply_downed() -> void:
-	move_speed = _base_move_speed * (DOWNED_SPEED if is_downed else 1.0)
+	_update_move_speed()
+	if is_downed:
+		shield_up = false
+	_apply_shield()
 	var show_world_label := _shows_downed_label()
 	_downed_label.visible = show_world_label
 	_revive_bar.visible = _shows_revive_bar()

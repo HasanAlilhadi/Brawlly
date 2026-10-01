@@ -17,6 +17,11 @@ const CATALOG_PATH := "res://resources/data/class_catalog.tres"
 ## Where the fists sit relative to the standard rig's (arm bone space): the keeper's arms are a bit higher
 ## on their bones, so weapons in hand move with them.
 @export var hand_offset: Vector3 = Vector3.ZERO
+## Shield on the left arm (none: the class can't block), how much damage it soaks before it breaks, and
+## the offset from the model's origin to its middle (shield space; front = +Z).
+@export var shield: PackedScene
+@export var shield_health: float = 0.0
+@export var shield_center: Vector3 = Vector3.ZERO
 @export_group("Player color")
 ## Palette hue of the model recolored to the player's color (see Unit.recolor_*).
 @export_range(-1.0, 1.0) var recolor_key_hue: float = -1.0

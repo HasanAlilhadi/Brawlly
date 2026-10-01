@@ -2,16 +2,20 @@
 
 [ext_resource type="Script" path="res://scripts/game/class_def.gd" id="1_def"]
 [ext_resource type="PackedScene" path="res://assets/characters/keeper.glb" id="2_model"]
+[ext_resource type="PackedScene" path="res://assets/items/dungeon/shield_rectangle.glb" id="3_shield"]
 
 [resource]
 script = ExtResource("1_def")
 id = &"spearman"
 display_name = "Spearman"
-description = "Straight spear stabs that pierce a line of foes; E switches to throwing spears. Soldiers carry spears."
+description = "Straight spear stabs that pierce a line of foes; a tall shield (right mouse) blocks hits from the front; E switches to throwing spears. Soldiers carry spears."
 model = ExtResource("2_model")
 weapons = PackedStringArray("spear", "javelin")
 ally_weapon = "spear"
 icon = "spear"
+shield = ExtResource("3_shield")
+shield_health = 200.0
+shield_center = Vector3(0, 0.15, 0)
 hand_offset = Vector3(0, 0.085, 0.015)
 recolor_key_hue = 0.435
 recolor_hue_range = 0.04

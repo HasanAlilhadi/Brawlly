@@ -2,16 +2,19 @@
 
 [ext_resource type="Script" path="res://scripts/game/class_def.gd" id="1_def"]
 [ext_resource type="PackedScene" path="res://assets/characters/human.glb" id="2_model"]
+[ext_resource type="PackedScene" path="res://assets/items/dungeon/shield_round.glb" id="3_shield"]
 
 [resource]
 script = ExtResource("1_def")
 id = &"swordsman"
 display_name = "Swordsman"
-description = "Wide sword swings that cut through crowds. Soldiers fight with sword and shield."
+description = "Wide sword swings that cut through crowds; a round shield (right mouse) blocks hits from the front. Soldiers fight with sword and shield."
 model = ExtResource("2_model")
 weapons = PackedStringArray("sword")
 ally_weapon = "sword"
 icon = "sword"
+shield = ExtResource("3_shield")
+shield_health = 150.0
 recolor_key_hue = 0.65
 recolor_hue_range = 0.03
 recolor_min_saturation = 0.15

@@ -76,6 +76,7 @@ var _last_health: float = 0.0
 var _vibrate_cooldown: float = 0.0
 var _respawn_left: float = 0.0
 var _mouse_attack: bool = false
+var _mouse_block: bool = false  # right mouse holds the shield up (melee weapon in hand)
 var _mouse_bow: bool = false
 var _bow_cursor: bool = false
 var _mouse_bow_button: int = MOUSE_BUTTON_RIGHT
@@ -361,11 +362,16 @@ func _physics_process(delta: float) -> void:
 		melee_aim = _cursor_direction()
 	# Holding the sword button without dragging (or an attack key) keeps auto-attacking the nearest enemy;
 	# with the bow in hand the same keys shoot.
+	# Shield: right mouse (turns toward the cursor), LT (toward the right stick) or the touch shield button.
+	var pad_block := Input.is_action_pressed(&"block") and not Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
+	var block := local_player.can_block() and (_mouse_block or pad_block or hud.shield_button.is_held)
+	if block and _mouse_block:
+		aim = _cursor_direction()
 	var use_held := _attack_key_held() or Input.is_action_pressed(&"shoot")
-	var melee_held := melee and melee_aim == Vector3.ZERO and (hud.melee_button.is_held or use_held)
+	var melee_held := melee and not block and melee_aim == Vector3.ZERO and (hud.melee_button.is_held or use_held)
 	var shoot_held := not melee and use_held
 	if multiplayer.is_server():
-		local_player.set_input(move, aim, melee_aim)
+		local_player.set_input(move, aim, melee_aim, block)
 		if melee_held:
 			local_player.attack_melee()
 		if shoot_held:
@@ -379,7 +385,9 @@ func _physics_process(delta: float) -> void:
 			local_player.set_aim(aim)
 		elif local_player.is_aiming():
 			local_player.clear_aim()
-	local_player.net_input.rpc_id(1, move, aim, melee_aim)
+	if block and aim != Vector3.ZERO:
+		local_player.look_override = aim.normalized()  # turn right away; the server decides the block
+	local_player.net_input.rpc_id(1, move, aim, melee_aim, block)
 	_melee_send_timer -= delta
 	_shoot_send_timer -= delta
 	if melee_held and _melee_send_timer <= 0.0:
@@ -407,6 +415,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	if real_click and local_player.holds_ranged() and (button.is_action(&"attack") or button.is_action(&"aim_bow")):
 		_mouse_bow = true
 		_mouse_bow_button = button.button_index
+	elif real_click and button.is_action(&"block") and local_player.can_block():
+		_mouse_block = true
 	elif real_click and button.is_action(&"attack"):
 		_mouse_attack = true
 		_mouse_click_left = MOUSE_CLICK_HOLD
@@ -434,6 +444,8 @@ func _input(event: InputEvent) -> void:
 		return
 	if button.is_action(&"attack"):
 		_mouse_attack = false
+	if button.is_action(&"block"):
+		_mouse_block = false
 	if _mouse_bow and button.button_index == _mouse_bow_button:
 		_mouse_bow = false
 		_fire(_cursor_direction())
@@ -488,6 +500,7 @@ func _switch_weapon() -> void:
 		return
 	_mouse_bow = false
 	_mouse_attack = false
+	_mouse_block = false
 	hud.reset_touch_controls()
 	local_player.request_switch_weapon()
 

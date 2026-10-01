@@ -68,6 +68,12 @@ properties/17/replication_mode = 2
 properties/18/path = NodePath(".:army_target_path")
 properties/18/spawn = true
 properties/18/replication_mode = 2
+properties/19/path = NodePath(".:shield_up")
+properties/19/spawn = true
+properties/19/replication_mode = 2
+properties/20/path = NodePath(".:shield_health")
+properties/20/spawn = true
+properties/20/replication_mode = 2
 
 [node name="Player" type="CharacterBody3D"]
 collision_layer = 2
