@@ -4,7 +4,7 @@ class_name HitFx
 ## - Damage numbers are shown only to the player who landed the hit (`report_hit` on the server
 ##   sends them to that player's device).
 
-enum Kind { FLESH, WOOD, LEAVES, DIRT }
+enum Kind { FLESH, WOOD, LEAVES, DIRT, METAL }
 
 const NUMBER_COLOR := Color(1.0, 0.96, 0.82)
 const CRIT_COLOR := Color(1.0, 0.72, 0.15)
@@ -15,6 +15,7 @@ const DEATH_SMOKE := preload("res://assets/vfx/particles/smoke_04.png")
 const BIG_SMOKE := preload("res://assets/vfx/particles/smoke_10.png")
 const COMBO_RING := preload("res://assets/vfx/particles/circle_03.png")
 const REVIVE_SPARKLE := preload("res://assets/vfx/particles/magic_04.png")
+const BLOCK_RING := preload("res://assets/vfx/particles/circle_02.png")
 
 ## Set by main.gd for the running match.
 static var world: Node3D
@@ -237,8 +238,21 @@ static func _flash_material(texture: Texture2D, additive: bool) -> StandardMater
 	return material
 
 
-## Little burst of chips / sparks at `at`.
-static func burst(at: Vector3, kind: Kind, amount: int = 10) -> void:
+## A hit stopped by a shield at `at`: a quick ring shockwave, bright metal sparks flying out along `normal`
+## (the shield's front) and a small "Blocked" (`broken`: wood chips, dust and "Shield broken!").
+static func block_impact(at: Vector3, normal: Vector3, broken: bool) -> void:
+	flash(at, BLOCK_RING, Color(0.75, 0.9, 1.0, 0.95), 0.9, 0.2, Vector2(0.35, 1.5))
+	burst(at, Kind.METAL, 12, normal + Vector3(0, 0.6, 0))
+	if broken:
+		burst(at, Kind.WOOD, 14)
+		flash(at, DEATH_SMOKE, Color(0.8, 0.78, 0.72, 0.8), 1.3, 0.55, Vector2(0.5, 1.4), false)
+		FloatingText3D.spawn(world, at + Vector3(0, 1.3, 0), "Shield broken!", Color(1.0, 0.72, 0.35), 46, true)
+	else:
+		FloatingText3D.spawn(world, at + Vector3(0, 1.2, 0), "Blocked", Color(0.75, 0.9, 1.0), 34)
+
+
+## Little burst of chips / sparks at `at` (flying out around `direction`).
+static func burst(at: Vector3, kind: Kind, amount: int = 10, direction: Vector3 = Vector3.UP) -> void:
 	if not is_instance_valid(world):
 		return
 	var particles := CPUParticles3D.new()
@@ -247,7 +261,7 @@ static func burst(at: Vector3, kind: Kind, amount: int = 10) -> void:
 	particles.amount = amount
 	particles.lifetime = 0.45
 	particles.explosiveness = 1.0
-	particles.direction = Vector3.UP
+	particles.direction = direction.normalized()
 	particles.spread = 75.0
 	particles.initial_velocity_min = 2.2
 	particles.initial_velocity_max = 4.2
@@ -269,6 +283,14 @@ static func burst(at: Vector3, kind: Kind, amount: int = 10) -> void:
 		Kind.DIRT:
 			ramp.set_color(0, Color(0.68, 0.46, 0.27))
 			ramp.set_color(1, Color(0.32, 0.18, 0.1, 0.0))
+		Kind.METAL:
+			ramp.set_color(0, Color(1.0, 1.0, 0.9))
+			ramp.set_color(1, Color(1.0, 0.7, 0.25, 0.0))
+			particles.scale_amount_min = 0.35
+			particles.scale_amount_max = 0.7
+			particles.initial_velocity_min = 3.0
+			particles.initial_velocity_max = 5.5
+			particles.lifetime = 0.3
 	particles.color_ramp = ramp
 	world.add_child(particles)
 	particles.global_position = at

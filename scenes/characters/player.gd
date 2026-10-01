@@ -99,12 +99,24 @@ const NOCK_POSITION: Vector3 = Vector3(-0.04, 0.24, 0.08)
 const ARROW_MODEL := preload("res://assets/items/forest/arrow.glb")
 ## Shield (Swordsman, Spearman: ClassDef.shield): held up (right mouse / LT / the touch shield button) it blocks
 ## every hit from within BLOCK_ARC degrees of where the hero faces, soaking the damage until `shield_health`
-## runs out and it breaks (back on respawn; buying a new one comes later). Up, it is raised in front of the
-## chest (SHIELD_BLOCK_AT, body space), the hero walks at BLOCK_SPEED and can't attack.
+## runs out and it breaks (back on respawn; buying a new one comes later). Up, the hero walks at BLOCK_SPEED
+## and can't attack. Placed every frame (`_place_shield`, body space, the middle of the shield): carried on the
+## left fist, upright, its face turned out to the side (SHIELD_CARRY_FACE); up, square in front of the chest
+## (SHIELD_BLOCK_AT). Both ride the torso's bob / sway (SHIELD_SWAY of its turn), and a blocked hit knocks it back
+## (SHIELD_RECOIL_*).
 const BLOCK_ARC: float = 150.0
 const BLOCK_SPEED: float = 0.45
 const SHIELD_BLOCK_AT: Vector3 = Vector3(0.06, 0.4, 0.27)
-const SHIELD_CARRY: Vector3 = Vector3(0.27, 0.0, 0.0)
+## Carried: strapped to the forearm (arm space), its middle lifted a bit, face out to the side and a little ahead.
+const SHIELD_CARRY: Vector3 = Vector3(0.18, 0.0, 0.0)
+const SHIELD_CARRY_LIFT: float = 0.08
+const SHIELD_CARRY_FACE: Vector3 = Vector3(0.85, 0.0, 0.5)
+const SHIELD_CARRY_OUT: float = 0.05
+## Seconds to swing the shield up in front / back down to the side.
+const SHIELD_RAISE_TIME: float = 0.14
+const SHIELD_SWAY: float = 0.6
+const SHIELD_RECOIL_BACK: float = 0.09
+const SHIELD_RECOIL_TILT: float = 18.0
 ## Downed player: the revive bar sits just above the lying body; "HELP!" and the name stack above it
 ## in screen space (Label3D offsets, pixels), so they never overlap however steep the camera is.
 const DOWNED_LABEL_HEIGHT: float = 1.05
@@ -213,12 +225,17 @@ var shield_up: bool = false:
 			shield_up = value
 			if is_node_ready():
 				_apply_shield()
-## Replicated: damage the shield can still soak (0 = broken / none).
+## Replicated: damage the shield can still soak (0 = broken / none). Only shows / hides it (a hit must not
+## re-blend the arms, that dragged the shield around).
 var shield_health: float = 0.0:
 	set(value):
+		var was_broken := shield_health <= 0.0
 		shield_health = value
 		if is_node_ready():
-			_apply_shield()
+			_show_shield()
+			if was_broken != (shield_health <= 0.0):
+				_update_move_speed()
+			shield_changed.emit()
 var weapon_index: int = 0:
 	set(value):
 		if value != weapon_index:
@@ -255,6 +272,10 @@ var _slash_carry: Quaternion = Quaternion.IDENTITY  # carry grip in the skeleton
 var _thrust_phase: float = -1.0  # stab phase (see `_thrust_pose`); < 0 = not stabbing
 var _nocked_arrow: Node3D  # the arrow on the string (bow only)
 var _nock_body: Vector3 = Vector3.INF  # where it sits in the model's space (last drawn frame)
+var _shield_recoil: float = 0.0  # 1 right after a blocked hit, back to 0 (see `_place_shield`)
+var _shield_recoil_tween: Tween
+var _shield_raise: float = 0.0  # 0 carried .. 1 up in front (blends while it goes up / down)
+var _shield_raise_tween: Tween
 
 
 ## Every peer, at spawn and before entering the tree: the class's model (replaces the scene's
@@ -437,7 +458,7 @@ func set_block(up: bool) -> void:
 	shield_up = up and can_block()
 
 
-## Like the bow: placed in the body's frame after every skeleton update while it is up.
+## Like the bow: placed in the body's frame after every skeleton update.
 func _setup_shield() -> void:
 	var skeleton := model.find_child("Skeleton3D", true, false) as Skeleton3D
 	if class_def.shield == null or _left_item == null or skeleton == null:
@@ -446,24 +467,50 @@ func _setup_shield() -> void:
 	_apply_shield()
 
 
-## Up: square in front of the chest, facing where the hero faces. Down: Unit's carry grip on the arm.
+## Down: upright on the left fist (follows the arm's swing), face turned out to the side. Up: square in front
+## of the chest, facing where the hero faces. Both ride the torso (walk bob, sway) and the hit recoil.
 func _place_shield(skeleton: Skeleton3D) -> void:
-	if not shield_up or _left_item == null or not _left_item.is_inside_tree():
+	if _left_item == null or not _left_item.visible or not _left_item.is_inside_tree():
 		return
 	var to_skeleton := skeleton.global_transform.affine_inverse()
 	var arm := (to_skeleton * (_left_item.get_parent() as Node3D).global_transform).orthonormalized()
 	var body := (to_skeleton * model.global_transform).orthonormalized()
-	var held := arm.affine_inverse() * body * Transform3D(Basis.IDENTITY, SHIELD_BLOCK_AT - class_def.shield_center)
-	_left_item.transform = held
+	# How the torso moves this frame (the walk's bounce and twist) relative to its rest, in skeleton space.
+	var torso := skeleton.find_bone("torso")
+	var sway := Transform3D.IDENTITY
+	if torso >= 0:
+		sway = skeleton.get_bone_global_pose(torso) * skeleton.get_bone_global_rest(torso).affine_inverse()
+		sway.basis = Basis(Quaternion.IDENTITY.slerp(sway.basis.orthonormalized().get_rotation_quaternion(), SHIELD_SWAY))
+	# The shield's middle and facing in skeleton space: carried, up in front, and the blend between them.
+	var face := SHIELD_CARRY_FACE.normalized()
+	var carry_basis := sway.basis * body.basis * Basis(Vector3.UP.cross(face), Vector3.UP, face)
+	var forearm := arm * (SHIELD_CARRY + class_def.hand_offset)
+	var carried := Transform3D(carry_basis, forearm + carry_basis * Vector3(0.0, SHIELD_CARRY_LIFT, SHIELD_CARRY_OUT))
+	var recoil := Transform3D(Basis(Vector3.RIGHT, -deg_to_rad(SHIELD_RECOIL_TILT) * _shield_recoil),
+			SHIELD_BLOCK_AT - Vector3(0.0, 0.0, SHIELD_RECOIL_BACK) * _shield_recoil)
+	var raised := sway * body * recoil
+	var middle := carried.interpolate_with(raised, _shield_raise) if _shield_raise < 1.0 else raised
+	_left_item.transform = arm.affine_inverse() * middle * Transform3D(Basis.IDENTITY, -class_def.shield_center)
+
+
+func _show_shield() -> void:
+	if _left_item and class_def and class_def.shield:
+		_left_item.visible = shield_health > 0.0 and not is_downed
 
 
 ## Every peer: slower while blocking, the left arm up or down, the shield hidden once broken.
 func _apply_shield() -> void:
 	_update_move_speed()
-	if _left_item and class_def and class_def.shield:
-		_left_item.visible = shield_health > 0.0 and not is_downed
+	_show_shield()
 	if shield_up:
 		set_melee_aim(Vector3.ZERO)
+	var raise_to := 1.0 if shield_up else 0.0
+	if not is_equal_approx(_shield_raise, raise_to):
+		if _shield_raise_tween:
+			_shield_raise_tween.kill()
+		_shield_raise_tween = create_tween()
+		_shield_raise_tween.tween_property(self, "_shield_raise", raise_to, SHIELD_RAISE_TIME) \
+				.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	if (_left_hold or _right_hold) and _action_time <= 0.0:
 		_hold_arms()
 	shield_changed.emit()
@@ -490,15 +537,16 @@ func _block(amount: float) -> void:
 
 @rpc("authority", "call_local", "reliable")
 func _net_blocked(broken: bool) -> void:
-	var at := global_position + facing() * 0.4 + Vector3(0, 0.55, 0)
-	HitFx.flash(at, HitFx.HIT_SPARK, Color(0.75, 0.88, 1.0), 1.0, 0.16)
-	if broken:
-		HitFx.flash(at, HitFx.DEATH_SMOKE, Color(0.8, 0.78, 0.72, 0.8), 1.2, 0.5, Vector2(0.5, 1.3), false)
-		FloatingText3D.spawn(get_parent(), global_position + Vector3(0, 1.9, 0), "Shield broken!", Color(1.0, 0.75, 0.4), 44)
-	elif _left_item:
-		var punch := create_tween()
-		_left_item.scale = Vector3.ONE * 0.85
-		punch.tween_property(_left_item, "scale", Vector3.ONE, 0.12)
+	var at := global_position + facing() * 0.45 + Vector3(0, 0.55, 0)
+	if _left_item and _left_item.is_inside_tree():
+		at = _left_item.global_transform * class_def.shield_center + facing() * 0.08
+	HitFx.block_impact(at, facing(), broken)
+	# Knocked back toward the body, top tipping back, then it springs into place (`_place_shield`).
+	if _shield_recoil_tween:
+		_shield_recoil_tween.kill()
+	_shield_recoil = 1.0
+	_shield_recoil_tween = create_tween()
+	_shield_recoil_tween.tween_property(self, "_shield_recoil", 0.0, 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 
 func _show_spear(shown: bool) -> void:
@@ -812,8 +860,11 @@ func _idle_anim() -> String:
 	return "holding-left" if is_aiming() else "idle"
 
 
+## Crawling while downed; walking (never sprinting) behind a raised shield, whatever the stick says.
 func _move_anim(strength: float) -> String:
-	return "crawl" if is_downed else super(strength)
+	if is_downed:
+		return "crawl"
+	return "walk" if shield_up else super(strength)
 
 
 func _can_hit(target: Object) -> bool:

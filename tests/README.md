@@ -28,6 +28,9 @@ Run from the project folder (`G` = the Godot binary). Tests start the game norma
 # Shield (Swordsman, or --class=spearman): blocks from the front only while up, slower, no attacks, breaks, back on respawn
 "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/shield_test.gd
 
+# Shield motion: carried upright on the forearm, swings when running, bobs / sways while up (walk clip), a blocked hit recoils and settles
+"$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/shield_motion_test.gd
+
 # Screenshots of every screen (needs a window, no --headless); add --mobile for the phone layout
 "$G" --path . res://tests/test_runner.tscn -- --test=res://tests/screenshot_test.gd --out=/tmp/shots
 "$G" --path . res://tests/test_runner.tscn -- --test=res://tests/screenshot_test.gd --out=/tmp/shots --mobile

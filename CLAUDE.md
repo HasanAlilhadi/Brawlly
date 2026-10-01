@@ -190,8 +190,11 @@ by touch index so the joystick and buttons work together with multi-touch.
   left arm): `block` action (right mouse / LT / `Hud.shield_button`) → `set_input(..., block)` / `net_input` →
   `Player.shield_up` (replicated with `shield_health`). Up: `Player._shield_blocks` soaks every hit from within
   `BLOCK_ARC` of the facing into `shield_health` (breaks at 0, back on `revive`; a shop item later), `BLOCK_SPEED`,
-  no attacks, the hero turns toward the cursor / right stick, the shield placed in front (`_place_shield`, body frame
-  after each skeleton update, like the bow). Right mouse with a ranged weapon in hand still aims. Test: `tests/shield_test.gd`.
+  no attacks, the hero turns toward the cursor / right stick, the shield placed by `_place_shield` after each skeleton update
+  (carried: upright on the forearm, face out; up: in front of the chest; blended by `_shield_raise`; both ride the
+  torso bone's bob / sway; a block knocks it back via `_shield_recoil` — never re-blend the arms on a hit). Block FX:
+  `HitFx.block_impact` (ring, metal sparks, "Blocked"). Walks (no sprint clip) behind it. Tests: `shield_test.gd`,
+  `shield_motion_test.gd`. Right mouse with a ranged weapon in hand still aims.
 - **Deaths drop nothing**: weapons come from the class and coins stay.
   Clips `crawl` (moving) / `downed` (still) come from `assets/characters/animations/archer_downed.glb` (made in Blender on
   the archer armature, copied into each class model's library by `Player._add_downed_anims()`, track paths re-rooted); while downed the arm holds stay off and the sword / bow are hidden.
