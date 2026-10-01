@@ -672,7 +672,12 @@ func _attach_item(skeleton: Skeleton3D, item: PackedScene, bone: String) -> Node
 	return instance
 
 
-## Arms back into the holding pose, weapons into their carry grip.
+## Virtual: which arms go back into their holding pose after an action (ARM_* flags); the others hang free.
+func _held_arms() -> int:
+	return ARM_BOTH
+
+
+## Arms back into the holding pose (the free ones out of it), weapons into their carry grip.
 func _hold_arms(instant: bool = false) -> void:
 	_full_body_action = false
 	if _live_hold:
@@ -683,8 +688,9 @@ func _hold_arms(instant: bool = false) -> void:
 	var duration := 0.0 if instant else 0.12
 	if duration > 0.0 and (_right_hold or _left_hold):
 		_arm_tween = create_tween().set_parallel(true)
-	_tween_arm(_right_hold, _right_item, 1.0, right_hand_offset, right_hand_rotation, duration)
-	_tween_arm(_left_hold, _left_item, 1.0, left_hand_offset, left_hand_rotation, duration)
+	var held := _held_arms()
+	_tween_arm(_right_hold, _right_item, 1.0 if held & ARM_RIGHT else 0.0, right_hand_offset, right_hand_rotation, duration)
+	_tween_arm(_left_hold, _left_item, 1.0 if held & ARM_LEFT else 0.0, left_hand_offset, left_hand_rotation, duration)
 	# Arms that are never held always use the swing grip.
 	if _right_hold == null and _right_item:
 		_right_item.position = right_swing_offset

@@ -565,7 +565,7 @@ func _slash_arm_basis(offset: Quaternion) -> Basis:
 	return torso * Basis(offset * _right_hold.get_held_rotation())
 
 
-## Only the arm with the weapon in hand holds it; downed players crawl with both arms.
+## Procedural slash / stab poses back to carry, then the arms (see `_held_arms`).
 func _hold_arms(instant: bool = false) -> void:
 	if _slash_tween:
 		_slash_tween.kill()
@@ -574,10 +574,12 @@ func _hold_arms(instant: bool = false) -> void:
 		_slash_pose(0.0)
 		_thrust_pose(0.0)
 	super(instant)
-	if is_downed:
-		_release_arms(ARM_BOTH)
-	else:
-		_release_arms(ARM_LEFT if _weapon_hand() == ARM_RIGHT else ARM_RIGHT)
+
+
+## Only the arm with the weapon in hand holds it; downed players crawl with both arms free. (Leaving the
+## free arm to Unit._hold_arms keeps the tween that brings the weapon arm back, e.g. after a bow shot.)
+func _held_arms() -> int:
+	return 0 if is_downed else _weapon_hand()
 
 
 # --- Weapons ------------------------------------------------------------------
