@@ -6,7 +6,7 @@ var st := 0.0
 var modes := [Net.Mode.DEATHMATCH, Net.Mode.TEAM_DEATHMATCH, Net.Mode.CAPTURE_THE_FLAG, Net.Mode.KING_OF_THE_HILL]
 var round_i := 0
 func _ready() -> void:
-	Net.set_profile("Hosty", 0); Net.host()
+	Net.set_profile("Hosty"); Net.host()
 func _log(m: String) -> void:
 	printerr("HOST [%.1f] %s" % [t, m])
 func _p(peer_is_host: bool) -> Player:

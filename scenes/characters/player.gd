@@ -945,8 +945,8 @@ func _finish_training() -> void:
 	soldiers_training -= 1
 	if not is_instance_valid(stall):
 		return
-	NetSpawn.unit(&"ally", stall.pen_spot(), {"team": team_id, "owner": peer_id, "color": unit_color,
-			"pen": stall.get_path(), "weapon": class_def.ally_weapon})
+	NetSpawn.unit(&"ally", stall.pen_spot(), {"team": team_id, "owner": peer_id, "pen": stall.get_path(),
+			"weapon": class_def.ally_weapon})
 	_net_soldier_ready.rpc()
 
 

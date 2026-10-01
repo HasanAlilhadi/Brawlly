@@ -201,7 +201,7 @@ func spawn_warlord(quarry: Player = null) -> Warlord:
 	_warlord_timer = randf_range(warlord_every.x, warlord_every.y)
 	var who := quarry.display_name
 	if Net.is_team_mode(_game_mode.match_mode):
-		who = "the %s team" % Net.TEAM_NAMES[quarry.team_id]
+		who = "{team:%d}" % quarry.team_id
 	_game_mode.announce("The Orc Warlord marches on %s!" % who if Net.is_online() else "The Orc Warlord is coming for you!")
 	return warlord
 

@@ -39,15 +39,16 @@ const SCORE_LIMIT_LABELS: PackedStringArray = ["", "Kills to win", "Team kills t
 const DIFFICULTY_NAMES: PackedStringArray = ["Easy", "Normal", "Hard", "Brutal"]
 const DIFFICULTY_STRENGTH: Array[float] = [0.7, 1.0, 1.3, 1.65]
 const DIFFICULTY_RESPAWN: Array[float] = [1.5, 1.0, 0.8, 0.6]
-const PLAYER_COLORS: Array[Color] = [
-	Color("e8483c"), Color("3c8ee8"), Color("46c04c"), Color("f2c230"), Color("a45de0"),
-	Color("f07f2a"), Color("35c9c2"), Color("f06aa8"), Color("f4f4f4"), Color("303030"),
-]
-const TEAM_NAMES: PackedStringArray = ["Red", "Blue", "Green", "Yellow"]
-const TEAM_COLORS: Array[Color] = [Color("e8483c"), Color("3c8ee8"), Color("46c04c"), Color("f2c230")]
+## Colors (and team names) are relative to who is looking — every device colors the world for its own player,
+## nobody picks a color: you and your soldiers blue, your teammates and theirs green, enemies red (team modes:
+## each enemy team its own color, red first). See `color_of()`, `team_color()`, `team_label()`.
+const SELF_COLOR := Color("3c8ee8")
+const TEAMMATE_COLOR := Color("46c04c")
+const ENEMY_COLORS: Array[Color] = [Color("e8483c"), Color("f2c230"), Color("a45de0")]
+const ENEMY_TEAM_NAMES: PackedStringArray = ["Red", "Yellow", "Purple"]
 
-var profile: Dictionary = {"name": "Player", "color": 0, "class": &"swordsman"}
-## peer id -> {"name": String, "color": int, "team": int, "class": StringName (ClassDef.id)}
+var profile: Dictionary = {"name": "Player", "class": &"swordsman"}
+## peer id -> {"name": String, "team": int, "class": StringName (ClassDef.id)}
 var players: Dictionary = {}
 var settings: Dictionary = default_settings()
 ## Discovered games: ip -> {"name", "players", "max", "mode", "port", "in_game", "seen"}
@@ -118,9 +119,51 @@ func team_of(peer: int) -> int:
 	return players.get(peer, {}).get("team", 0)
 
 
+## A player's color on this device: blue for you, else their team's (`team_color`).
 func color_of(peer: int) -> Color:
-	var index: int = players.get(peer, {}).get("color", 0)
-	return PLAYER_COLORS[clampi(index, 0, PLAYER_COLORS.size() - 1)]
+	return SELF_COLOR if peer == my_id() else team_color(team_of(peer))
+
+
+## A team's color on this device: green for your own team, red / yellow / purple for the others.
+func team_color(team: int) -> Color:
+	var slot := _enemy_slot(team)
+	return TEAMMATE_COLOR if slot < 0 else ENEMY_COLORS[slot]
+
+
+## A team's name on this device: "Your team", or the enemy team's color ("Red").
+func team_label(team: int) -> String:
+	var slot := _enemy_slot(team)
+	return "Your team" if slot < 0 else ENEMY_TEAM_NAMES[slot]
+
+
+## -1 for this device's own team, else which enemy team it is (0 = red; deathmatch: every enemy is red).
+func _enemy_slot(team: int) -> int:
+	var mine := team_of(my_id())
+	if team == mine:
+		return -1
+	if not is_team_mode(mode()):
+		return 0
+	var slot := 0
+	for other in int(settings.get("team_count", 2)):
+		if other == team:
+			break
+		if other != mine:
+			slot += 1
+	return mini(slot, ENEMY_COLORS.size() - 1)
+
+
+## Server-made text shown on every device: "{team:N}" becomes "your team" / "the Red team" here,
+## "{label:N}" becomes `team_label(N)`; the first letter is capitalized.
+func localize(text: String) -> String:
+	var pattern := RegEx.create_from_string("\\{(team|label):(-?\\d+)\\}")
+	var result := text
+	for found in pattern.search_all(text):
+		var team := int(found.get_string(2))
+		var word := team_label(team)
+		if found.get_string(1) == "team":
+			word = "your team" if _enemy_slot(team) < 0 else "the %s team" % word
+		result = result.replace(found.get_string(), word)
+	return result.left(1).to_upper() + result.substr(1)
 
 
 func name_of(peer: int) -> String:
@@ -143,9 +186,8 @@ func local_addresses() -> PackedStringArray:
 
 # --- Profile -------------------------------------------------------------------
 
-func set_profile(player_name: String, color_index: int) -> void:
+func set_profile(player_name: String) -> void:
 	profile.name = _clean_name(player_name)
-	profile.color = clampi(color_index, 0, PLAYER_COLORS.size() - 1)
 	_profile_changed()
 
 
@@ -159,23 +201,21 @@ func _profile_changed() -> void:
 	_save_profile()
 	if multiplayer.has_multiplayer_peer() and not game_in_progress and players.has(my_id()):
 		if is_host():
-			_update_player(1, profile.name, profile.color, profile["class"])
+			_update_player(1, profile.name, profile["class"])
 		else:
-			_request_profile.rpc_id(1, profile.name, profile.color, profile["class"])
+			_request_profile.rpc_id(1, profile.name, profile["class"])
 
 
 func _load_profile() -> void:
 	var config := ConfigFile.new()
 	if config.load(PROFILE_PATH) == OK:
 		profile.name = _clean_name(config.get_value("profile", "name", "Player"))
-		profile.color = clampi(config.get_value("profile", "color", 0), 0, PLAYER_COLORS.size() - 1)
 		profile["class"] = ClassDef.find(StringName(config.get_value("profile", "class", ""))).id
 
 
 func _save_profile() -> void:
 	var config := ConfigFile.new()
 	config.set_value("profile", "name", profile.name)
-	config.set_value("profile", "color", profile.color)
 	config.set_value("profile", "class", String(profile["class"]))
 	config.save(PROFILE_PATH)
 
@@ -191,7 +231,7 @@ static func _clean_name(value: String) -> String:
 func open_offline_lobby() -> void:
 	_reset()
 	multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
-	players = {1: _entry(profile.name, profile.color, 0, profile["class"])}
+	players = {1: _entry(profile.name, 0, profile["class"])}
 	lobby_changed.emit()
 
 
@@ -203,7 +243,7 @@ func host() -> Error:
 		return err
 	multiplayer.multiplayer_peer = peer
 	_online = true
-	players = {1: _entry(profile.name, profile.color, 0, profile["class"])}
+	players = {1: _entry(profile.name, 0, profile["class"])}
 	_start_broadcast()
 	lobby_changed.emit()
 	return OK
@@ -302,15 +342,14 @@ func _balance_teams() -> void:
 		team += 1
 
 
-func _entry(player_name: String, color_index: int, team: int, class_id: StringName) -> Dictionary:
-	return {"name": _clean_name(player_name), "color": color_index, "team": team, "class": ClassDef.find(class_id).id}
+func _entry(player_name: String, team: int, class_id: StringName) -> Dictionary:
+	return {"name": _clean_name(player_name), "team": team, "class": ClassDef.find(class_id).id}
 
 
-func _update_player(peer: int, player_name: String, color_index: int, class_id: StringName) -> void:
+func _update_player(peer: int, player_name: String, class_id: StringName) -> void:
 	if not players.has(peer):
 		return
 	players[peer]["name"] = _clean_name(player_name)
-	players[peer]["color"] = clampi(color_index, 0, PLAYER_COLORS.size() - 1)
 	players[peer]["class"] = ClassDef.find(class_id).id
 	_broadcast_lobby()
 
@@ -324,7 +363,7 @@ func _broadcast_lobby() -> void:
 # --- RPCs ------------------------------------------------------------------------
 
 @rpc("any_peer", "call_remote", "reliable")
-func _register(player_name: String, color_index: int, class_id: StringName) -> void:
+func _register(player_name: String, class_id: StringName) -> void:
 	if not is_host():
 		return
 	var peer := multiplayer.get_remote_sender_id()
@@ -339,14 +378,14 @@ func _register(player_name: String, color_index: int, class_id: StringName) -> v
 	for t in settings.team_count:
 		if counts.get(t, 0) < counts.get(team, 0):
 			team = t
-	players[peer] = _entry(player_name, color_index, team, class_id)
+	players[peer] = _entry(player_name, team, class_id)
 	_broadcast_lobby()
 
 
 @rpc("any_peer", "call_remote", "reliable")
-func _request_profile(player_name: String, color_index: int, class_id: StringName) -> void:
+func _request_profile(player_name: String, class_id: StringName) -> void:
 	if is_host() and not game_in_progress:
-		_update_player(multiplayer.get_remote_sender_id(), player_name, color_index, class_id)
+		_update_player(multiplayer.get_remote_sender_id(), player_name, class_id)
 
 
 @rpc("any_peer", "call_remote", "reliable")
@@ -410,7 +449,7 @@ func _on_peer_disconnected(peer: int) -> void:
 
 
 func _on_connected() -> void:
-	_register.rpc_id(1, profile.name, profile.color, profile["class"])
+	_register.rpc_id(1, profile.name, profile["class"])
 
 
 func _on_connection_failed() -> void:

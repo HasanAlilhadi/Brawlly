@@ -109,8 +109,8 @@ func _draw_hill(k: float) -> void:
 	var color := Hill.NEUTRAL
 	if hill.holder == -2:
 		color = Hill.CONTESTED
-	elif hill.holder >= 0 and hill.holder < Net.TEAM_COLORS.size():
-		color = Net.TEAM_COLORS[hill.holder]
+	elif hill.holder >= 0:
+		color = Net.team_color(hill.holder)
 	if hill.holder == -2:
 		# Contested: a ring pulses outward.
 		var pulse := fmod(_time * 1.5, 1.0)
@@ -125,7 +125,7 @@ func _draw_hill(k: float) -> void:
 func _draw_flag_bases(k: float) -> void:
 	for node in get_tree().get_nodes_in_group(&"flags"):
 		var flag := node as CaptureFlag
-		var color: Color = Net.TEAM_COLORS[flag.team_id]
+		var color: Color = Net.team_color(flag.team_id)
 		var at := _to_map(flag.home)
 		var radius := maxf(CaptureFlag.CAPTURE_RANGE / (GameConfig.world_half * 2.0) * size.x, 7.0 * k)
 		draw_circle(at, radius, Color(color, 0.3))
@@ -136,7 +136,7 @@ func _draw_flag_bases(k: float) -> void:
 func _draw_flags(k: float) -> void:
 	for node in get_tree().get_nodes_in_group(&"flags"):
 		var flag := node as CaptureFlag
-		var color: Color = Net.TEAM_COLORS[flag.team_id]
+		var color: Color = Net.team_color(flag.team_id)
 		var at := _to_map(flag.global_position)
 		if flag.state != CaptureFlag.State.HOME:
 			var pulse := fmod(_time * 1.2, 1.0)

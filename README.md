@@ -7,7 +7,7 @@ Windows PC game (desktop first) that also runs on Android / iOS, built with Godo
 Multiplayer heroes vs. orc camps (and each other) in a big procedural world (3D, Kenney mini packs). Landscape on PC,
 portrait on phones. There is no single player: host a game (alone is fine) or join one.
 
-- **Classes** (picked in the multiplayer menu / lobby; `resources/data/classes/*.tres`, `ClassDef`): each hero fights
+- **Classes** (picked in the lobby, with a preview of your hero and soldiers; `resources/data/classes/*.tres`, `ClassDef`): each hero fights
   only with its class's weapon, and nothing needs ammo.
   - **Swordsman** (`human.glb`): wide sword swings that cut through crowds. Soldiers: sword and shield.
   - **Spearman** (`keeper.glb`): long, narrow spear thrusts that pierce a line; **E** switches to throwing spears
@@ -46,13 +46,15 @@ portrait on phones. There is no single player: host a game (alone is fine) or jo
 
 ### Multiplayer (local Wi-Fi)
 
-- **Main menu → Multiplayer**: set your **name**, **color** (recolors your hero and your soldiers' crests) and
-  **class** — a live preview shows your hero and soldiers — then
+- **Main menu → Multiplayer**: set your **name**, then
   **Host Game** or **Join** — pick a game found on your Wi-Fi, or type the host's IP (shown in the host's lobby).
 - **Lobby**: when the host presses Start, everyone sees a **3-2-1 countdown**, then the screen fades into the match
   (it fades in once your hero has spawned). The host sets **mode**, **orc camps** (0–60), **difficulty** (Easy/Normal/Hard/Brutal),
   **starting coins**, and for versus modes **teams** (2–4), **score to win** and **time limit**. Players pick teams
-  in team modes, and everyone can still change class (each player's class shows in the list).
+  in team modes, and everyone picks their **class** (each player's class shows in the list).
+- **Colors are automatic and relative to you**: you and your soldiers are blue, teammates and their soldiers green,
+  enemies red (team modes: each enemy team its own color — red, yellow, purple). Team names follow the same rule
+  ("Your team", "Red team") everywhere: lobby, score line, towns, flags, announcements.
 - **Modes**: Co-op vs Orcs · Deathmatch · Team Deathmatch · Capture the Flag · King of the Hill. Orcs stay in every
   mode and fight everyone. Destroying a camp gives its soldiers to whoever landed the last hit.
 - **Towns in multiplayer**: co-op uses one shared town, Deathmatch gives every player a private town, and team modes

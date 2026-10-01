@@ -25,7 +25,7 @@ var _model: Node3D
 func _ready() -> void:
 	add_to_group(&"flags")
 	position = home
-	var color: Color = Net.TEAM_COLORS[team_id]
+	var color: Color = Net.team_color(team_id)
 	# Base pad (stays at home).
 	var pad := MeshInstance3D.new()
 	var disc := CylinderMesh.new()
@@ -75,11 +75,11 @@ func _physics_process(delta: float) -> void:
 					continue
 				if player.team_id != team_id:
 					_set_state(State.CARRIED, player.peer_id, global_position)
-					game_mode.announce("%s took the %s flag!" % [player.display_name, Net.TEAM_NAMES[team_id]])
+					game_mode.announce("%s took {team:%d}'s flag!" % [player.display_name, team_id])
 					return
 				elif state == State.DROPPED:
 					_return_home()
-					game_mode.announce("%s returned the %s flag" % [player.display_name, Net.TEAM_NAMES[team_id]])
+					game_mode.announce("%s returned {team:%d}'s flag" % [player.display_name, team_id])
 					return
 		State.CARRIED:
 			var carrier := _player(carrier_peer)
@@ -88,7 +88,7 @@ func _physics_process(delta: float) -> void:
 				return
 			var own_flag := _flag_of(carrier.team_id)
 			if own_flag and own_flag.state == State.HOME and carrier.global_position.distance_to(own_flag.home) < CAPTURE_RANGE:
-				game_mode.announce("%s captured the %s flag!" % [carrier.display_name, Net.TEAM_NAMES[team_id]])
+				game_mode.announce("%s captured {team:%d}'s flag!" % [carrier.display_name, team_id])
 				_return_home()
 				game_mode.add_score(carrier.team_id, 1)
 

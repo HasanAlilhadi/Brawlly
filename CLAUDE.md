@@ -124,7 +124,7 @@ by touch index so the joystick and buttons work together with multi-touch.
   running `main.tscn` directly from the editor.
 - **Classes** (`ClassDef` resources in `resources/data/classes/`, listed in `class_catalog.tres`): Swordsman (`human.glb`,
   sword), Spearman (`keeper.glb`, spear thrust + javelin throw, E / Y toggles), Bowman (`archer.glb`, bow). Picked with
-  `ClassPicker` (multiplayer menu + lobby) → `Net.set_class()` → profile `class` + `Net.players[peer].class` → spawn data
+  `ClassPicker` (lobby only, with an `ArmyPreview`) → `Net.set_class()` → profile `class` + `Net.players[peer].class` → spawn data
   `class` → `Player.set_class()` (every peer, before entering the tree: swaps the Model, sets `weapons`, hand items,
   recolor hue, `hand_offset`). Soldiers carry `ClassDef.ally_weapon` (`Ally.weapon` from spawn data, `Ally.WEAPON_STATS`;
   archers stop at `shoot_range` and shoot arrows). A class is locked to its weapons; nothing has ammo. Planned, not built:
@@ -240,6 +240,11 @@ by touch index so the joystick and buttons work together with multi-touch.
   fed by `main.gd` via `predict_input`) and only corrects real drift from the server position.
 - **Static world** (trees, chests, camps, flags, hill) is built identically on every peer from `Net.settings.seed`
   with deterministic names; state changes go through RPCs on those nodes (`_net_*` methods, `call_local`).
+- **Colors are per device, relative to the local player** (nobody picks one): `Net.color_of(peer)` (you blue,
+  teammates green, enemies red), `Net.team_color(team)` / `Net.team_label(team)` ("Your team" green; enemy teams red /
+  yellow / purple). Unit colors are computed in `main._spawn_unit` on every peer from `owner_peer` — never send a
+  color in spawn data for players / soldiers. Server-made text (announcements, match over) names teams with
+  `{team:N}` / `{label:N}` tokens that `Net.localize()` resolves on each device.
 - **Teams**: `team_id` on units/camps/projectiles (`GameConfig.ORC_TEAM` = -1 for orcs). Hostility =
   `GameConfig.is_hostile(a, b)`; groups: `players`, `allies`, `player_units` (players+allies), `enemies`,
   `active_enemies`, `camps`, `units`. `owner_peer` = controlling player (kill/camp credit).

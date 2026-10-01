@@ -137,7 +137,7 @@ func _ready() -> void:
 	pause_menu.paused.connect(_on_paused)
 	shop_menu.opened.connect(_on_paused)
 	game_mode.scores_changed.connect(func() -> void: hud.set_mode_label(game_mode.score_text()))
-	game_mode.announced.connect(func(message: String) -> void: hud.show_toast(message))
+	game_mode.announced.connect(func(message: String) -> void: hud.show_toast(Net.localize(message)))
 	game_mode.match_over.connect(_end)
 
 	if not Platform.mobile_layout:
@@ -232,7 +232,9 @@ func _spawn_unit(data: Dictionary) -> Node:
 	unit.position = data.pos
 	unit.team_id = data.get("team", GameConfig.ORC_TEAM)
 	unit.owner_peer = data.get("owner", data.get("peer", 0))
-	unit.unit_color = data.get("color", Color(1, 1, 1, 0))
+	# Players and soldiers in this device's colors (you blue, teammates green, enemies red); others from the data.
+	var owner_peer: int = unit.owner_peer
+	unit.unit_color = Net.color_of(owner_peer) if owner_peer > 0 else data.get("color", Color(1, 1, 1, 0))
 	return unit
 
 
@@ -269,7 +271,6 @@ func _spawn_player(peer: int) -> void:
 		"display_name": Net.name_of(peer),
 		"class": Net.class_of(peer),
 		"team": Net.team_of(peer),
-		"color": Net.color_of(peer),
 		"start_coins": int(Net.settings.start_coins),
 	}) as Player
 	player.died.connect(_on_player_died)

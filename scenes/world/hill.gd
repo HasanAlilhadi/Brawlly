@@ -80,6 +80,6 @@ func _apply_color() -> void:
 	var color := NEUTRAL
 	if holder == -2:
 		color = CONTESTED
-	elif holder >= 0 and holder < Net.TEAM_COLORS.size():
-		color = Net.TEAM_COLORS[holder]
+	elif holder >= 0:
+		color = Net.team_color(holder)
 	_material.albedo_color = Color(color, 0.3)

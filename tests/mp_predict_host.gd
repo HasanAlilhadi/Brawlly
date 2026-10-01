@@ -2,7 +2,7 @@ extends Node
 var t := 0.0
 var started := false
 func _ready() -> void:
-	Net.set_profile("Hosty", 0); Net.host()
+	Net.set_profile("Hosty"); Net.host()
 func _process(delta: float) -> void:
 	t += delta
 	if not started and Net.players.size() >= 2:

@@ -3,7 +3,7 @@ var t := 0.0
 var phase := 0
 var pt := 0.0
 func _ready() -> void:
-	Net.set_profile("Clienty", 3)
+	Net.set_profile("Clienty")
 	await get_tree().create_timer(1.0).timeout
 	Net.join("127.0.0.1")
 func _log(m: String) -> void:

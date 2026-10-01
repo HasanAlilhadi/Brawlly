@@ -3,7 +3,7 @@ var t := 0.0
 var phase := 0
 var pt := 0.0
 func _ready() -> void:
-	Net.set_profile("Hosty", 0); Net.host()
+	Net.set_profile("Hosty"); Net.host()
 func _log(m: String) -> void:
 	printerr("HOST [%.1f] %s" % [t, m])
 func _process(delta: float) -> void:

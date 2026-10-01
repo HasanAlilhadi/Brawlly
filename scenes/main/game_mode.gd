@@ -216,7 +216,7 @@ func _finish_by_score() -> void:
 	elif match_mode == Net.Mode.DEATHMATCH:
 		finish("%s wins!" % player_name(best_key), "%d kill%s" % [best, "" if best == 1 else "s"])
 	else:
-		finish("%s team wins!" % Net.TEAM_NAMES[best_key], score_text())
+		finish("{team:%d} wins!" % best_key, score_text(true))
 
 
 func _publish() -> void:
@@ -234,8 +234,9 @@ func player_name(peer: int) -> String:
 	return _names.get(peer, Net.name_of(peer))
 
 
-## One-line summary for the HUD, e.g. "Red 3 - 2 Blue   4:12".
-func score_text() -> String:
+## One-line summary for the HUD, e.g. "Your team 3   Red 2   4:12" (`tokens`: team names as
+## Net.localize() tokens, for text the server sends to everyone).
+func score_text(tokens: bool = false) -> String:
 	var parts := PackedStringArray()
 	match match_mode:
 		Net.Mode.COOP:
@@ -247,7 +248,7 @@ func score_text() -> String:
 				parts.append("%s %d" % [player_name(peer), scores[peer]])
 		_:
 			for team in settings.team_count:
-				parts.append("%s %d" % [Net.TEAM_NAMES[team], scores.get(team, 0)])
+				parts.append("%s %d" % ["{label:%d}" % team if tokens else Net.team_label(team), scores.get(team, 0)])
 	var text := "   ".join(parts)
 	if uses_time_limit():
 		text += "   %d:%02d" % [int(time_left) / 60, int(time_left) % 60]
@@ -269,4 +270,4 @@ func _net_announce(message: String) -> void:
 @rpc("authority", "call_local", "reliable")
 func _net_match_over(title: String, subtitle: String) -> void:
 	is_over = true
-	match_over.emit(title, subtitle)
+	match_over.emit(Net.localize(title), Net.localize(subtitle))

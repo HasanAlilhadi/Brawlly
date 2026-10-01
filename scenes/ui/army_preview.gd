@@ -1,7 +1,7 @@
 class_name ArmyPreview
 extends SubViewportContainer
-## Small 3D preview of your class hero and two of its soldiers in a player color (used next to the color
-## picker). Each figure slowly turns in place.
+## Small 3D preview of your class hero and two of its soldiers in a player color (the lobby's class picker).
+## Each figure slowly turns in place.
 ## Uses the real unit scenes with AI, networking and groups removed. Call `set_color()` / `set_class()`.
 
 const PLAYER_SCENE := preload("res://scenes/characters/player.tscn")
@@ -11,7 +11,7 @@ const ALLY_SCENE := preload("res://scenes/characters/ally.tscn")
 
 var _viewport: SubViewport
 var _pivot: Node3D
-var _color: Color = Color.RED
+var _color: Color = Net.SELF_COLOR
 var _class: StringName = &""
 
 
@@ -52,6 +52,8 @@ func set_color(color: Color) -> void:
 
 
 func set_class(class_id: StringName) -> void:
+	if class_id == _class:
+		return
 	_class = class_id
 	if is_node_ready():
 		_rebuild()

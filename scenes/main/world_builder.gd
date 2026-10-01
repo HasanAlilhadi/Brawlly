@@ -216,9 +216,9 @@ func _add_town_identity(town: Node3D, access: Dictionary) -> void:
 		color = Net.color_of(owner_peer)
 		title = "Your Town" if owner_peer == Net.my_id() else "%s's Town" % Net.name_of(owner_peer)
 	elif team_id >= 0:
-		color = Net.TEAM_COLORS[team_id]
+		color = Net.team_color(team_id)
 		title = "Your Team's Town" if Net.team_of(Net.my_id()) == team_id \
-				else "%s Team Town" % Net.TEAM_NAMES[team_id]
+				else "%s Team Town" % Net.team_label(team_id)
 	town.set_meta(&"display_title", title)
 
 	var ring_mesh := TorusMesh.new()

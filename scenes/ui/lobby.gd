@@ -32,6 +32,7 @@ var _summary: VBoxContainer  # read-only settings for joined players
 var _countdown_overlay: Control
 var _countdown_number: Label
 var _class_picker: ClassPicker
+var _preview: ArmyPreview
 
 
 func _ready() -> void:
@@ -91,16 +92,21 @@ func _show_countdown(seconds: int) -> void:
 		await get_tree().create_timer(1.0).timeout
 
 
-## "Your class" right under the team buttons.
+## "Your class" right under the team buttons: a preview of your hero and soldiers (in your blue), then the tabs.
 func _build_class_picker() -> void:
 	var box := _team_row.get_parent()
 	var label := Label.new()
 	label.text = "Your class"
 	box.add_child(label)
 	box.move_child(label, _team_row.get_index() + 1)
+	_preview = ArmyPreview.new()
+	_preview.custom_minimum_size = Vector2(0, 170)
+	_preview.set_color(Net.SELF_COLOR)
+	box.add_child(_preview)
+	box.move_child(_preview, label.get_index() + 1)
 	_class_picker = ClassPicker.new()
 	box.add_child(_class_picker)
-	box.move_child(_class_picker, label.get_index() + 1)
+	box.move_child(_class_picker, _preview.get_index() + 1)
 	_class_picker.picked.connect(func(class_id: StringName) -> void:
 		if not Net.game_in_progress:
 			Net.set_class(class_id))
@@ -255,13 +261,15 @@ func _refresh() -> void:
 	if _team_row.visible:
 		for team in settings.team_count:
 			var button := Button.new()
-			button.text = "Join %s" % Net.TEAM_NAMES[team]
+			var mine: bool = Net.players.get(Net.my_id(), {}).get("team", -1) == team
+			button.text = "Your team" if mine else "Join %s" % Net.team_label(team)
 			button.theme_type_variation = &"ButtonBeige"
 			button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			button.custom_minimum_size = Vector2(0, 72)
 			button.add_theme_font_size_override("font_size", 26)
-			button.add_theme_color_override("font_color", Net.TEAM_COLORS[team].darkened(0.3))
-			button.disabled = Net.players.get(Net.my_id(), {}).get("team", -1) == team
+			button.add_theme_color_override("font_color", Net.team_color(team).darkened(0.3))
+			button.add_theme_color_override("font_disabled_color", Net.team_color(team).darkened(0.3))
+			button.disabled = mine
 			button.pressed.connect(Net.request_team.bind(team))
 			_team_row.add_child(button)
 
@@ -298,6 +306,7 @@ func _refresh() -> void:
 	_start_button.disabled = Net.game_in_progress
 	_start_button.text = "Start (%d players)" % Net.players.size()
 	_class_picker.select(Net.class_of(Net.my_id()))
+	_preview.set_class(Net.class_of(Net.my_id()))
 	_waiting.visible = not Net.is_host()
 	_updating = false
 
@@ -326,7 +335,7 @@ func _player_row(peer: int, team_mode: bool) -> Control:
 	if team_mode:
 		var team: int = Net.players[peer].get("team", 0)
 		var team_label := Label.new()
-		team_label.text = Net.TEAM_NAMES[team]
-		team_label.add_theme_color_override("font_color", Net.TEAM_COLORS[team].darkened(0.25))
+		team_label.text = Net.team_label(team)
+		team_label.add_theme_color_override("font_color", Net.team_color(team).darkened(0.25))
 		row.add_child(team_label)
 	return row
