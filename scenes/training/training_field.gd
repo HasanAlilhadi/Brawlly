@@ -2,8 +2,13 @@ class_name TrainingField
 extends Node3D
 ## Welcoming local practice area: class gallery, indestructible targets and concise onboarding UI.
 
-const SPAWN_POINT := Vector3(0.0, 0.0, 13.0)
+const SPAWN_POINT := Vector3(0.0, 0.0, -8.0)
 const SWITCH_RANGE: float = 2.2
+const ORC_STATION := Vector3(-13.0, 0.0, 4.0)
+const ORC_SPAWN_CENTER := Vector3(-8.8, 0.0, 4.0)
+const ORC_INTERACT_RANGE: float = 2.6
+const ORC_LIMIT: int = 8
+const ORC_SCENE := "res://scenes/characters/enemy.tscn"
 const TARGET_SCENE := preload("res://scenes/training/training_target.tscn")
 const BANNER_SCENE := preload("res://assets/environment/arena/banner.glb")
 const WEAPON_RACK_SCENE := preload("res://assets/environment/arena/weapon_rack.glb")
@@ -13,6 +18,8 @@ var _stations: Array[Dictionary] = []
 var _prompt_panel: PanelContainer
 var _prompt_label: Label
 var _nearby_class: StringName = &""
+var _nearby_orc_station := false
+var _next_orc_slot := 0
 
 
 func _ready() -> void:
@@ -20,20 +27,25 @@ func _ready() -> void:
 	_build_walls()
 	_build_gallery()
 	_build_targets()
+	_build_orc_station()
 	_build_decor()
 	_build_ui()
 
 
 func update_player(player: Player) -> void:
 	_nearby_class = nearby_class_id(player.global_position) if is_instance_valid(player) else &""
-	_prompt_panel.visible = _nearby_class != &""
-	if _nearby_class != &"":
+	_nearby_orc_station = is_instance_valid(player) and is_near_orc_station(player.global_position)
+	_prompt_panel.visible = _nearby_class != &"" or _nearby_orc_station
+	if _nearby_orc_station:
+		_prompt_label.text = "F   Spawn Orc  (%d/%d)" % [live_orc_count(), ORC_LIMIT]
+	elif _nearby_class != &"":
 		var def := ClassDef.find(_nearby_class)
 		_prompt_label.text = "F   Play as %s" % def.display_name
 
 
 func hide_prompt() -> void:
 	_nearby_class = &""
+	_nearby_orc_station = false
 	if _prompt_panel:
 		_prompt_panel.hide()
 
@@ -51,6 +63,41 @@ func nearby_class_id(at: Vector3) -> StringName:
 			best_distance = distance
 			best = station.id
 	return best
+
+
+func is_near_orc_station(at: Vector3) -> bool:
+	return Vector2(at.x - ORC_STATION.x, at.z - ORC_STATION.z).length() <= ORC_INTERACT_RANGE
+
+
+func live_orc_count() -> int:
+	var count := 0
+	for node in get_tree().get_nodes_in_group(&"training_orcs"):
+		if node is Enemy and not (node as Enemy).is_dead and not node.is_queued_for_deletion():
+			count += 1
+	return count
+
+
+## Training-only, server-authoritative. One F press creates one orc; nothing spawns on a timer.
+func spawn_orc(player: Player) -> Enemy:
+	if not multiplayer.is_server() or not is_instance_valid(player) or not player.training_mode \
+			or player.is_dead or not is_near_orc_station(player.global_position) or live_orc_count() >= ORC_LIMIT:
+		return null
+	for attempt in ORC_LIMIT:
+		var slot := (_next_orc_slot + attempt) % ORC_LIMIT
+		var angle := TAU * slot / float(ORC_LIMIT)
+		var spot := ORC_SPAWN_CENTER + Vector3(cos(angle), 0.0, sin(angle)) * 1.5
+		var occupied := false
+		for node in get_tree().get_nodes_in_group(&"training_orcs"):
+			if node is Enemy and not (node as Enemy).is_dead \
+					and (node as Enemy).global_position.distance_to(spot) < 0.9:
+				occupied = true
+				break
+		if occupied:
+			continue
+		_next_orc_slot = (slot + 1) % ORC_LIMIT
+		return NetSpawn.unit(&"enemy", spot, {"scene": ORC_SCENE, "strength": 1.0, "coins": 0.0,
+				"training_orc": true}) as Enemy
+	return null
 
 
 func _build_ground() -> void:
@@ -202,6 +249,44 @@ func _build_targets() -> void:
 		target.rotation.y = PI if i < 3 else -PI * 0.5
 		target.title = "Range Target" if i < 3 else "Combat Dummy"
 		add_child(target)
+
+
+func _build_orc_station() -> void:
+	var base := MeshInstance3D.new()
+	base.name = &"OrcPracticeStation"
+	var disk := CylinderMesh.new()
+	disk.top_radius = 0.95
+	disk.bottom_radius = 1.1
+	disk.height = 0.18
+	var stone := StandardMaterial3D.new()
+	stone.albedo_color = Color("695b4b")
+	stone.roughness = 0.9
+	disk.material = stone
+	base.mesh = disk
+	base.position = ORC_STATION + Vector3(0.0, 0.09, 0.0)
+	add_child(base)
+	var ring := MeshInstance3D.new()
+	var torus := TorusMesh.new()
+	torus.inner_radius = 0.83
+	torus.outer_radius = 1.02
+	var gold := StandardMaterial3D.new()
+	gold.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	gold.albedo_color = Color("f3bf4b")
+	torus.material = gold
+	ring.mesh = torus
+	ring.position = ORC_STATION + Vector3(0.0, 0.2, 0.0)
+	ring.scale.y = 0.12
+	add_child(ring)
+	_add_section_label("ORC PRACTICE\nF to spawn", ORC_STATION + Vector3(0.0, 2.1, 0.0), Color("ffd36b"), 42)
+	var spawn_ring := MeshInstance3D.new()
+	var spawn_torus := TorusMesh.new()
+	spawn_torus.inner_radius = 1.25
+	spawn_torus.outer_radius = 1.38
+	spawn_torus.material = gold
+	spawn_ring.mesh = spawn_torus
+	spawn_ring.position = ORC_SPAWN_CENTER + Vector3(0.0, 0.06, 0.0)
+	spawn_ring.scale.y = 0.1
+	add_child(spawn_ring)
 
 
 func _build_decor() -> void:

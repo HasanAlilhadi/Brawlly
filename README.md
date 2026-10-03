@@ -12,11 +12,12 @@ portrait on phones. There is no single player: host a game (alone is fine) or jo
   - **Swordsman** (`human.glb`): wide sword swings that cut through crowds, and a round shield. Soldiers: sword and shield.
   - **Spearman** (`keeper.glb`): straight spear stabs that pierce everything in a line; **E** switches to throwing spears
     (to become a purchase later), and a tall rectangular shield. Soldiers: spears (longer reach).
-  - **Bowman** (`archer.glb`): fast arrows. Soldiers: archers that stop at range and shoot.
+  - **Bowman** (`archer.glb`): fast arrows. **Bow Rain** marks a large area with X, then LMB rains arrows
+    into it. Soldiers: archers that stop at range and shoot.
   - **Shields** (Swordsman 150, Spearman 200): hold **right mouse** / LT / the touch shield button to raise it. It
     blocks every hit from the front (the damage goes into the shield) while up; you walk slower and can't attack.
     It breaks when worn out and comes back when you respawn (buying a new one: planned).
-  - Planned, not built yet: per-class upgrades and one special ability per class.
+  - Every class has a special ability charged by XP: Swordsman Whirlwind, Spearman Bull Rush, and Bowman Bow Rain.
 - Melee weapons are aim sticks (drag to keep swinging toward a direction, independent of movement); ranged = drag to
   aim, release to shoot. A tap auto-targets the nearest enemy. **Health** comes from potions (orc drops, chests).
 - **Chests** have five rarities: Common (gray), Uncommon (green), Rare (blue), Epic (purple), and Legendary (gold).
@@ -97,7 +98,8 @@ portrait on phones. There is no single player: host a game (alone is fine) or jo
 - Starts at the **main menu** (`scenes/ui/main_menu.tscn`, 3D camp backdrop from `menu_backdrop.tscn`):
   Training Field · Multiplayer (`multiplayer_menu.tscn`) · Controls · Quit. Lobby: `lobby.tscn`.
 - **Training Field** is a local onboarding area with every hero on display, unlimited special abilities and
-  indestructible damage targets. Stand beside a hero and press **F** to switch to it.
+  indestructible damage targets. Press **F** beside a hero to switch, or at the Orc Practice station to spawn
+  one orc (up to eight alive at once). Orcs never spawn on their own.
 - **Pause**: the II button (top left), Esc, or Android back → Resume / Restart / Main menu. Auto-pauses when the
   app goes to the background.
 - UI look: Kenney RPG UI pack via `resources/themes/rpg_theme.tres` (set as the project theme). Regenerate it with
@@ -112,13 +114,13 @@ portrait on phones. There is no single player: host a game (alone is fine) or jo
 | Action | Keyboard + mouse (PC) | Gamepad | Touch (phones) |
 |---|---|---|---|
 | Move | WASD / arrow keys | Left stick | Drag on the left side |
-| Choose training hero | F while beside a displayed hero | — | — |
+| Training: choose hero / spawn orc | F beside a hero / orc station | LB / View | — |
 | Sword / spear | Left mouse — swings / thrusts toward the cursor while held · J = nearest enemy | RB / X (nearest enemy) | Weapon stick: drag = direction, tap = nearest |
 | Bow / spear throw | Right mouse — hold to aim at the cursor, release to shoot | Right stick aims · RT / A shoots | Aim stick: drag to aim, release to shoot |
 | Quick shot (nearest enemy) | K | RT / A without aiming | Tap the aim stick |
 | Spearman: thrust ⇄ throw | E | Y | Small button above the weapon stick |
 | Shield (Swordsman, Spearman) | Right mouse (hold; turns toward the cursor) | LT (hold) | Shield button left of the weapon stick |
-| Use a stall | B | LB / View | Stall button |
+| Use a stall | F | LB / View | Stall button |
 | Pause | Esc / P | Start | II button / Android back |
 | Army orders (follow / charge / hold) | 1 / 2 / 3 (charge / hold at the cursor) | D-pad up / right / down | Buttons under the soldier count |
 | Ping · call for help | G or middle mouse · H | D-pad left | "!" button (online) |
@@ -126,7 +128,7 @@ portrait on phones. There is no single player: host a game (alone is fine) or jo
 
 All bindings are listed in-game under **main menu → Controls** (`scenes/ui/controls_menu.gd` — update it when
 bindings change). Bindings are Input Map actions (Project Settings → Input Map): `move_*`, `aim_*`, `attack`, `aim_bow`, `shoot`,
-`switch_weapon`, `block`, `interact`, `training_interact`, `pause`, `toggle_fullscreen`, `army_follow` / `army_charge` / `army_hold`, `ping`, `ping_help`. Touch controls appear on a PC only when a touchscreen is used.
+`switch_weapon`, `block`, `interact`, `pause`, `toggle_fullscreen`, `army_follow` / `army_charge` / `army_hold`, `ping`, `ping_help`. Touch controls appear on a PC only when a touchscreen is used.
 
 ### Desktop vs. mobile (`scripts/autoload/platform.gd`, autoload `Platform`)
 

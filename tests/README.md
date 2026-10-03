@@ -10,11 +10,14 @@ Run from the project folder (`G` = the Godot binary). Tests start the game norma
 # and no --fixed-fps (it races ahead of real time and the connection times out)
 "$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/ui_flow_test.gd
 
-# Training Field: menu entry, unlimited special ability, permanent damage targets (sword, arrow and thrown spear hit them), switch hero at the gallery
+# Training Field: menu entry, unlimited special ability, permanent damage targets, F-only manual orc spawning, switch hero at the gallery
 "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/training_test.gd
 
-# Spearman Bull Rush: three-second shield charge, front protection, heavy steering, correct spear grip, one hit per target
+# Spearman Bull Rush: three-second shield charge, front protection, heavy steering, correct spear grip, one hit per target, passes through real orcs
 "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/bull_rush_test.gd --class=spearman
+
+# Bowman Bow Rain: placed ground area, server-authoritative falling arrows, duration and cleanup
+"$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/bow_rain_test.gd
 
 # Solo: chest, tree, camp (gives no soldiers), trading post (buy only at the right stall), barracks (queue 10 s each, pen, take at the gate, 8 soldiers leave the pen, army cap 10 → 15), death
 "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/solo_test.gd
@@ -30,7 +33,7 @@ Run from the project folder (`G` = the Godot binary). Tests start the game norma
 # (key 4, HUD Kill + click), CHARGE after the kill, a KILL that misses charges there
 "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/army_test.gd
 
-# Desktop controls (Spearman): WASD, mouse thrust (aim wedge) / E → throw, K, B at a trading post stall, camera zoom per weapon, R rotates the camera 90°, touch controls hidden until a real touch
+# Desktop controls (Spearman): WASD, mouse thrust (aim wedge) / E → throw, K, F at a trading post stall, camera zoom per weapon, R rotates the camera 90°, touch controls hidden until a real touch
 "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/desktop_input_test.gd --class=spearman
 
 # Shield (Swordsman, or --class=spearman): blocks from the front only while up, slower, no attacks, breaks, back on respawn

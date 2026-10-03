@@ -1,6 +1,6 @@
 extends Node
 ## Desktop controls, as a Spearman: WASD moves, left mouse thrusts toward the cursor (hits exactly the aim wedge), E switches
-## to throwing, right mouse aims + throws on release, K throws at the nearest enemy (Space does nothing), B does nothing away
+## to throwing, right mouse aims + throws on release, K throws at the nearest enemy (Space does nothing), F does nothing away
 ## from a stall and opens / closes the Blacksmith's shop at it, and touch controls stay hidden.
 ##   "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/desktop_input_test.gd --class=spearman
 
@@ -187,12 +187,12 @@ func _process(delta: float) -> void:
 				space.physical_keycode = KEY_SPACE
 				_check(InputMap.get_actions().all(func(action: StringName) -> bool:
 						return action.begins_with("ui_") or not InputMap.event_is_action(space, action)), "Space is not bound to any game action")
-				_key(KEY_B, true)
-				_key(KEY_B, false)
+				_key(KEY_F, true)
+				_key(KEY_F, false)
 				_next()
 		6:
 			if pt > 0.2 and not at_stall:
-				_check(not main.shop_menu.visible and not hud._stall_prompt.visible, "B does nothing away from a stall")
+				_check(not main.shop_menu.visible and not hud._stall_prompt.visible, "F does nothing away from a stall")
 				_check_stall_sides()
 				for stall: ShopStation in get_tree().get_nodes_in_group(&"shop_stations"):
 					if stall.stall_id == &"blacksmith":
@@ -202,20 +202,20 @@ func _process(delta: float) -> void:
 				pt = 0.0
 			elif at_stall and pt > 0.3:
 				_check(hud._stall_prompt.visible, "the stall prompt shows at the Blacksmith")
-				_key(KEY_B, true)
-				_key(KEY_B, false)
+				_key(KEY_F, true)
+				_key(KEY_F, false)
 				_next()
 		7:
 			if pt > 0.2:
-				_check(main.shop_menu.visible and main.shop_menu._title.text == "Blacksmith", "B opens the Blacksmith's shop")
+				_check(main.shop_menu.visible and main.shop_menu._title.text == "Blacksmith", "F opens the Blacksmith's shop")
 				var rows: Array = main.shop_menu._rows.filter(func(r: Dictionary) -> bool: return (r.panel as Control).visible)
 				_check(rows.size() == 1 and rows[0].def.id == &"blade", "it only sells the Sharp Blade")
-				_key(KEY_B, true)
-				_key(KEY_B, false)
+				_key(KEY_F, true)
+				_key(KEY_F, false)
 				_next()
 		8:
 			if pt > 0.2:
-				_check(not main.shop_menu.visible, "B closes the shop")
+				_check(not main.shop_menu.visible, "F closes the shop")
 				var touch := InputEventScreenTouch.new()
 				touch.pressed = true
 				touch.position = Vector2(50, 50)

@@ -87,6 +87,7 @@ var _mouse_click_left: float = 0.0
 var _last_ping_ms: Dictionary = {}  # peer -> time of their last ping (server)
 var _training_switching: bool = false
 var _training_welcomed: bool = false
+var _bow_rain_targeting: bool = false
 
 
 func _ready() -> void:
@@ -244,6 +245,8 @@ func _spawn_unit(data: Dictionary) -> Node:
 			enemy.throw_damage *= data.strength
 			enemy.coin_multiplier = data.coins
 			unit = enemy
+			if data.get("training_orc", false):
+				unit.add_to_group(&"training_orcs")
 	unit.name = data.name
 	unit.position = data.pos
 	unit.team_id = data.get("team", GameConfig.ORC_TEAM)
@@ -271,6 +274,10 @@ func _spawn_item(data: Dictionary) -> Node:
 		projectile.team_id = data.team
 		projectile.owner_peer = data.owner
 		projectile.shooter_path = data.shooter
+		projectile.check_shooter_origin = data.get("check_shooter_origin", true)
+		projectile.rain_arrow = data.get("rain_arrow", false)
+		if data.get("speed", 0.0) > 0.0:
+			projectile.speed = data.speed
 		node = projectile
 	node.name = data.name
 	return node
@@ -304,6 +311,7 @@ func _spawn_player(peer: int, class_override: StringName = &"", position_overrid
 
 
 func _bind_local_player(player: Player) -> void:
+	_cancel_bow_rain()
 	local_player = player
 	if not multiplayer.is_server():
 		player.enable_prediction()  # move instantly on this device, the server corrects drift
@@ -393,7 +401,7 @@ func _physics_process(delta: float) -> void:
 	var block := local_player.can_block() and (_mouse_block or pad_block or hud.shield_button.is_held)
 	if block and _mouse_block:
 		aim = _cursor_direction()
-	var use_held := _attack_key_held() or Input.is_action_pressed(&"shoot")
+	var use_held := (_attack_key_held() or Input.is_action_pressed(&"shoot")) and not _bow_rain_targeting
 	var melee_held := melee and not block and melee_aim == Vector3.ZERO and (hud.melee_button.is_held or use_held)
 	var shoot_held := not melee and use_held
 	if multiplayer.is_server():
@@ -431,6 +439,22 @@ func _unhandled_input(event: InputEvent) -> void:
 	var button := event as InputEventMouseButton
 	var real_click := button != null and button.pressed and button.device != InputEvent.DEVICE_ID_EMULATION \
 			and not Platform.mobile_layout
+	if _bow_rain_targeting:
+		if real_click:
+			if button.button_index == MOUSE_BUTTON_LEFT:
+				_confirm_bow_rain(_pointer_point())
+			else:
+				_cancel_bow_rain()
+			get_viewport().set_input_as_handled()
+			return
+		if event.is_action_pressed(&"ability") and not event.is_echo():
+			_cancel_bow_rain()
+			get_viewport().set_input_as_handled()
+			return
+		if (event.is_action_pressed(&"attack") or event.is_action_pressed(&"shoot")) and not event.is_echo():
+			_confirm_bow_rain(_pointer_point())
+			get_viewport().set_input_as_handled()
+			return
 	if _kill_picking and real_click:
 		# Picking the kill target: left click orders it, any other button cancels. No swing / shot.
 		_set_kill_picking(false)
@@ -450,8 +474,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		_switch_weapon()
 	elif event.is_action_pressed(&"ability") and not event.is_echo():
 		_use_ability()
-	elif training_mode and event.is_action_pressed(&"training_interact") and not event.is_echo():
-		_switch_training_class()
+	elif event.is_action_pressed(&"interact") and not event.is_echo() and training_mode:
+		_interact_training()
 		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed(&"rotate_camera") and not event.is_echo():
 		camera.rotate_step(1)
@@ -548,7 +572,36 @@ func _use_ability() -> void:
 		return
 	_mouse_attack = false
 	_mouse_block = false
+	if local_player.class_def.ability == &"bow_rain":
+		_bow_rain_targeting = true
+		_mouse_bow = false
+		_update_bow_rain_target()
+		return
 	local_player.request_ability()
+
+
+func _update_bow_rain_target() -> void:
+	if not _bow_rain_targeting:
+		return
+	if local_player == null or not local_player.ability_ready() or local_player.class_def.ability != &"bow_rain":
+		_cancel_bow_rain()
+		return
+	local_player.set_bow_rain_preview(_pointer_point(), true)
+
+
+func _confirm_bow_rain(point: Vector3) -> void:
+	if not _bow_rain_targeting or local_player == null:
+		return
+	var target := local_player.clamp_bow_rain_point(point)
+	_bow_rain_targeting = false
+	local_player.set_bow_rain_preview(target, false)
+	local_player.request_bow_rain(target)
+
+
+func _cancel_bow_rain() -> void:
+	_bow_rain_targeting = false
+	if local_player and is_instance_valid(local_player):
+		local_player.set_bow_rain_preview(Vector3.ZERO, false)
 
 
 ## E / Y / the HUD switch button: next weapon in hand (drops any aim in progress).
@@ -558,6 +611,7 @@ func _switch_weapon() -> void:
 	_mouse_bow = false
 	_mouse_attack = false
 	_mouse_block = false
+	_cancel_bow_rain()
 	hud.reset_touch_controls()
 	local_player.request_switch_weapon()
 
@@ -572,6 +626,10 @@ func _melee_once() -> void:
 
 
 func _on_bow_released(aim: Vector2) -> void:
+	if _bow_rain_targeting and local_player:
+		var direction := _screen_to_world(aim).normalized()
+		_confirm_bow_rain(local_player.global_position + direction * Player.BOW_RAIN_RANGE)
+		return
 	_fire(_screen_to_world(aim))
 	if local_player:
 		local_player.clear_aim()
@@ -587,6 +645,7 @@ func _fire(direction: Vector3) -> void:
 
 
 func _on_paused() -> void:
+	_cancel_bow_rain()
 	hud.reset_touch_controls()
 	_mouse_attack = false
 	_mouse_bow = false
@@ -602,6 +661,7 @@ func _on_paused() -> void:
 
 func _process(delta: float) -> void:
 	_vibrate_cooldown -= delta
+	_update_bow_rain_target()
 	_update_respawn_display(delta)
 	_update_stall()
 	_update_town()
@@ -638,6 +698,17 @@ func _switch_training_class() -> void:
 		replacement.face_now(Vector3.FORWARD)
 		hud.show_toast("Now training as %s — abilities are unlimited." % replacement.class_def.display_name, 3.5)
 	_training_switching = false
+
+
+## F near a class pedestal switches hero; F near the orc station spawns one live orc.
+func _interact_training() -> void:
+	if not training_field or not is_instance_valid(local_player) or local_player.is_dead:
+		return
+	if training_field.is_near_orc_station(local_player.global_position):
+		if training_field.spawn_orc(local_player) == null:
+			hud.show_toast("Orc practice is full. Defeat an orc to spawn another.")
+		return
+	_switch_training_class()
 
 
 ## Default zoom + a bit more with the bow / spear in hand.

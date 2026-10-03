@@ -13,6 +13,8 @@ const WAVE_TARGET_GROUPS: Array[StringName] = [&"players"]
 const XP_PER_HEALTH: float = 0.025
 ## Largest XP orb; bigger drops are split.
 const XP_ORB: int = 10
+## Extra reaction time before any orc's first melee swing or throw starts.
+const FIRST_ATTACK_DELAY: float = 0.25
 
 @export var aggro_range: float = 6.5
 ## Beyond this distance from home a calm orc stops chasing and walks back.
@@ -65,6 +67,8 @@ var _base_speed: float
 var _alert_label: Label3D
 var _alert_tween: Tween
 var _throw_timer: float = 0.0
+## -1 until the first attack is attempted; then counts down once for either weapon.
+var _first_attack_delay_left: float = -1.0
 ## Server: last hit time (ms) per player peer, for combos.
 var _player_hits: Dictionary = {}
 var _last_combo_ms: int = -100000
@@ -161,6 +165,8 @@ func _on_damaged(attacker: Node3D) -> void:
 
 
 func _get_move_input(delta: float) -> Vector3:
+	if _first_attack_delay_left > 0.0:
+		_first_attack_delay_left = maxf(_first_attack_delay_left - delta, 0.0)
 	if _provoked_time > 0.0:
 		_provoked_time -= delta
 		if _provoked_time <= 0.0:
@@ -181,6 +187,19 @@ func _get_move_input(delta: float) -> Vector3:
 	if to_point.length() > 0.3:
 		return steer(to_point.normalized() * (1.0 if _returning else 0.35), delta)
 	return Vector3.ZERO
+
+
+func _first_attack_ready() -> bool:
+	if _first_attack_delay_left < 0.0:
+		_first_attack_delay_left = FIRST_ATTACK_DELAY
+		return false
+	return _first_attack_delay_left <= 0.0
+
+
+func melee() -> bool:
+	if is_dead or _melee_timer > 0.0 or not _first_attack_ready():
+		return false
+	return super()
 
 
 func _think() -> void:
@@ -238,6 +257,8 @@ func _ranged_move(delta: float) -> Vector3:
 
 func _try_throw() -> void:
 	if _throw_timer > 0.0 or _action_time > 0.0:
+		return
+	if not _first_attack_ready():
 		return
 	_throw_timer = throw_cooldown * randf_range(0.85, 1.15)
 	play_action("attack-melee-right", 0.4 / anim_speed, ARM_RIGHT)

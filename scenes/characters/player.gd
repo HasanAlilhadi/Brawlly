@@ -15,7 +15,7 @@ extends Unit
 ## Army orders: `command_army()` tells this player's soldiers to follow, charge a point or hold a point.
 ## Special ability (ClassDef.ability, X / R3): enemies drop XP orbs (Enemy.xp_drop); with ClassDef.ability_xp
 ## collected, `use_ability()` spends it. Swordsman: Whirlwind (`_whirlwind_*`); Spearman: Bull Rush
-## (`_bull_rush_*`).
+## (`_bull_rush_*`). Bowman: Bow Rain (`_bow_rain_*`).
 
 signal coins_changed(count: int)
 signal upgrades_changed
@@ -164,6 +164,18 @@ const BULL_RUSH_DAMAGE: float = 2.0
 const BULL_RUSH_RADIUS: float = 0.72
 ## Heavy steering: normal movement turns immediately; Bull Rush can turn only this many degrees per second.
 const BULL_RUSH_TURN_SPEED: float = 105.0
+## Bow Rain (Bowman ability): X enters placement mode and LMB confirms the ground target. Arrows fall
+## across this radius for the ability duration. These values are intentionally centralized for tuning.
+const BOW_RAIN_RADIUS: float = 4.05
+const BOW_RAIN_RANGE: float = 14.0
+const BOW_RAIN_HEIGHT: float = 7.0
+const BOW_RAIN_TOTAL_ARROWS: int = 100
+const BOW_RAIN_TARGETED_ARROWS: int = 5
+const BOW_RAIN_COVERAGE_BLOCK: int = 10
+const BOW_RAIN_DAMAGE: float = 0.45
+const BOW_RAIN_ARROW_SPEED: float = 16.0
+const BOW_RAIN_EDGE_MARGIN: float = 0.25
+const BOW_RAIN_SHADER := preload("res://assets/shaders/bow_rain_area.gdshader")
 
 @export var arrow_damage: float = 25.0
 @export var shoot_cooldown: float = 0.4
@@ -294,6 +306,12 @@ var ability_active: bool = false:
 			ability_active = value
 			if is_node_ready():
 				_apply_ability()
+## Replicated center of an active Bow Rain. The server clamps it to BOW_RAIN_RANGE before starting.
+var bow_rain_target: Vector3 = Vector3.ZERO:
+	set(value):
+		bow_rain_target = value
+		if is_node_ready():
+			_place_bow_rain_area()
 var weapon_index: int = 0:
 	set(value):
 		if value != weapon_index:
@@ -337,7 +355,7 @@ var _shield_raise: float = 0.0  # 0 carried .. 1 up in front (blends while it go
 var _shield_raise_tween: Tween
 var _ability_left: float = 0.0  # server: seconds of the ability left
 var _ability_xp_lockout_left: float = 0.0  # server: seconds until XP collection is enabled again
-var _ability_tick: float = 0.0  # server: next Whirlwind hit
+var _ability_tick: float = 0.0  # server: next Whirlwind hit / Bow Rain arrow
 var _spin_angle: float = 0.0  # every peer: total Whirlwind turn, independent of movement facing
 var _spin_world_yaw: float = 0.0  # visible body yaw; movement may still turn the model underneath it
 var _whirlwind_arc: MeshInstance3D  # one reusable effect; moved instead of spawned every frame
@@ -345,6 +363,12 @@ var _bull_rush_direction: Vector3 = Vector3.ZERO
 var _bull_rush_last_position: Vector3 = Vector3.ZERO
 var _bull_rush_hit_ids: Dictionary = {}
 var _bull_rush_exceptions: Array[PhysicsBody3D] = []
+var _bull_rush_saved_mask: int = -1
+var _bow_rain_area: MeshInstance3D
+var _bow_rain_previewing: bool = false
+var _bow_rain_fired: int = 0
+var _bow_rain_targeted_fired: int = 0
+var _bow_rain_offsets: Array[Vector2] = []
 
 
 ## Every peer, at spawn and before entering the tree: the class's model (replaces the scene's
@@ -405,6 +429,7 @@ func _ready() -> void:
 	_build_melee_indicator()
 	_build_name_label()
 	_build_downed_visuals()
+	_build_bow_rain_area()
 	var spear := _attach_spear() if weapons.has("spear") or weapons.has("javelin") else null
 	# Hand items that are weapons (the left one can be a shield instead of the bow).
 	_weapon_items = {"sword": _right_item if weapons.has("sword") else null, "bow": _left_item if weapons.has("bow") else null,
@@ -624,7 +649,11 @@ func _shield_blocks(attacker: Node3D) -> bool:
 		return true
 	var to := attacker.global_position - global_position
 	to.y = 0.0
-	return to.length() < 0.05 or rad_to_deg(facing().angle_to(to)) <= BLOCK_ARC * 0.5
+	# The body turns smoothly while steering, but the Bull Rush shield guards the
+	# direction of travel immediately. Keep the normal shield arc and durability.
+	var guard_direction := _bull_rush_direction if _is_bull_rushing() \
+			and _bull_rush_direction.length_squared() > 0.0001 else facing()
+	return to.length() < 0.05 or rad_to_deg(guard_direction.angle_to(to)) <= BLOCK_ARC * 0.5
 
 
 func _block(amount: float) -> void:
@@ -1109,6 +1138,21 @@ func ability_ready() -> bool:
 func use_ability() -> void:
 	if not ability_ready():
 		return
+	# Bow Rain needs a confirmed ground point; use_bow_rain() starts it instead.
+	if class_def.ability == &"bow_rain":
+		return
+	_begin_ability()
+
+
+## Server: starts a placed Bow Rain after validating and clamping its target.
+func use_bow_rain(point: Vector3) -> void:
+	if not ability_ready() or class_def.ability != &"bow_rain" or not point.is_finite():
+		return
+	bow_rain_target = clamp_bow_rain_point(point)
+	_begin_ability()
+
+
+func _begin_ability() -> void:
 	if not training_mode:
 		xp -= class_def.ability_xp
 		_ability_xp_lockout_left = class_def.ability_xp_lockout
@@ -1119,7 +1163,11 @@ func use_ability() -> void:
 		if spear_index >= 0:
 			weapon_index = spear_index
 	_ability_left = class_def.ability_duration
-	_ability_tick = WHIRLWIND_TICK
+	_ability_tick = 0.0 if class_def.ability == &"bow_rain" else WHIRLWIND_TICK
+	_bow_rain_fired = 0
+	_bow_rain_targeted_fired = 0
+	if class_def.ability == &"bow_rain":
+		_prepare_bow_rain_offsets()
 	shield_up = false
 	ability_active = true
 
@@ -1132,10 +1180,24 @@ func request_ability() -> void:
 		net_ability.rpc_id(1)
 
 
+## Local input: confirms Bow Rain at a world-space ground point.
+func request_bow_rain(point: Vector3) -> void:
+	if multiplayer.is_server():
+		use_bow_rain(point)
+	else:
+		net_bow_rain.rpc_id(1, point)
+
+
 @rpc("any_peer", "call_remote", "reliable")
 func net_ability() -> void:
 	if _from_owner():
 		use_ability()
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func net_bow_rain(point: Vector3) -> void:
+	if _from_owner():
+		use_bow_rain(point)
 
 
 ## Server, every physics frame while it runs.
@@ -1148,6 +1210,13 @@ func _update_ability(delta: float) -> void:
 			_whirlwind_hit()
 	elif class_def.ability == &"bull_rush":
 		_bull_rush_hit()
+	elif class_def.ability == &"bow_rain":
+		_ability_tick -= delta
+		var arrow_interval := class_def.ability_duration / float(BOW_RAIN_TOTAL_ARROWS)
+		while _ability_tick <= 0.0 and _bow_rain_fired < BOW_RAIN_TOTAL_ARROWS:
+			_ability_tick += arrow_interval
+			_bow_rain_arrow()
+			_bow_rain_fired += 1
 	if _ability_left <= 0.0:
 		ability_active = false
 
@@ -1164,7 +1233,8 @@ func _update_ability_xp_lockout(delta: float) -> void:
 ## Every peer: start / end the ability's look (and the speed / arms that go with it).
 func _apply_ability() -> void:
 	_update_move_speed()
-	if ability_active:
+	var takes_over_weapon := class_def.ability != &"bow_rain"
+	if ability_active and takes_over_weapon:
 		# The special pose owns the weapon until it ends. Do not let a normal attack tween keep moving it.
 		if _slash_tween:
 			_slash_tween.kill()
@@ -1175,6 +1245,10 @@ func _apply_ability() -> void:
 		_spin_world_yaw = model.rotation.y
 		_action_time = 0.0
 		if class_def.ability == &"bull_rush":
+			# Enemy bodies cannot halt the charge. The separate spear sweep still detects and damages them.
+			if multiplayer.is_server() and _bull_rush_saved_mask < 0:
+				_bull_rush_saved_mask = collision_mask
+				collision_mask &= ~GameConfig.LAYER_ENEMIES
 			if _bull_rush_direction.length_squared() < 0.0001:
 				_bull_rush_direction = facing()
 			_bull_rush_direction.y = 0.0
@@ -1182,6 +1256,9 @@ func _apply_ability() -> void:
 			_bull_rush_last_position = global_position
 			_bull_rush_hit_ids.clear()
 	elif class_def.ability == &"bull_rush":
+		if multiplayer.is_server() and _bull_rush_saved_mask >= 0:
+			collision_mask = _bull_rush_saved_mask
+			_bull_rush_saved_mask = -1
 		_clear_bull_rush_exceptions()
 		_bull_rush_direction = Vector3.ZERO
 	if class_def.ability == &"whirlwind":
@@ -1189,14 +1266,133 @@ func _apply_ability() -> void:
 			_ensure_whirlwind_arc()
 		if is_instance_valid(_whirlwind_arc):
 			_whirlwind_arc.visible = ability_active and not is_dead
+	if class_def.ability == &"bow_rain":
+		_refresh_bow_rain_area()
 	if class_def.shield != null:
 		_apply_shield()
-	_hold_arms()
+	if takes_over_weapon:
+		_hold_arms()
 	ability_changed.emit()
 
 
 func _is_bull_rushing() -> bool:
 	return ability_active and class_def != null and class_def.ability == &"bull_rush"
+
+
+## Same range rule is used by the local preview and by the authoritative server.
+func clamp_bow_rain_point(point: Vector3) -> Vector3:
+	var offset := point - global_position
+	offset.y = 0.0
+	if offset.length() > BOW_RAIN_RANGE:
+		offset = offset.normalized() * BOW_RAIN_RANGE
+	return global_position + offset
+
+
+## Local-only placement preview. Active casts are shown on every peer via bow_rain_target replication.
+func set_bow_rain_preview(point: Vector3, shown: bool) -> void:
+	_bow_rain_previewing = shown and class_def != null and class_def.ability == &"bow_rain"
+	if _bow_rain_previewing:
+		bow_rain_target = clamp_bow_rain_point(point)
+	_refresh_bow_rain_area()
+
+
+func _build_bow_rain_area() -> void:
+	_bow_rain_area = MeshInstance3D.new()
+	_bow_rain_area.name = &"BowRainArea"
+	_bow_rain_area.top_level = true
+	var mesh := PlaneMesh.new()
+	mesh.size = Vector2.ONE * BOW_RAIN_RADIUS * 2.0
+	_bow_rain_area.mesh = mesh
+	var material := ShaderMaterial.new()
+	material.shader = BOW_RAIN_SHADER
+	_bow_rain_area.material_override = material
+	_bow_rain_area.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_bow_rain_area.visible = false
+	add_child(_bow_rain_area)
+	_place_bow_rain_area()
+
+
+func _place_bow_rain_area() -> void:
+	if not is_instance_valid(_bow_rain_area):
+		return
+	_bow_rain_area.global_position = bow_rain_target + Vector3(0.0, 0.035, 0.0)
+	_refresh_bow_rain_area()
+
+
+func _refresh_bow_rain_area() -> void:
+	if not is_instance_valid(_bow_rain_area):
+		return
+	var active := ability_active and class_def != null and class_def.ability == &"bow_rain" and not is_dead
+	_bow_rain_area.visible = _bow_rain_previewing or active
+	var material := _bow_rain_area.material_override as ShaderMaterial
+	material.set_shader_parameter(&"opacity", 1.0 if _bow_rain_previewing else 0.85)
+	material.set_shader_parameter(&"active", 1.0 if active and not _bow_rain_previewing else 0.0)
+
+
+## Server: each short run covers every angle and equal-area radial band once, with jittered points
+## and shuffled order. This avoids empty patches without creating a visible repeated pattern.
+func _prepare_bow_rain_offsets() -> void:
+	_bow_rain_offsets.clear()
+	var max_radius := BOW_RAIN_RADIUS - BOW_RAIN_EDGE_MARGIN
+	for block_start in range(0, BOW_RAIN_TOTAL_ARROWS, BOW_RAIN_COVERAGE_BLOCK):
+		var count := mini(BOW_RAIN_COVERAGE_BLOCK, BOW_RAIN_TOTAL_ARROWS - block_start)
+		var sectors: Array[int] = []
+		var bands: Array[int] = []
+		for index in count:
+			sectors.append(index)
+			bands.append(index)
+		sectors.shuffle()
+		bands.shuffle()
+		var rotation := randf() * TAU
+		for index in count:
+			var angle := rotation + (sectors[index] + randf()) * TAU / float(count)
+			var radius := sqrt((bands[index] + randf()) / float(count)) * max_radius
+			_bow_rain_offsets.append(Vector2(cos(angle), sin(angle)) * radius)
+
+
+## Server: pick from live, hostile targets inside the marked circle. Cycling the sorted list
+## spreads the five aimed arrows fairly instead of repeatedly choosing the nearest enemy.
+func _bow_rain_target_for_next_arrow() -> Node3D:
+	var interval := BOW_RAIN_TOTAL_ARROWS / BOW_RAIN_TARGETED_ARROWS
+	if _bow_rain_fired % interval != interval / 2:
+		return null
+	var candidates: Array[Node3D] = []
+	for group in [&"units", &"breakable"]:
+		for node in get_tree().get_nodes_in_group(group):
+			if not node is Node3D or node == self or GameConfig.is_gone(node) \
+					or node.is_queued_for_deletion() or not node.has_method("take_damage") \
+					or not GameConfig.is_hostile(self, node):
+				continue
+			var target_node := node as Node3D
+			var delta := target_node.global_position - bow_rain_target
+			if Vector2(delta.x, delta.z).length() <= BOW_RAIN_RADIUS and not candidates.has(target_node):
+				candidates.append(target_node)
+	if candidates.is_empty():
+		return null
+	candidates.sort_custom(func(a: Node3D, b: Node3D) -> bool:
+		return a.get_instance_id() < b.get_instance_id())
+	var chosen := candidates[_bow_rain_targeted_fired % candidates.size()]
+	_bow_rain_targeted_fired += 1
+	return chosen
+
+
+## Server: fire the next precomputed landing point.
+func _bow_rain_arrow() -> void:
+	var offset := _bow_rain_offsets[_bow_rain_fired]
+	var landing := bow_rain_target + Vector3(offset.x, 0.0, offset.y)
+	var aimed_target := _bow_rain_target_for_next_arrow()
+	if aimed_target != null:
+		var predicted := aimed_target.global_position
+		if aimed_target is CharacterBody3D:
+			predicted += (aimed_target as CharacterBody3D).velocity \
+					* (BOW_RAIN_HEIGHT / BOW_RAIN_ARROW_SPEED)
+		var aimed_offset := Vector2(predicted.x - bow_rain_target.x, predicted.z - bow_rain_target.z) \
+				.limit_length(BOW_RAIN_RADIUS - BOW_RAIN_EDGE_MARGIN)
+		landing = bow_rain_target + Vector3(aimed_offset.x, 0.0, aimed_offset.y)
+	var from := Vector3(landing.x, bow_rain_target.y + BOW_RAIN_HEIGHT, landing.z)
+	var crit := randf() < crit_chance
+	var damage := arrow_damage * BOW_RAIN_DAMAGE * (crit_multiplier if crit else 1.0)
+	NetSpawn.projectile(&"arrow", from, Vector3.DOWN, damage, self, crit, false, BOW_RAIN_ARROW_SPEED, true)
 
 
 ## Turn toward held movement input at a limited rate. Releasing WASD keeps the current momentum.
@@ -1236,7 +1432,8 @@ func _bull_rush_hit() -> void:
 			if _bull_rush_hit_ids.has(id):
 				continue
 			_bull_rush_hit_ids[id] = true
-			if collider is PhysicsBody3D and collider.is_in_group(&"active_enemies"):
+			if collider is PhysicsBody3D and collider.is_in_group(&"active_enemies") \
+					and (collider.collision_layer & GameConfig.LAYER_ENEMIES) == 0:
 				var body := collider as PhysicsBody3D
 				add_collision_exception_with(body)
 				_bull_rush_exceptions.append(body)
@@ -1304,7 +1501,7 @@ func _whirlwind_local_yaw() -> float:
 ## The spin's turn of the skeleton, in the model's space (identity when not spinning).
 func _spin_transform() -> Transform3D:
 	var local_yaw := _whirlwind_local_yaw()
-	if not ability_active or is_zero_approx(local_yaw):
+	if not ability_active or class_def.ability != &"whirlwind" or is_zero_approx(local_yaw):
 		return Transform3D.IDENTITY
 	return _slash_skeleton_rest * Transform3D(Basis(Vector3.UP, local_yaw)) * _slash_skeleton_rest.affine_inverse()
 
@@ -1414,7 +1611,7 @@ func is_aiming() -> bool:
 ## Fires the ranged weapon in hand (arrow, or a thrown spear) toward `direction`, or at the nearest
 ## enemy when no direction is given. Server only.
 func shoot(direction: Vector3 = Vector3.ZERO) -> void:
-	if is_dead or is_downed or not holds_ranged():
+	if is_dead or is_downed or (ability_active and class_def.ability != &"bow_rain") or not holds_ranged():
 		return
 	if _shoot_timer > 0.0:
 		if direction != Vector3.ZERO:

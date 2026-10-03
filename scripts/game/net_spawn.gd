@@ -35,9 +35,11 @@ static func pickup(kind: int, amount: int, position: Vector3) -> void:
 
 ## kind: &"arrow", &"spear" (orc throwers) or &"player_spear" (hits orcs).
 static func projectile(kind: StringName, from: Vector3, direction: Vector3, damage: float, shooter: Node,
-		crit: bool = false) -> void:
+		crit: bool = false, check_shooter_origin: bool = true, speed: float = 0.0,
+		rain_arrow: bool = false) -> void:
 	if not _is_server():
 		return
 	items.spawn({"kind": kind, "pos": from, "dir": direction, "damage": damage, "crit": crit,
 			"team": shooter.get("team_id"), "owner": GameConfig.owner_peer_of(shooter),
-			"shooter": shooter.get_path(), "name": _name(kind)})
+			"shooter": shooter.get_path(), "check_shooter_origin": check_shooter_origin,
+			"speed": speed, "rain_arrow": rain_arrow, "name": _name(kind)})

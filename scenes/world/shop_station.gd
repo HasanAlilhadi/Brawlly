@@ -1,7 +1,7 @@
 class_name ShopStation
 extends StaticBody3D
 ## A stall in the trading post next to each spawn (away from the orc camps). Each one sells only its own
-## items (`UpgradeDef.stalls` lists the stalls that sell an item): walk up and press interact (E / B, LB /
+## items (`UpgradeDef.stalls` lists the stalls that sell an item): walk up and press interact (F, LB /
 ## View, or tap the prompt) to open its shop. Part of the static world: every peer builds the same stalls
 ## (WorldBuilder, deterministic names); the server checks you stand at the right stall when you buy.
 ## The barracks is a walled training compound (model: tools/blender_barracks.py): the hall sits in the front

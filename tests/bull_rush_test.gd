@@ -4,6 +4,7 @@ extends Node
 ##       --test=res://tests/bull_rush_test.gd --class=spearman
 
 const TARGET_SCENE := preload("res://scenes/training/training_target.tscn")
+const ORC_SCENE := "res://scenes/characters/enemy.tscn"
 
 var t := 0.0
 var step := 0
@@ -13,6 +14,8 @@ var training_world: Node3D
 var lane_targets: Array[TrainingTarget] = []
 var side_target: TrainingTarget
 var front_attacker: Node3D
+var lane_orcs: Array[Enemy] = []
+var normal_collision_mask := 0
 
 
 func _ready() -> void:
@@ -102,6 +105,30 @@ func _process(delta: float) -> void:
 			_check(player._shield_is_guarding() and is_equal_approx(player.health, health_before)
 					and is_equal_approx(player.shield_health, shield_before - 20.0),
 					"Bull Rush automatically blocks front damage with the shield")
+			# Steering can change the charge heading before the model finishes turning.
+			player.face_now(Vector3.LEFT)
+			front_attacker.global_position = player.global_position + Vector3.RIGHT
+			health_before = player.health
+			shield_before = player.shield_health
+			player.take_damage(10.0, front_attacker)
+			_check(is_equal_approx(player.health, health_before)
+					and is_equal_approx(player.shield_health, shield_before - 10.0),
+					"Bull Rush guards its travel direction even while the body turns")
+			front_attacker.global_position = player.global_position + Vector3.FORWARD
+			health_before = player.health
+			shield_before = player.shield_health
+			player.take_damage(10.0, front_attacker)
+			_check(is_equal_approx(player.health, health_before - 10.0)
+					and is_equal_approx(player.shield_health, shield_before),
+					"side hits damage the Spearman without using shield durability")
+			front_attacker.global_position = player.global_position + Vector3.LEFT
+			health_before = player.health
+			shield_before = player.shield_health
+			player.take_damage(10.0, front_attacker)
+			_check(is_equal_approx(player.health, health_before - 10.0)
+					and is_equal_approx(player.shield_health, shield_before),
+					"back hits damage the Spearman during Bull Rush")
+			player.face_now(Vector3.RIGHT)
 			player.joystick_vector = Vector2.UP
 			var steered := player._get_move_input(0.25)
 			_check(steered.angle_to(Vector3.RIGHT) > 0.1 and steered.angle_to(Vector3.FORWARD) > 0.1,
@@ -139,5 +166,37 @@ func _process(delta: float) -> void:
 			_check(lane_targets.all(func(target: TrainingTarget) -> bool:
 				return not player.get_collision_exceptions().has(target)), "charge collision exceptions are removed")
 			_check(is_equal_approx(player.move_speed, player.running_speed()), "normal movement speed returns")
+			player.global_position = Vector3(-8.0, 0.0, 14.0)
+			player.net_position = player.global_position
+			player.face_now(Vector3.RIGHT)
+			for x in [-5.0, -2.0, 1.0]:
+				var orc := NetSpawn.unit(&"enemy", Vector3(x, 0.0, 14.0),
+						{"scene": ORC_SCENE, "strength": 1.0, "coins": 0.0}) as Enemy
+				orc.set_physics_process(false)
+				lane_orcs.append(orc)
+			normal_collision_mask = player.collision_mask
+			player.request_ability()
+			_check(player.ability_active and (player.collision_mask & GameConfig.LAYER_ENEMIES) == 0,
+					"Bull Rush ignores orc bodies from its first frame")
+			_check((player.collision_mask & (GameConfig.LAYER_WORLD | GameConfig.LAYER_FENCE)) \
+					== (normal_collision_mask & (GameConfig.LAYER_WORLD | GameConfig.LAYER_FENCE)),
+					"Bull Rush still collides with walls and fences")
+			step = 4
+			t = 0.0
+		4:
+			if t < 1.75:
+				return
+			var damage := player.spear_damage * Player.BULL_RUSH_DAMAGE
+			_check(player.global_position.x > 2.0, "Spearman passes through three real orcs (x=%.2f)" % player.global_position.x)
+			_check(lane_orcs.all(func(orc: Enemy) -> bool:
+				return is_equal_approx(orc.max_health - orc.health, damage)),
+					"each real orc takes one charge hit")
+			step = 5
+			t = 0.0
+		5:
+			if t < 2.0:
+				return
+			_check(not player.ability_active and player.collision_mask == normal_collision_mask,
+					"normal enemy collision returns after the charge")
 			printerr("DONE failures=%d" % failures)
 			get_tree().quit()

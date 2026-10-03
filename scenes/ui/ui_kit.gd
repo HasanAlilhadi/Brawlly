@@ -51,6 +51,17 @@ static func medal(icon: String, size: float = 60.0) -> Control:
 
 ## An input prompt image, `height` px tall ("keyboard/w", "mouse/left", "xbox/rt", "touch/tap").
 static func prompt(id: String, height: float = 52.0) -> Control:
+	if id.begins_with("keyboard/") and not ResourceLoader.exists(PROMPTS % id):
+		var cap := PanelContainer.new()
+		cap.theme_type_variation = &"KeyCap"
+		cap.custom_minimum_size = Vector2(height, height)
+		var label := Label.new()
+		label.text = id.get_file().to_upper()
+		label.theme_type_variation = &"KeyCapLabel"
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		cap.add_child(label)
+		return cap
 	var picture := TextureRect.new()
 	picture.texture = load(PROMPTS % id)
 	picture.custom_minimum_size = Vector2(height, height)

@@ -79,6 +79,7 @@ var _stall_label: Label
 var _weapon_bar: PanelContainer
 var _weapon_slots: HBoxContainer
 var _weapon_icons: Dictionary = {}  # weapon id -> texture for the touch buttons
+var _ability_icon_id: String = ""
 var _downed_panel: PanelContainer
 var _downed_title: Label
 var _downed_seconds: Label
@@ -381,7 +382,7 @@ func _build_extras() -> void:
 	_build_end_screen()
 
 
-## "E  Blacksmith" (bottom center) while the local player stands at a trading post stall; click / tap it
+## "F  Blacksmith" (bottom center) while the local player stands at a trading post stall; click / tap it
 ## or press interact to open that stall's shop.
 func _build_stall_prompt() -> void:
 	_stall_prompt = Button.new()
@@ -424,7 +425,7 @@ func set_stall(stall: ShopStation, take_soldiers: int = 0) -> void:
 	_stall_prompt.visible = stall != null and not _ended
 	if not _stall_prompt.visible:
 		return
-	var key := "touch/tap" if Platform.touch_mode else "keyboard/b"
+	var key := "touch/tap" if Platform.touch_mode else "keyboard/f"
 	var allowed := stall.can_access(_player)
 	var text := stall.title_for(_player)
 	var ready := _player.penned_soldiers().size() if allowed and stall.stall_id == ShopStation.BARRACKS else 0
@@ -747,10 +748,12 @@ func _update_weapon_controls() -> void:
 		shield_button.reset()
 	ability_button.visible = touch and _player != null and _player.has_ability()
 	if ability_button.visible:
-		if ability_button.icon == null:
-			var glyph := (load("res://assets/ui/icons/game/%s.svg" % _player.class_def.ability_icon) as Texture2D).get_image()
+		var icon_id := _player.class_def.ability_icon
+		if ability_button.icon == null or _ability_icon_id != icon_id:
+			var glyph := (load("res://assets/ui/icons/game/%s.svg" % icon_id) as Texture2D).get_image()
 			glyph.resize(44, 44, Image.INTERPOLATE_LANCZOS)
 			ability_button.icon = ImageTexture.create_from_image(glyph)
+			_ability_icon_id = icon_id
 		ability_button.modulate = HudStyle.SLOT_ACTIVE if _player.ability_ready() or _player.ability_active else HudStyle.SLOT_INACTIVE
 	_weapon_bar.visible = not touch and not _ended and _player != null
 	if _player == null:

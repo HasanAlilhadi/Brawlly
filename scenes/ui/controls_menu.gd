@@ -14,7 +14,7 @@ const TWO_COLUMNS_WIDTH: float = 1150.0
 ## key caps with that text. Icons are Game Icon Pack glyphs (assets/ui/icons/game/).
 const KEYBOARD: Array = [
 	["cursor_move", "Move", "", [["keyboard/w", "keyboard/a", "keyboard/s", "keyboard/d"], ["keyboard/arrows"]]],
-	["user_group", "Choose training hero", "Training Field: stand beside a displayed hero", [["F"]]],
+	["user_group", "Training interactions", "Beside a hero or orc practice station", [["F"]]],
 	["spear", "Spear: thrust ⇄ throw", "Spearman only", [["keyboard/e"]]],
 	["star_coin", "Special ability", "Charged by 10 XP from fallen enemies · Swordsman: Whirlwind", [["keyboard/x"]]],
 	["rotate_right", "Rotate camera", "Turns the view 90° around you", [["keyboard/r"]]],
@@ -28,7 +28,7 @@ const KEYBOARD: Array = [
 	["target", "Soldiers: kill", "They hunt the enemy under the cursor (none there: charge) · or click Kill, then the enemy", [["keyboard/4"]]],
 	["location", "Ping", "Attack! · Loot! · Here! for your team", [["G"], ["mouse/scroll"]]],
 	["heart", "Call for help", "", [["keyboard/h"]]],
-	["shop", "Use a stall", "Shop at a trading post stall you stand at", [["keyboard/b"]]],
+	["shop", "Use a stall", "Shop at a trading post stall you stand at", [["F"]]],
 	["pause", "Pause", "", [["keyboard/escape"], ["keyboard/p"]]],
 	["expand", "Fullscreen", "", [["keyboard/f11"], ["keyboard/alt", "keyboard/enter"]]],
 ]

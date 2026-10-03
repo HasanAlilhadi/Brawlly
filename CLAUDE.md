@@ -75,6 +75,8 @@ by touch index so the joystick and buttons work together with multi-touch.
   `toggle_fullscreen`, `rotate_camera`, `army_*`, `ping*`) — add new bindings there, not as hard-coded keys, and list them on the
   Controls page (`scenes/ui/controls_menu.gd`, main menu → Controls). Mouse clicks for gameplay are taken in
   `_unhandled_input` (so clicks on HUD buttons don't attack); ignore events with `device == DEVICE_ID_EMULATION`.
+- `interact` is F on keyboard in both matches and Training Field. The Training Field's Orc Practice station
+  spawns exactly one server-owned orc per press, up to eight living orcs; there is no automatic spawn timer.
 - UI must work in both orientations: anchor to edges, use `MaxWidth` on full-width panels, check both with
   `tests/screenshot_test.gd` (with and without `--mobile`). Touch controls still handle input in `_input` by touch index.
 - 3D cameras: FOV applies to the screen's short side (`FollowCamera3D.fit_fov_to_short_side`). "Off-screen"
@@ -128,7 +130,7 @@ by touch index so the joystick and buttons work together with multi-touch.
   `class` → `Player.set_class()` (every peer, before entering the tree: swaps the Model, sets `weapons`, hand items,
   recolor hue, `hand_offset`). Soldiers carry `ClassDef.ally_weapon` (`Ally.weapon` from spawn data, `Ally.WEAPON_STATS`;
   archers stop at `shoot_range` and shoot arrows). A class is locked to its weapons; nothing has ammo. Planned, not built:
-  per-class upgrades and one special ability per class (the Spearman's throw becomes a purchase). `keeper.glb` is a rigid
+  per-class upgrades (the Spearman's throw becomes a purchase). `keeper.glb` is a rigid
   Graveyard Kit model skinned onto the human's armature by `tools/blender_keeper_rig.py` (same bones and clips).
 - Anything damageable implements `take_damage(amount, attacker = null, is_melee = true)`.
 - **Weapons**: `Player.WEAPONS` rows (melee: `arc` / `reach` / `cooldown`): sword (melee 40, 80° wedge, cleaves),
@@ -149,6 +151,14 @@ by touch index so the joystick and buttons work together with multi-touch.
   Ability per class in its ClassDef (`ability` id, `ability_name`, `ability_icon`, `ability_duration`); `ability_active`
   is replicated, `_apply_ability()` shows it on every peer. Swordsman `whirlwind`: spins (`_whirlwind_pose`, skeleton
   turned by `_spin_angle`), hits everything within `WHIRLWIND_RADIUS` every `WHIRLWIND_TICK`, slower, no attack / block.
+  Spearman `bull_rush`: shield charge with limited steering that damages each crossed target once; enemy
+  bodies do not block the charge, but walls and fences still do. Bowman `bow_rain`:
+  X enters local cursor placement; LMB confirms a server-clamped target, then server-spawned arrows fall throughout
+  the replicated circular ground marker for the ability duration. All 100 arrows fall from above to random points inside the
+  marker; they do not track targets. Arrows fall one by one, with jittered angle/radius strata in each
+  10-arrow run so the whole circle fills evenly. Bowman keeps normal bow aim and shooting during the rain.
+  Each peer draws a brief entry flash and local hit burst for rain arrows;
+  only the server applies projectile damage.
   New ability = ClassDef fields + a branch in `_update_ability` / `_apply_ability`. Test: `tests/ability_test.gd`.
 - **VFX**: `HitFx.flash(at, texture, color, size, …)` pops a billboard sprite from `assets/vfx/particles/` (Kenney Particle Pack;
   additive, or `additive = false` for smoke). Used for hit sparks, death / camp smoke, combo ring, revive sparkle. Ground
