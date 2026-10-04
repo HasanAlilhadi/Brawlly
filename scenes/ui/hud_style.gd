@@ -37,8 +37,8 @@ const FONT_HEADLINE: int = 44
 const UPGRADE_SHEET_WIDTH: float = 1480.0
 const UPGRADE_CARD: Vector2 = Vector2(228.0, 176.0)
 ## Its handle at the bottom edge ("T  Upgrades"): size, how much of it hides below the edge, hover lift.
-const UPGRADES_TAB: Vector2 = Vector2(250.0, 64.0)
-const UPGRADES_TAB_TUCK: float = 12.0
+const UPGRADES_TAB: Vector2 = Vector2(236.0, 52.0)
+const UPGRADES_TAB_TUCK: float = 4.0
 const UPGRADES_TAB_LIFT: float = 6.0
 
 ## Weapon slot in hand vs carried.
