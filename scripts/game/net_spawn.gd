@@ -33,13 +33,16 @@ static func pickup(kind: int, amount: int, position: Vector3) -> void:
 			"name": _name(&"pickup")})
 
 
-## kind: &"arrow", &"spear" (orc throwers) or &"player_spear" (hits orcs).
+## kind: &"arrow", &"spear" (orc throwers), &"player_spear" (hits orcs) or &"sword_wave" (the Wave upgrade).
+## `extra`: "pierce" (enemies it flies through), "lifetime_scale" (longer flight = farther range).
 static func projectile(kind: StringName, from: Vector3, direction: Vector3, damage: float, shooter: Node,
 		crit: bool = false, check_shooter_origin: bool = true, speed: float = 0.0,
-		rain_arrow: bool = false) -> void:
+		rain_arrow: bool = false, extra: Dictionary = {}) -> void:
 	if not _is_server():
 		return
-	items.spawn({"kind": kind, "pos": from, "dir": direction, "damage": damage, "crit": crit,
+	var data := {"kind": kind, "pos": from, "dir": direction, "damage": damage, "crit": crit,
 			"team": shooter.get("team_id"), "owner": GameConfig.owner_peer_of(shooter),
 			"shooter": shooter.get_path(), "check_shooter_origin": check_shooter_origin,
-			"speed": speed, "rain_arrow": rain_arrow, "name": _name(kind)})
+			"speed": speed, "rain_arrow": rain_arrow, "name": _name(kind)}
+	data.merge(extra)
+	items.spawn(data)

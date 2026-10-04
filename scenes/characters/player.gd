@@ -176,6 +176,26 @@ const BOW_RAIN_DAMAGE: float = 0.45
 const BOW_RAIN_ARROW_SPEED: float = 16.0
 const BOW_RAIN_EDGE_MARGIN: float = 0.25
 const BOW_RAIN_SHADER := preload("res://assets/shaders/bow_rain_area.gdshader")
+# Class upgrades (UpgradeDef.classes, bought from the upgrades sheet; effects in `_apply_class_upgrades`).
+## Unlocks every hero gets for free in the Training Field (all class upgrades cost nothing there).
+const TRAINING_UNLOCKS: Array[StringName] = [&"shield", &"spear_throw", &"knife", &"sword_dash"]
+## Dash Attack (Swordsman, C): DASH_DISTANCE m in DASH_TIME s through enemies, each one crossed takes
+## melee_damage × the upgrade's amount once (in a DASH_RADIUS sweep).
+const DASH_TIME: float = 0.22
+const DASH_DISTANCE: float = 4.5
+const DASH_COOLDOWN: float = 4.0
+const DASH_RADIUS: float = 0.7
+const DASH_COLOR := Color(0.75, 0.9, 1.0)
+## Knife (Bowman, right mouse): a quick stab in a KNIFE_ARC° fan out to KNIFE_REACH m. The knife is the dungeon
+## sword scaled down, shown in the right hand only while stabbing.
+const KNIFE_SCENE := preload("res://assets/items/dungeon/sword.glb")
+const KNIFE_SCALE: float = 0.55
+const KNIFE_REACH: float = 1.35
+const KNIFE_ARC: float = 110.0
+const KNIFE_COOLDOWN: float = 0.45
+const KNIFE_HIT_DELAY: float = 0.12
+## Wave (Swordsman): each swing also sends a slash wave forward (`sword_wave` projectile) that goes through enemies.
+const WAVE_HEIGHT: float = 0.5
 
 @export var arrow_damage: float = 25.0
 @export var shoot_cooldown: float = 0.4
@@ -226,6 +246,8 @@ var follower_cap: int = GameConfig.BASE_FOLLOWER_CAP
 var upgrade_levels: Dictionary = {}:
 	set(value):
 		upgrade_levels = value
+		if is_node_ready():
+			_apply_class_upgrades()
 		upgrades_changed.emit()
 var is_downed: bool = false:
 	set(value):
@@ -300,6 +322,11 @@ var ability_xp_locked: bool = false:
 			ability_xp_locked = value
 			ability_changed.emit()
 ## Replicated: the special ability is running.
+var ability_start_yaw: float = 0.0
+var ability_elapsed: float = 0.0:
+	set(value):
+		ability_elapsed = value
+		_ability_visual_elapsed = value
 var ability_active: bool = false:
 	set(value):
 		if value != ability_active:
@@ -319,9 +346,34 @@ var weapon_index: int = 0:
 			if is_node_ready() and _melee_indicator:
 				_apply_weapon()
 
+## Class-upgrade stats, recomputed from `upgrade_levels` on every peer (`_apply_class_upgrades`): extra enemies an
+## arrow flies through, the Wave's damage fraction (0 = none), Dash / Knife damage (0 = not owned).
+var arrow_pierce: int = 0
+var sword_wave: float = 0.0
+var dash_damage: float = 0.0
+var knife_damage: float = 0.0
+## Replicated: a Dash Attack is under way (trail and slash on every peer).
+var dash_active: bool = false:
+	set(value):
+		if value != dash_active:
+			dash_active = value
+			if is_node_ready():
+				_apply_dash()
+
 var _base_melee_damage: float
 var _base_arrow_damage: float
 var _base_spear_damage: float
+var _base_aim_range: float
+var _base_shoot_cooldown: float
+var _base_spear_cooldown: float
+var _dash_left: float = 0.0  # server and the predicting owner: seconds of dash left
+var _dash_direction: Vector3 = Vector3.ZERO
+var _dash_cooldown: float = 0.0  # server and the owner (HUD): seconds until the next dash
+var _dash_last_position: Vector3 = Vector3.ZERO
+var _dash_hit_ids: Dictionary = {}
+var _dash_saved_mask: int = -1
+var _knife_timer: float = 0.0  # server: seconds until the next knife stab
+var _knife_item: Node3D
 var _shoot_timer: float = 0.0
 var _pending_shot: Vector3 = Vector3.ZERO  # aimed shot released during cooldown
 var _aim_indicator: Node3D
@@ -354,11 +406,13 @@ var _shield_recoil_tween: Tween
 var _shield_raise: float = 0.0  # 0 carried .. 1 up in front (blends while it goes up / down)
 var _shield_raise_tween: Tween
 var _ability_left: float = 0.0  # server: seconds of the ability left
+var _ability_visual_elapsed: float = 0.0  # clients extrapolate the server's replicated ability clock
 var _ability_xp_lockout_left: float = 0.0  # server: seconds until XP collection is enabled again
 var _ability_tick: float = 0.0  # server: next Whirlwind hit / Bow Rain arrow
 var _spin_angle: float = 0.0  # every peer: total Whirlwind turn, independent of movement facing
 var _spin_world_yaw: float = 0.0  # visible body yaw; movement may still turn the model underneath it
 var _whirlwind_arc: MeshInstance3D  # one reusable effect; moved instead of spawned every frame
+var _rush_wind: Node3D
 var _bull_rush_direction: Vector3 = Vector3.ZERO
 var _bull_rush_last_position: Vector3 = Vector3.ZERO
 var _bull_rush_hit_ids: Dictionary = {}
@@ -384,7 +438,7 @@ func set_class(class_id: StringName) -> void:
 	old.free()
 	add_child(body)
 	move_child(body, index)
-	weapons = class_def.weapons
+	weapons = _class_weapons()
 	weapon_index = 0
 	if not weapons.has("sword"):
 		right_hand_item = null
@@ -392,7 +446,7 @@ func set_class(class_id: StringName) -> void:
 		left_hand_item = class_def.shield
 		left_hand_offset = SHIELD_CARRY
 		hold_left_arm = class_def.shield != null  # raised while blocking
-	shield_health = class_def.shield_health if class_def.shield else 0.0
+	shield_health = class_def.shield_health if owns_shield() else 0.0
 	right_hand_offset += class_def.hand_offset
 	right_swing_offset += class_def.hand_offset
 	left_hand_offset += class_def.hand_offset
@@ -418,6 +472,9 @@ func _ready() -> void:
 	_base_melee_damage = melee_damage
 	_base_arrow_damage = arrow_damage
 	_base_spear_damage = spear_damage
+	_base_aim_range = aim_range
+	_base_shoot_cooldown = shoot_cooldown
+	_base_spear_cooldown = spear_cooldown
 	if class_def.move_speed > 0.0:
 		move_speed = class_def.move_speed
 	_base_move_speed = move_speed
@@ -436,9 +493,14 @@ func _ready() -> void:
 			"spear": spear, "javelin": spear}
 	_setup_bow()
 	_setup_shield()
+	if training_mode and multiplayer.is_server():
+		_grant_training_unlocks()
+	_apply_class_upgrades()
 	_apply_weapon()
 	if is_downed:
 		_apply_downed()
+	if ability_active:
+		_apply_ability()  # spawn replication can set the ability before its weapons and effects exist
 
 
 ## True on the device whose player this is.
@@ -453,6 +515,8 @@ func _get_move_input(delta: float) -> Vector3:
 	if _is_bull_rushing():
 		_steer_bull_rush(Vector3(joystick_vector.x, 0.0, joystick_vector.y), delta)
 		return _bull_rush_direction
+	if _dash_left > 0.0:
+		return _dash_step(delta)
 	_shoot_timer = maxf(_shoot_timer - delta, 0.0)
 	if _pending_shot != Vector3.ZERO and _shoot_timer <= 0.0:
 		var direction := _pending_shot
@@ -468,6 +532,8 @@ func _prediction_move_input(delta: float) -> Vector3:
 	if _is_bull_rushing():
 		_steer_bull_rush(Vector3(predict_input.x, 0.0, predict_input.y), delta)
 		return _bull_rush_direction
+	if _dash_left > 0.0:
+		return _dash_step(delta)
 	return super(delta)
 
 
@@ -495,6 +561,12 @@ func _add_downed_anims() -> void:
 ## Every peer: sword swings and spear thrusts get a trail through the hit wedge; spear throws empty the
 ## hand briefly.
 func _play_action_local(anim_name: String, duration: float, release_arms: int) -> void:
+	# A delayed replicated normal attack must not replace the special ability's weapon pose.
+	if ability_active and class_def.ability != &"bow_rain":
+		return
+	if anim_name == "knife-stab":
+		_knife_stab_visual(duration)
+		return
 	var melee := anim_name.begins_with("attack-melee") and holds_melee()
 	if melee and current_weapon() == "sword" and _right_hold and _right_item and not is_downed:
 		_sword_slash(duration)
@@ -692,7 +764,9 @@ func _slash_fx() -> void:
 	var forward := _melee_dir if multiplayer.is_server() and _melee_dir != Vector3.ZERO else facing()
 	var yaw := atan2(forward.x, forward.z)
 	if melee_lane() > 0.0:
-		HitFx.stab(self, 0.6, yaw, melee_reach(), melee_lane() * 0.5, Color(1.0, 0.96, 0.85))
+		forward = _melee_hit_direction()
+		HitFx.stab(self, 0.6, atan2(forward.x, forward.z), melee_reach(), melee_lane() * 0.5,
+				Color(1.0, 0.96, 0.85), 0.22, _melee_hit_direction)
 	else:
 		HitFx.swing_arc(self, 0.5, yaw, melee_reach(), Color(1.0, 0.96, 0.85), melee_arc())
 
@@ -802,7 +876,13 @@ func _place_stab_spear() -> void:
 	var body_to_skeleton := (_slash_skeleton.global_transform.affine_inverse() * model.global_transform).orthonormalized()
 	var fist := _right_fist_position()
 	var fist_body := body_to_skeleton.affine_inverse() * (arm * fist)
-	var far := Vector3(0.0, fist_body.y, melee_reach() / maxf(model.scale.z, 0.01))
+	var lane_forward := Vector3(0.0, 0.0, 1.0)
+	if not _is_bull_rushing():
+		lane_forward = model.global_basis.inverse() * _melee_hit_direction()
+		lane_forward.y = 0.0
+		lane_forward = lane_forward.normalized()
+	var far := lane_forward * (melee_reach() / maxf(model.scale.z, 0.01))
+	far.y = fist_body.y
 	var ahead := (far - fist_body).normalized()
 	var down := (Vector3.DOWN - ahead * ahead.dot(Vector3.DOWN)).normalized()
 	var level_body := Basis(ahead.cross(down), ahead, down)  # spear +Y (shaft) ahead, flat side up
@@ -1078,17 +1158,24 @@ func _from_owner() -> bool:
 func attack_melee() -> void:
 	if is_dead or is_downed or shield_up or ability_active or _melee_timer > 0.0 or not holds_melee():
 		return
+	if current_weapon() == "spear":
+		melee()
+		return
 	var target := find_nearest(TARGET_GROUPS, 1.8, global_position, {&"camps": -0.8})
 	if target:
 		face_now(_flat_dir_to(target))
 	melee()
 
 
-## Swing toward `direction` (sword stick), with a little aim assist. Movement is independent.
+## Attack toward `direction`. Sword swings get aim assist; spear thrusts keep the exact lane direction.
 func attack_melee_toward(direction: Vector3) -> void:
 	if is_dead or is_downed or shield_up or ability_active or _melee_timer > 0.0 or not holds_melee():
 		return
 	direction.y = 0.0
+	if current_weapon() == "spear":
+		face_now(direction)
+		melee()
+		return
 	var best := direction.normalized()
 	var best_angle := deg_to_rad(MELEE_ASSIST_DEGREES)
 	for group in TARGET_GROUPS:
@@ -1105,6 +1192,18 @@ func attack_melee_toward(direction: Vector3) -> void:
 				best = to.normalized()
 	face_now(best)
 	melee()
+
+
+## Server: the swing's damage, then (Wave upgrade) a slash wave flies on from the sword along the swing.
+func _apply_melee() -> void:
+	super()
+	if sword_wave <= 0.0 or is_dead or current_weapon() != "sword" or not multiplayer.is_server():
+		return
+	var direction := _melee_hit_direction()
+	direction.y = 0.0
+	direction = direction.normalized()
+	NetSpawn.projectile(&"sword_wave", global_position + Vector3(0.0, WAVE_HEIGHT, 0.0) + direction * 0.5, direction,
+			melee_damage * sword_wave, self, false, false, 0.0, false, {"pierce": 99})
 
 
 ## Sword stick aim: face `direction` (shows a short wedge for the local player). ZERO = released.
@@ -1153,6 +1252,8 @@ func use_bow_rain(point: Vector3) -> void:
 
 
 func _begin_ability() -> void:
+	ability_start_yaw = model.rotation.y
+	ability_elapsed = 0.0
 	if not training_mode:
 		xp -= class_def.ability_xp
 		_ability_xp_lockout_left = class_def.ability_xp_lockout
@@ -1202,6 +1303,7 @@ func net_bow_rain(point: Vector3) -> void:
 
 ## Server, every physics frame while it runs.
 func _update_ability(delta: float) -> void:
+	ability_elapsed += delta
 	_ability_left -= delta
 	if class_def.ability == &"whirlwind":
 		_ability_tick -= delta
@@ -1241,8 +1343,8 @@ func _apply_ability() -> void:
 			_slash_tween = null
 		set_melee_aim(Vector3.ZERO)
 		clear_aim()
-		_spin_angle = 0.0
-		_spin_world_yaw = model.rotation.y
+		_spin_angle = wrapf(deg_to_rad(WHIRLWIND_SPIN) * ability_elapsed, 0.0, TAU)
+		_spin_world_yaw = wrapf(ability_start_yaw - _spin_angle, -PI, PI)
 		_action_time = 0.0
 		if class_def.ability == &"bull_rush":
 			# Enemy bodies cannot halt the charge. The separate spear sweep still detects and damages them.
@@ -1268,6 +1370,19 @@ func _apply_ability() -> void:
 			_whirlwind_arc.visible = ability_active and not is_dead
 	if class_def.ability == &"bow_rain":
 		_refresh_bow_rain_area()
+	if _is_bull_rushing() and not is_dead and not is_downed:
+		if not is_instance_valid(_rush_wind):
+			var spear := _weapon_items.get("spear") as Node3D
+			if is_instance_valid(spear):
+				_rush_wind = preload("res://scripts/components/rush_wind.gd").new()
+				_rush_wind.name = &"RushWind"
+				spear.add_child(_rush_wind)
+				_rush_wind.position = Vector3(0.0, 0.6, 0.0)
+				_rush_wind.rotation.x = -PI * 0.5  # effect +Z follows the spear's +Y shaft
+		if is_instance_valid(_rush_wind):
+			_rush_wind.set_active(true)
+	elif is_instance_valid(_rush_wind):
+		_rush_wind.set_active(false)
 	if class_def.shield != null:
 		_apply_shield()
 	if takes_over_weapon:
@@ -1539,17 +1654,21 @@ func _place_whirlwind_arc() -> void:
 
 func _process(delta: float) -> void:
 	super(delta)
+	_dash_cooldown = maxf(_dash_cooldown - delta, 0.0)
 	if ability_active and class_def.ability == &"whirlwind" and not is_dead:
 		_ensure_whirlwind_arc()
-		var spin_step := deg_to_rad(WHIRLWIND_SPIN) * delta
-		_spin_angle = wrapf(_spin_angle + spin_step, 0.0, TAU)
-		_spin_world_yaw = wrapf(_spin_world_yaw - spin_step, -PI, PI)
+		if not multiplayer.is_server():
+			_ability_visual_elapsed += delta
+		_spin_angle = wrapf(deg_to_rad(WHIRLWIND_SPIN) * _ability_visual_elapsed, 0.0, TAU)
+		_spin_world_yaw = wrapf(ability_start_yaw - _spin_angle, -PI, PI)
 		_whirlwind_pose()
 		if is_instance_valid(_whirlwind_arc):
 			_whirlwind_arc.visible = true
 			_place_whirlwind_arc()
 	elif _is_bull_rushing() and not is_dead:
 		_bull_rush_pose()
+	if is_instance_valid(_rush_wind) and (is_dead or is_downed or not _is_bull_rushing()):
+		_rush_wind.set_active(false)
 
 
 # --- Bow ----------------------------------------------------------------------
@@ -1638,7 +1757,9 @@ func shoot(direction: Vector3 = Vector3.ZERO) -> void:
 		NetSpawn.projectile(&"player_spear", from, direction, spear_damage * multiplier, self, crit)
 	else:
 		play_action("holding-left-shoot", 0.25, ARM_LEFT)
-		NetSpawn.projectile(&"arrow", from, direction, arrow_damage * multiplier, self, crit)
+		# Fire Range: the arrow flies longer, in step with the farther aim; Penetration: it goes through enemies.
+		NetSpawn.projectile(&"arrow", from, direction, arrow_damage * multiplier, self, crit, true, 0.0, false,
+				{"pierce": arrow_pierce, "lifetime_scale": aim_range / _base_aim_range})
 
 
 ## Aim path (drifting chevrons) and a reticle at the aim point, at shot height; placed by `set_aim`.
@@ -1689,14 +1810,14 @@ func _melee_hit_direction() -> Vector3:
 	return _melee_aim if _melee_aim != Vector3.ZERO else facing()
 
 
-## Melee hits the aim wedge itself (a prism, so big colliders like camp houses count by their surface,
-## not their center), starting a little behind the hero so point-blank targets are never missed.
+## Melee hits a prism, so big colliders count by their surface instead of their center.
+## The spear matches the visible decal exactly; the sword also covers point-blank targets behind its start.
 func _melee_query(direction: Vector3) -> PhysicsShapeQueryParameters3D:
 	if _melee_wedge == null or _melee_wedge_weapon != _melee_weapon():
 		_melee_wedge_weapon = _melee_weapon()
 		var points := PackedVector3Array()
 		for y in [0.05, GameConfig.HIT_HEIGHT + 0.3]:
-			for corner in melee_outline(-0.3):
+			for corner in melee_outline(0.25 if melee_lane() > 0.0 else -0.3):
 				points.append(Vector3(corner.x, y, corner.y))
 		_melee_wedge = ConvexPolygonShape3D.new()
 		_melee_wedge.points = points
@@ -1805,6 +1926,7 @@ func next_soldier_in() -> float:
 
 func _physics_process(delta: float) -> void:
 	super(delta)
+	_knife_timer = maxf(_knife_timer - delta, 0.0)
 	# A queue: the next soldier starts training when the one before it is ready.
 	if not _training_left.is_empty():
 		_training_left[0] = maxf(_training_left[0] - delta, 0.0)
@@ -1866,6 +1988,277 @@ func net_collect_soldiers() -> void:
 		collect_soldiers()
 
 
+# --- Class upgrades -------------------------------------------------------------
+
+## Level × amount of a class upgrade (0 when not owned).
+func _upgrade_amount(id: StringName) -> float:
+	var level := upgrade_level(id)
+	if level == 0:
+		return 0.0
+	for def in CATALOG.upgrades:
+		if def.id == id:
+			return level * def.amount
+	return 0.0
+
+
+func owns_shield() -> bool:
+	return class_def != null and class_def.shield != null and upgrade_level(&"shield") > 0
+
+
+## The class's weapons, without the thrown spear until "Can Throw" is bought.
+func _class_weapons() -> PackedStringArray:
+	var carried := PackedStringArray()
+	for weapon in class_def.weapons:
+		if weapon != "javelin" or upgrade_level(&"spear_throw") > 0:
+			carried.append(weapon)
+	return carried
+
+
+## Every peer: the stats the class upgrades change, straight from the levels (so clients aim with the same range
+## and swing at the same speed). Fire Rate shortens the cooldowns and speeds the swing / thrust up to match.
+func _apply_class_upgrades() -> void:
+	if class_def == null or _base_aim_range <= 0.0:
+		return
+	melee_damage = _base_melee_damage * (1.0 + _upgrade_amount(&"sword_damage"))
+	spear_damage = _base_spear_damage * (1.0 + _upgrade_amount(&"spear_damage"))
+	arrow_damage = _base_arrow_damage * (1.0 + _upgrade_amount(&"bow_damage"))
+	var rate := 1.0 + _upgrade_amount(&"sword_rate") + _upgrade_amount(&"spear_rate") + _upgrade_amount(&"bow_rate")
+	var melee := _melee_weapon()
+	if melee != "":
+		melee_cooldown = WEAPONS[melee].cooldown / rate
+	anim_speed = rate
+	shoot_cooldown = _base_shoot_cooldown / rate
+	spear_cooldown = _base_spear_cooldown / rate
+	aim_range = _base_aim_range + _upgrade_amount(&"bow_range")
+	arrow_pierce = upgrade_level(&"bow_pierce")
+	knockback_power = _upgrade_amount(&"sword_knockback") if upgrade_level(&"sword_knockback") > 0 else 1.0
+	sword_wave = _upgrade_amount(&"sword_wave")
+	dash_damage = _upgrade_amount(&"sword_dash")
+	knife_damage = _upgrade_amount(&"knife")
+	var carried := _class_weapons()
+	if carried != weapons:
+		weapons = carried
+	if _left_item:
+		_show_shield()
+
+
+## Server, Training Field: the class's unlocks are owned from the start.
+func _grant_training_unlocks() -> void:
+	var levels := upgrade_levels.duplicate()
+	for def in class_upgrades():
+		if TRAINING_UNLOCKS.has(def.id):
+			levels[def.id] = 1
+	upgrade_levels = levels
+	if owns_shield():
+		shield_health = class_def.shield_health
+
+
+## Server: owning upgrade `id` (tests, Training Field): one more level, applied like a purchase.
+func grant_upgrade(id: StringName) -> void:
+	for def in CATALOG.upgrades:
+		if def.id == id and not is_upgrade_maxed(def):
+			var levels := upgrade_levels.duplicate()
+			levels[id] = upgrade_level(id) + 1
+			upgrade_levels = levels
+			_apply_upgrade(def)
+			return
+
+
+# --- Dash Attack (Swordsman) ---------------------------------------------------------
+
+func has_dash() -> bool:
+	return dash_damage > 0.0
+
+
+## Seconds until the next dash (0 = ready).
+func dash_cooldown_left() -> float:
+	return _dash_cooldown
+
+
+func can_dash() -> bool:
+	return has_dash() and _dash_cooldown <= 0.0 and _dash_left <= 0.0 and not is_dead and not is_downed \
+			and not ability_active and not shield_up
+
+
+## Server: dash toward `direction` (ZERO: where the hero faces), slashing everything crossed.
+func dash(direction: Vector3) -> void:
+	if not can_dash():
+		return
+	_start_dash(direction)
+	play_action("attack-melee-right", DASH_TIME + 0.15, ARM_RIGHT)
+	dash_active = true
+
+
+## Local input (C / L3 / the touch dash button): dash now on the server, else predict it here and ask the server.
+func request_dash(direction: Vector3) -> void:
+	if multiplayer.is_server():
+		dash(direction)
+		return
+	if can_dash():
+		_start_dash(direction)
+	net_dash.rpc_id(1, direction)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func net_dash(direction: Vector3) -> void:
+	if _from_owner():
+		dash(direction)
+
+
+## Server and the predicting owner: the dash's direction, timer and cooldown; enemies don't block it.
+func _start_dash(direction: Vector3) -> void:
+	direction.y = 0.0
+	_dash_direction = direction.normalized() if direction.length_squared() > 0.0001 else facing()
+	_dash_left = DASH_TIME
+	_dash_cooldown = DASH_COOLDOWN
+	_dash_last_position = global_position
+	_dash_hit_ids.clear()
+	set_melee_aim(Vector3.ZERO)
+	clear_aim()
+	face_now(_dash_direction)
+	if _dash_saved_mask < 0:
+		_dash_saved_mask = collision_mask
+		collision_mask &= ~GameConfig.LAYER_ENEMIES
+	_update_move_speed()
+
+
+## One movement frame of the dash (it moves at dash speed, see `_update_move_speed`).
+func _dash_step(delta: float) -> Vector3:
+	_dash_left -= delta
+	if multiplayer.is_server():
+		_dash_hit()
+	if _dash_left <= 0.0:
+		_dash_left = 0.0
+		if _dash_saved_mask >= 0:
+			collision_mask = _dash_saved_mask
+			_dash_saved_mask = -1
+		_update_move_speed()
+		if multiplayer.is_server():
+			dash_active = false
+	return _dash_direction
+
+
+## Server: every target along the path since the last frame takes one dash slash.
+func _dash_hit() -> void:
+	var shape := SphereShape3D.new()
+	shape.radius = DASH_RADIUS
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = shape
+	query.collision_mask = melee_mask
+	query.exclude = [get_rid()]
+	var finish := global_position + _dash_direction * DASH_RADIUS * 0.5
+	var steps := maxi(1, ceili(_dash_last_position.distance_to(finish) / (DASH_RADIUS * 0.6)))
+	for step in steps + 1:
+		query.transform = Transform3D(Basis.IDENTITY, _dash_last_position.lerp(finish, float(step) / steps) + Vector3(0, 0.55, 0))
+		for hit in get_world_3d().direct_space_state.intersect_shape(query, 32):
+			var collider := hit.collider as Node3D
+			if collider == null or not collider.has_method("take_damage") or not _can_hit(collider) \
+					or _dash_hit_ids.has(collider.get_instance_id()):
+				continue
+			_dash_hit_ids[collider.get_instance_id()] = true
+			var crit := randf() < crit_chance
+			collider.take_damage(melee_damage * dash_damage * (crit_multiplier if crit else 1.0), self, true, crit)
+	_dash_last_position = global_position
+
+
+## Every peer: a dust puff where the dash starts and a streak trailing behind the hero.
+func _apply_dash() -> void:
+	if not dash_active or not is_inside_tree():
+		return
+	var back := -facing()
+	HitFx.burst(global_position + Vector3(0, 0.1, 0), HitFx.Kind.DIRT, 8, back + Vector3.UP * 0.5)
+	HitFx.stab(self, 0.55, atan2(back.x, back.z), DASH_DISTANCE * 0.7, 0.6, DASH_COLOR, DASH_TIME + 0.15)
+
+
+# --- Knife (Bowman) ---------------------------------------------------------------
+
+func has_knife() -> bool:
+	return knife_damage > 0.0
+
+
+func can_knife() -> bool:
+	return has_knife() and not is_dead and not is_downed and not (ability_active and class_def.ability != &"bow_rain")
+
+
+## Server: a quick knife stab toward `direction` (ZERO: where the hero faces). Cancels a drawn bow shot.
+func knife_attack(direction: Vector3) -> void:
+	if not can_knife() or _knife_timer > 0.0:
+		return
+	_knife_timer = KNIFE_COOLDOWN
+	direction.y = 0.0
+	direction = direction.normalized() if direction.length_squared() > 0.0001 else facing()
+	_pending_shot = Vector3.ZERO
+	face_now(direction)
+	play_action("knife-stab", KNIFE_COOLDOWN * 0.7, ARM_RIGHT)
+	get_tree().create_timer(KNIFE_HIT_DELAY).timeout.connect(_knife_hit.bind(direction))
+
+
+func request_knife(direction: Vector3) -> void:
+	if multiplayer.is_server():
+		knife_attack(direction)
+	else:
+		net_knife.rpc_id(1, direction)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func net_knife(direction: Vector3) -> void:
+	if _from_owner():
+		knife_attack(direction)
+
+
+## Server: everything hostile in the knife's fan.
+func _knife_hit(direction: Vector3) -> void:
+	if is_dead or is_downed:
+		return
+	var points := PackedVector3Array()
+	var half := deg_to_rad(KNIFE_ARC * 0.5)
+	for y in [0.05, GameConfig.HIT_HEIGHT + 0.3]:
+		points.append(Vector3(0.0, y, -0.3))
+		for i in 7:
+			var a := -half + 2.0 * half * i / 6.0
+			points.append(Vector3(sin(a) * KNIFE_REACH, y, cos(a) * KNIFE_REACH))
+	var shape := ConvexPolygonShape3D.new()
+	shape.points = points
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = shape
+	query.transform = Transform3D(Basis(Vector3.UP, atan2(direction.x, direction.z)), global_position)
+	query.collision_mask = melee_mask
+	query.exclude = [get_rid()]
+	var victims: Array[Node3D] = []
+	for hit in get_world_3d().direct_space_state.intersect_shape(query, 32):
+		var collider := hit.collider as Node3D
+		if collider and not victims.has(collider) and collider.has_method("take_damage") and _can_hit(collider):
+			victims.append(collider)
+	for victim in victims:
+		var crit := randf() < crit_chance
+		victim.take_damage(knife_damage * (crit_multiplier if crit else 1.0), self, true, crit)
+
+
+## Every peer: the knife appears in the right hand for the stab (Kenney's melee clip on that arm) with a
+## small swing trail.
+func _knife_stab_visual(duration: float) -> void:
+	if is_downed:
+		return
+	if _knife_item == null:
+		var skeleton := model.find_child("Skeleton3D", true, false) as Skeleton3D
+		if skeleton:
+			_knife_item = _attach_item(skeleton, KNIFE_SCENE, "arm-right")
+		if _knife_item:
+			_knife_item.position = right_swing_offset + class_def.hand_offset
+			_knife_item.rotation_degrees = right_swing_rotation
+			_knife_item.scale = Vector3.ONE * KNIFE_SCALE
+	if _knife_item:
+		_knife_item.visible = true
+		get_tree().create_timer(duration).timeout.connect(func() -> void:
+			if is_instance_valid(_knife_item):
+				_knife_item.visible = false)
+	super._play_action_local("attack-melee-right", duration, ARM_RIGHT)
+	var forward := facing()
+	get_tree().create_timer(KNIFE_HIT_DELAY * 0.6).timeout.connect(func() -> void:
+		if is_inside_tree() and not is_dead:
+			HitFx.swing_arc(self, 0.5, atan2(forward.x, forward.z), KNIFE_REACH, Color(1.0, 0.96, 0.85), KNIFE_ARC))
+
+
 # --- Economy ------------------------------------------------------------------
 
 func upgrade_level(id: StringName) -> int:
@@ -1873,7 +2266,26 @@ func upgrade_level(id: StringName) -> int:
 
 
 func upgrade_cost(def: UpgradeDef) -> int:
+	if training_mode and def.is_class_upgrade():
+		return 0  # the Training Field lets you try every upgrade
 	return def.cost_at(upgrade_level(def.id))
+
+
+## A pick-one class upgrade whose alternative is owned (Knock Back / Wave).
+func is_upgrade_locked(def: UpgradeDef) -> bool:
+	for other in def.excludes:
+		if upgrade_level(other) > 0:
+			return true
+	return false
+
+
+## The class upgrades this hero's class can buy (upgrades sheet), in catalog order.
+func class_upgrades() -> Array[UpgradeDef]:
+	var result: Array[UpgradeDef] = []
+	for def in CATALOG.upgrades:
+		if class_def and def.classes.has(class_def.id):
+			result.append(def)
+	return result
 
 
 func is_upgrade_maxed(def: UpgradeDef) -> bool:
@@ -1887,17 +2299,15 @@ func is_upgrade_useful(def: UpgradeDef) -> bool:
 			return health < max_health
 		&"recruit":
 			return army_size() < follower_cap
-		&"blade":
-			return weapons.has("sword")
-		&"archery":
-			return weapons.has("bow") or weapons.has("spear")
+	if def.is_class_upgrade():
+		return class_def != null and def.classes.has(class_def.id) and not is_upgrade_locked(def)
 	return true
 
 
-## Only at a trading post stall that sells `def` (checked on the server too).
+## Stall items only at a trading post stall that sells `def`; class upgrades anywhere (checked on the server too).
 func can_buy(def: UpgradeDef) -> bool:
 	return not is_dead and not is_downed and not is_upgrade_maxed(def) and is_upgrade_useful(def) \
-			and coins >= upgrade_cost(def) and ShopStation.can_buy_here(self, def)
+			and coins >= upgrade_cost(def) and (def.is_class_upgrade() or ShopStation.can_buy_here(self, def))
 
 
 ## Buys on the server; on clients sends the request to the server.
@@ -1920,15 +2330,15 @@ func buy_upgrade(def: UpgradeDef) -> bool:
 
 
 func _apply_upgrade(def: UpgradeDef) -> void:
+	if def.is_class_upgrade():
+		# The stats follow the levels (`_apply_class_upgrades`, every peer); a new shield arrives whole.
+		if def.id == &"shield":
+			shield_health = class_def.shield_health
+		return
 	match def.id:
 		&"vitality":
 			max_health += def.amount
 			heal(def.amount)
-		&"blade":
-			melee_damage += _base_melee_damage * def.amount
-		&"archery":
-			arrow_damage += _base_arrow_damage * def.amount
-			spear_damage += _base_spear_damage * def.amount
 		&"drill":
 			ally_power += def.amount
 			for ally in followers():
@@ -1970,7 +2380,7 @@ func die() -> void:
 func revive(at: Vector3) -> void:
 	is_downed = false
 	shield_up = false
-	shield_health = class_def.shield_health if class_def.shield else 0.0
+	shield_health = class_def.shield_health if owns_shield() else 0.0
 	army_order = Order.FOLLOW
 	army_target = null
 	army_target_path = NodePath()
@@ -2052,6 +2462,9 @@ func _get_up(helpers: Array) -> void:
 
 ## Every peer: crawl speed while downed, a little slower carrying a shield, slower still behind a raised one.
 func _update_move_speed() -> void:
+	if _dash_left > 0.0:
+		move_speed = DASH_DISTANCE / DASH_TIME
+		return
 	if _base_move_speed > 0.0:
 		var ability_scale := 1.0
 		if ability_active:

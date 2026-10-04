@@ -3,11 +3,21 @@
 [ext_resource type="Script" uid="uid://dfqixa0m5f1q4" path="res://scripts/game/upgrade_catalog.gd" id="1_catalog"]
 [ext_resource type="Script" uid="uid://bofqa8lkh8430" path="res://scripts/game/upgrade_def.gd" id="2_def"]
 [ext_resource type="Texture2D" uid="uid://cij7p2003q5jv" path="res://assets/ui/icons/banner.png" id="icon_banner"]
-[ext_resource type="Texture2D" uid="uid://cth77lrtb3huw" path="res://assets/ui/icons/bow.png" id="icon_bow"]
 [ext_resource type="Texture2D" uid="uid://c8jbhlg8oj0es" path="res://assets/ui/icons/potion.png" id="icon_potion"]
 [ext_resource type="Texture2D" uid="uid://87gmfgn5duiw" path="res://assets/ui/icons/shield.png" id="icon_shield"]
 [ext_resource type="Texture2D" uid="uid://nlolsqkgsmsa" path="res://assets/ui/icons/soldier.png" id="icon_soldier"]
-[ext_resource type="Texture2D" uid="uid://ib1w2l0ncgy6" path="res://assets/ui/icons/sword.png" id="icon_sword"]
+
+[ext_resource type="Texture2D" uid="uid://cjn2dlr4shdkf" path="res://assets/ui/icons/game/broadsword.svg" id="glyph_broadsword"]
+[ext_resource type="Texture2D" uid="uid://mkqs2cj2l4b8" path="res://assets/ui/icons/game/rotate_right.svg" id="glyph_rotate_right"]
+[ext_resource type="Texture2D" uid="uid://bmxmc00pct0n6" path="res://assets/ui/icons/game/expand.svg" id="glyph_expand"]
+[ext_resource type="Texture2D" uid="uid://wlhp1wllelm" path="res://assets/ui/icons/game/ghost.svg" id="glyph_ghost"]
+[ext_resource type="Texture2D" uid="uid://bn6g3j81hsl8s" path="res://assets/ui/icons/game/cursor_move.svg" id="glyph_cursor_move"]
+[ext_resource type="Texture2D" uid="uid://bt7fvpkd557ys" path="res://assets/ui/icons/game/shield.svg" id="glyph_shield"]
+[ext_resource type="Texture2D" uid="uid://drvr60mshoqi" path="res://assets/ui/icons/game/spear.svg" id="glyph_spear"]
+[ext_resource type="Texture2D" uid="uid://cuny4r1sbx63f" path="res://assets/ui/icons/game/target.svg" id="glyph_target"]
+[ext_resource type="Texture2D" uid="uid://xxdeyv84nyan" path="res://assets/ui/icons/game/bow.svg" id="glyph_bow"]
+[ext_resource type="Texture2D" uid="uid://djipbgiur3f68" path="res://assets/ui/icons/game/arrow.svg" id="glyph_arrow"]
+[ext_resource type="Texture2D" uid="uid://cba75l7xy4tiq" path="res://assets/ui/icons/game/axe.svg" id="glyph_axe"]
 
 [sub_resource type="Resource" id="Upgrade_vitality"]
 script = ExtResource("2_def")
@@ -20,28 +30,6 @@ cost_growth = 1.45
 max_level = 8
 amount = 30.0
 stalls = Array[StringName]([&"healer"])
-
-[sub_resource type="Resource" id="Upgrade_blade"]
-script = ExtResource("2_def")
-id = &"blade"
-title = "Sharp Blade"
-description = "+20% sword damage"
-icon = ExtResource("icon_sword")
-base_cost = 40
-max_level = 8
-amount = 0.2
-stalls = Array[StringName]([&"blacksmith"])
-
-[sub_resource type="Resource" id="Upgrade_archery"]
-script = ExtResource("2_def")
-id = &"archery"
-title = "Keen Points"
-description = "+20% arrow and spear damage"
-icon = ExtResource("icon_bow")
-base_cost = 40
-max_level = 8
-amount = 0.2
-stalls = Array[StringName]([&"armory"])
 
 [sub_resource type="Resource" id="Upgrade_recruit"]
 script = ExtResource("2_def")
@@ -89,6 +77,171 @@ max_level = 0
 amount = 60.0
 stalls = Array[StringName]([&"healer"])
 
+[sub_resource type="Resource" id="Upgrade_sword_damage"]
+script = ExtResource("2_def")
+id = &"sword_damage"
+title = "Increase Damage"
+description = "+20% sword damage"
+icon = ExtResource("glyph_broadsword")
+base_cost = 40
+amount = 0.2
+classes = Array[StringName]([&"swordsman"])
+
+[sub_resource type="Resource" id="Upgrade_sword_rate"]
+script = ExtResource("2_def")
+id = &"sword_rate"
+title = "Fire Rate"
+description = "+15% faster sword swings"
+icon = ExtResource("glyph_rotate_right")
+base_cost = 60
+cost_growth = 1.6
+max_level = 3
+amount = 0.15
+classes = Array[StringName]([&"swordsman"])
+
+[sub_resource type="Resource" id="Upgrade_sword_knockback"]
+script = ExtResource("2_def")
+id = &"sword_knockback"
+title = "Knock Back"
+description = "Sword hits shove enemies far back"
+icon = ExtResource("glyph_expand")
+base_cost = 120
+cost_growth = 1.0
+max_level = 1
+amount = 3.0
+classes = Array[StringName]([&"swordsman"])
+excludes = Array[StringName]([&"sword_wave"])
+
+[sub_resource type="Resource" id="Upgrade_sword_wave"]
+script = ExtResource("2_def")
+id = &"sword_wave"
+title = "Wave"
+description = "Each swing also sends a slash wave through enemies (60% damage)"
+icon = ExtResource("glyph_ghost")
+base_cost = 160
+cost_growth = 1.0
+max_level = 1
+amount = 0.6
+classes = Array[StringName]([&"swordsman"])
+excludes = Array[StringName]([&"sword_knockback"])
+
+[sub_resource type="Resource" id="Upgrade_sword_dash"]
+script = ExtResource("2_def")
+id = &"sword_dash"
+title = "Dash Attack"
+description = "Dash forward through enemies, slashing each one (150% damage)"
+icon = ExtResource("glyph_cursor_move")
+base_cost = 150
+cost_growth = 1.0
+max_level = 1
+amount = 1.5
+classes = Array[StringName]([&"swordsman"])
+key_hint = "C"
+
+[sub_resource type="Resource" id="Upgrade_spear_damage"]
+script = ExtResource("2_def")
+id = &"spear_damage"
+title = "Increase Damage"
+description = "+20% spear damage (stab and throw)"
+icon = ExtResource("glyph_spear")
+base_cost = 40
+amount = 0.2
+classes = Array[StringName]([&"spearman"])
+
+[sub_resource type="Resource" id="Upgrade_spear_rate"]
+script = ExtResource("2_def")
+id = &"spear_rate"
+title = "Fire Rate"
+description = "+15% faster stabs and throws"
+icon = ExtResource("glyph_rotate_right")
+base_cost = 60
+cost_growth = 1.6
+max_level = 3
+amount = 0.15
+classes = Array[StringName]([&"spearman"])
+
+[sub_resource type="Resource" id="Upgrade_spear_throw"]
+script = ExtResource("2_def")
+id = &"spear_throw"
+title = "Can Throw"
+description = "Throw spears at range. E switches between stab and throw"
+icon = ExtResource("glyph_target")
+base_cost = 100
+cost_growth = 1.0
+max_level = 1
+classes = Array[StringName]([&"spearman"])
+key_hint = "E"
+
+[sub_resource type="Resource" id="Upgrade_bow_damage"]
+script = ExtResource("2_def")
+id = &"bow_damage"
+title = "Increase Damage"
+description = "+20% arrow damage"
+icon = ExtResource("glyph_bow")
+base_cost = 40
+amount = 0.2
+classes = Array[StringName]([&"bowman"])
+
+[sub_resource type="Resource" id="Upgrade_bow_rate"]
+script = ExtResource("2_def")
+id = &"bow_rate"
+title = "Fire Rate"
+description = "+15% faster shots"
+icon = ExtResource("glyph_rotate_right")
+base_cost = 60
+cost_growth = 1.6
+max_level = 3
+amount = 0.15
+classes = Array[StringName]([&"bowman"])
+
+[sub_resource type="Resource" id="Upgrade_bow_range"]
+script = ExtResource("2_def")
+id = &"bow_range"
+title = "Fire Range"
+description = "+2.5 m arrow range"
+icon = ExtResource("glyph_target")
+base_cost = 50
+max_level = 3
+amount = 2.5
+classes = Array[StringName]([&"bowman"])
+
+[sub_resource type="Resource" id="Upgrade_bow_pierce"]
+script = ExtResource("2_def")
+id = &"bow_pierce"
+title = "Penetration"
+description = "Arrows fly through one more enemy (up to 2)"
+icon = ExtResource("glyph_arrow")
+base_cost = 120
+cost_growth = 1.6
+max_level = 2
+amount = 1.0
+classes = Array[StringName]([&"bowman"])
+
+[sub_resource type="Resource" id="Upgrade_shield"]
+script = ExtResource("2_def")
+id = &"shield"
+title = "Shield"
+description = "Hold right mouse to block hits from the front"
+icon = ExtResource("glyph_shield")
+base_cost = 80
+cost_growth = 1.0
+max_level = 1
+classes = Array[StringName]([&"swordsman", &"spearman"])
+key_hint = "RMB"
+
+[sub_resource type="Resource" id="Upgrade_knife"]
+script = ExtResource("2_def")
+id = &"knife"
+title = "Knife"
+description = "Quick knife stab up close (right mouse)"
+icon = ExtResource("glyph_axe")
+base_cost = 80
+cost_growth = 1.0
+max_level = 1
+amount = 30.0
+classes = Array[StringName]([&"bowman"])
+key_hint = "RMB"
+
 [resource]
 script = ExtResource("1_catalog")
-upgrades = Array[ExtResource("2_def")]([SubResource("Upgrade_vitality"), SubResource("Upgrade_blade"), SubResource("Upgrade_archery"), SubResource("Upgrade_recruit"), SubResource("Upgrade_command"), SubResource("Upgrade_drill"), SubResource("Upgrade_potion")])
+upgrades = Array[ExtResource("2_def")]([SubResource("Upgrade_vitality"), SubResource("Upgrade_recruit"), SubResource("Upgrade_command"), SubResource("Upgrade_drill"), SubResource("Upgrade_potion"), SubResource("Upgrade_sword_damage"), SubResource("Upgrade_sword_rate"), SubResource("Upgrade_sword_knockback"), SubResource("Upgrade_sword_wave"), SubResource("Upgrade_sword_dash"), SubResource("Upgrade_spear_damage"), SubResource("Upgrade_spear_rate"), SubResource("Upgrade_spear_throw"), SubResource("Upgrade_bow_damage"), SubResource("Upgrade_bow_rate"), SubResource("Upgrade_bow_range"), SubResource("Upgrade_bow_pierce"), SubResource("Upgrade_shield"), SubResource("Upgrade_knife")])

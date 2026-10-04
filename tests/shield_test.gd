@@ -1,6 +1,6 @@
 extends Node
 ## Shield (Swordsman / Spearman): blocks hits from the front only while up, slows the hero, no attacks behind it,
-## held up in front, breaks, gone until respawn.
+## held up in front, breaks, gone until respawn. The shield is a class upgrade: the test buys it first.
 ##   "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/shield_test.gd [--class=spearman]
 var t := 0.0
 var step := 0
@@ -22,6 +22,8 @@ func _process(delta: float) -> void:
 	match step:
 		0:
 			player.max_health = 1000.0; player.health = 1000.0; player.regen_per_second = 0.0
+			_check(not player.has_shield(), "no shield before it is bought (class upgrade)")
+			player.grant_upgrade(&"shield")
 			_check(player.has_shield() and player._left_item != null and player._left_item.visible, "%s carries a shield (%.0f)" % [player.class_def.id, player.shield_health])
 			var base := player.move_speed
 			player.set_input(Vector2.ZERO, Vector3(1, 0, 0), Vector3.ZERO, true)

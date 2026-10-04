@@ -72,7 +72,7 @@ by touch index so the joystick and buttons work together with multi-touch.
   (720×1280 portrait UI, touch controls). `Platform` (autoload) picks the layout: `Platform.mobile_layout`,
   `Platform.touch_mode` (+ `touch_mode_changed`). Test the phone layout on a PC with `-- --mobile`.
 - Input goes through Input Map actions (`move_*`, `aim_*`, `attack`, `aim_bow`, `block`, `shoot`, `switch_weapon`, `interact`, `pause`,
-  `toggle_fullscreen`, `rotate_camera`, `army_*`, `ping*`) — add new bindings there, not as hard-coded keys, and list them on the
+  `toggle_fullscreen`, `rotate_camera`, `army_*`, `ping*`, `dash` C / L3, `upgrades` T / View) — add new bindings there, not as hard-coded keys, and list them on the
   Controls page (`scenes/ui/controls_menu.gd`, main menu → Controls). Mouse clicks for gameplay are taken in
   `_unhandled_input` (so clicks on HUD buttons don't attack); ignore events with `device == DEVICE_ID_EMULATION`.
 - `interact` is F on keyboard in both matches and Training Field. The Training Field's Orc Practice station
@@ -136,18 +136,17 @@ by touch index so the joystick and buttons work together with multi-touch.
   **Multiplayer only**: no single player in any menu. `Net.open_offline_lobby()` (offline peer) exists only for tests and
   running `main.tscn` directly from the editor.
 - **Classes** (`ClassDef` resources in `resources/data/classes/`, listed in `class_catalog.tres`): Swordsman (`human.glb`,
-  sword), Spearman (`keeper.glb`, spear thrust + javelin throw, E / Y toggles), Bowman (`archer.glb`, bow). Picked with
+  sword), Spearman (`keeper.glb`, spear thrust; javelin throw with Can Throw, E / Y toggles), Bowman (`archer.glb`, bow). Picked with
   `ClassPicker` (lobby only, with an `ArmyPreview`) → `Net.set_class()` → profile `class` + `Net.players[peer].class` → spawn data
   `class` → `Player.set_class()` (every peer, before entering the tree: swaps the Model, sets `weapons`, hand items,
   recolor hue, `hand_offset`). Soldiers carry `ClassDef.ally_weapon` (`Ally.weapon` from spawn data, `Ally.WEAPON_STATS`;
-  archers stop at `shoot_range` and shoot arrows). A class is locked to its weapons; nothing has ammo. Planned, not built:
-  per-class upgrades (the Spearman's throw becomes a purchase). `keeper.glb` is a rigid
+  archers stop at `shoot_range` and shoot arrows). A class is locked to its weapons; nothing has ammo. `keeper.glb` is a rigid
   Graveyard Kit model skinned onto the human's armature by `tools/blender_keeper_rig.py` (same bones and clips).
 - Anything damageable implements `take_damage(amount, attacker = null, is_melee = true)`.
 - **Weapons**: `Player.WEAPONS` rows (melee: `arc` / `reach` / `cooldown`): sword (melee 40, 80° wedge, cleaves),
   spear (stab 35 = `spear_damage`, a straight 0.7 m × 2.4 m lane with a pointed end that pierces a line; `HitFx.stab` streak, not the sword's sweep), javelin (the spear thrown: `player_spear`
   projectile, `spear_cooldown` 1 s), bow (arrows 25, 0.4 s). No ammo anywhere (no ammo pickups, shop items or counters).
-  Sharp Blade boosts the sword, Keen Points arrows and spears (`is_upgrade_useful` hides the other class's).
+  Weapon damage / speed / range come only from the class upgrades (below).
   Chests are broken open by any weapon (group `breakable`, 60 hp), not opened by walking up. Shots fly at 0.55–0.7 m, so
   anything hittable needs collision up to `GameConfig.HIT_HEIGHT` (1 m); aimed shots fly exactly where aimed (no snapping); a quick shot / tap with no aim auto-targets the nearest enemy. Melee hits exactly the aim marker (`Player.melee_outline()` → `_melee_query` prism + `_melee_indicator`: a `melee_arc()` fan or a `melee_lane()` lane, out to `melee_reach()`), aimed where the swing started (`Unit._melee_dir`); other units keep the sphere in `Unit._melee_query`. The player carries `Player.weapons` (from the class) and holds one
   (`weapon_index`, replicated); `switch_weapon()` (server; E / Y / HUD button via `request_switch_weapon`). Melee / shoot
@@ -176,6 +175,20 @@ by touch index so the joystick and buttons work together with multi-touch.
   decals use `assets/vfx/light_masks/` (revive range ring). Touch controls are skinned from `assets/ui/touch/` (set in `hud.gd`).
 - **Combo hits**: `Enemy.take_damage` — a player hit within `combo_window` (1 s) of a teammate's hit on the same orc deals
   `combo_damage_multiplier` (1.5×) and pops "COMBO!" for everyone (`HitFx.report_combo` → `main._net_combo`). Soldiers don't count.
+- **Class upgrades** (`UpgradeDef.classes` set; in `upgrade_catalog.tres`): bought anywhere from the upgrades bottom
+  sheet (`UpgradeSheet`, scenes/ui/upgrade_sheet.gd, in the HUD: T / gamepad View / the star button next to pause;
+  `Hud.toggle_upgrades()`), never at stalls. Their effects are recomputed from the replicated `upgrade_levels` on every
+  peer (`Player._apply_class_upgrades()`: damage, Fire Rate = shorter cooldowns + `anim_speed`, `aim_range`, `arrow_pierce`,
+  `knockback_power`, `sword_wave`, `dash_damage`, `knife_damage`, the carried `weapons`); `_apply_upgrade` only refills a
+  newly bought shield. Swordsman: sword_damage, sword_rate, sword_knockback / sword_wave (pick one: `UpgradeDef.excludes`),
+  sword_dash (C: `Player.dash()` / `request_dash()`, predicted on the owner's client, `dash_active` replicated for the
+  trail, passes through enemies), shield. Spearman: spear_damage, spear_rate, spear_throw (adds "javelin" to `weapons`),
+  shield (Bull Run: planned). Bowman: bow_damage, bow_rate, bow_range (+ arrow `lifetime_scale`), bow_pierce (projectile
+  `pierce`), knife (right mouse / LT / the touch shield button: `knife_attack()`, the dungeon sword scaled down as the
+  knife). No hero owns a shield / throw / knife / dash until bought; the Training Field grants those
+  (`Player.TRAINING_UNLOCKS`) and makes class upgrades free. Tests: `grant_upgrade(id)`; `class_upgrades_test.gd`
+  (`--class=`), `class_upgrades_mp_test.gd`. New class upgrade = a catalog row with `classes` + its effect in
+  `_apply_class_upgrades`.
 - Economy: `Player.coins`, `Player.upgrade_levels`, `buy_upgrade(def)`; shop items are `UpgradeDef` resources in
   `resources/data/upgrade_catalog.tres` (effects by `id` in `Player._apply_upgrade`). There is no global shop: items
   are sold at **trading post stalls** (`ShopStation`) in the **town** at every spawn point: one fixed layout, never
@@ -215,9 +228,9 @@ by touch index so the joystick and buttons work together with multi-touch.
   aim assist skip them. Revive = teammate within `Player.REVIVE_RANGE` for `REVIVE_TIME`. Only hostile
   player-owned damage finishes a downed player. Signals `went_down` / `revived` → main.gd (announce, Help ping).
 - **Shields** (`ClassDef.shield` / `shield_health` / `shield_center`; Swordsman round 150, Spearman rectangle 200, on the
-  left arm): `block` action (right mouse / LT / `Hud.shield_button`) → `set_input(..., block)` / `net_input` →
+  left arm; owned only after the "shield" class upgrade, `Player.owns_shield()`): `block` action (right mouse / LT / `Hud.shield_button`) → `set_input(..., block)` / `net_input` →
   `Player.shield_up` (replicated with `shield_health`). Up: `Player._shield_blocks` soaks every hit from within
-  `BLOCK_ARC` of the facing into `shield_health` (breaks at 0, back on `revive`; a shop item later), `BLOCK_SPEED`,
+  `BLOCK_ARC` of the facing into `shield_health` (breaks at 0, back on `revive` while owned), `BLOCK_SPEED`,
   no attacks, the hero turns toward the cursor / right stick, the shield placed by `_place_shield` after each skeleton update
   (carried: upright on the forearm, face out; up: in front of the chest; blended by `_shield_raise`; both ride the
   torso bone's bob / sway; a block knocks it back via `_shield_recoil` — never re-blend the arms on a hit). Items a subclass places every

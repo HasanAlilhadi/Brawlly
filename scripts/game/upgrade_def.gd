@@ -1,7 +1,11 @@
 class_name UpgradeDef
 extends Resource
-## One item for sale at the trading post stalls (see ShopStation). Permanent upgrades have a max level; consumables (max_level 0) can be
-## bought again and again. What it does is decided by `id` in Player._apply_upgrade().
+## One item for sale. Two kinds:
+## - Stall items (`stalls`): sold at the trading post stalls (see ShopStation).
+## - Class upgrades (`classes`): bought anywhere from the upgrades sheet (T, UpgradeSheet) by heroes of those
+##   classes; their effects are recomputed from the levels on every peer (Player._apply_class_upgrades()).
+## Permanent upgrades have a max level; consumables (max_level 0) can be bought again and again. What it does is
+## decided by `id` in Player._apply_upgrade() / Player._apply_class_upgrades().
 
 @export var id: StringName
 @export var title: String
@@ -16,6 +20,12 @@ extends Resource
 @export var amount: float = 0.0
 ## Stalls that sell it (ShopStation.STALLS ids: blacksmith, armory, healer, barracks).
 @export var stalls: Array[StringName] = []
+## Class upgrade for these ClassDef ids (empty = a stall item).
+@export var classes: Array[StringName] = []
+## Owning any of these upgrades locks this one (a pick-one choice, e.g. Knock Back or Wave).
+@export var excludes: Array[StringName] = []
+## Control that uses it, shown on its card ("C", "E", "RMB").
+@export var key_hint: String = ""
 
 
 func cost_at(level: int) -> int:
@@ -24,3 +34,7 @@ func cost_at(level: int) -> int:
 
 func is_consumable() -> bool:
 	return max_level <= 0
+
+
+func is_class_upgrade() -> bool:
+	return not classes.is_empty()

@@ -129,7 +129,10 @@ func _process(delta: float) -> void:
 				return
 			player.max_health = 1e6
 			player.health = 1e6
-			_check(player.weapons == PackedStringArray(["spear", "javelin"]), "the Spearman carries the spear (thrust + throw)")
+			_check(player.weapons == PackedStringArray(["spear"]), "the Spearman starts with the spear thrust only")
+			player.grant_upgrade(&"spear_throw")
+			player.grant_upgrade(&"shield")
+			_check(player.weapons == PackedStringArray(["spear", "javelin"]), "Can Throw + Shield bought: thrust + throw")
 			_check(not Platform.mobile_layout, "desktop layout")
 			_check(not hud.joystick.visible and not hud.bow_stick.visible, "touch controls hidden")
 			_check(is_equal_approx(main.camera.zoom, main.CAMERA_ZOOM + 0.05), "spear thrust: nearly the default camera zoom (%.2f)" % main.camera.zoom)
@@ -209,7 +212,8 @@ func _process(delta: float) -> void:
 			if pt > 0.2:
 				_check(main.shop_menu.visible and main.shop_menu._title.text == "Blacksmith", "F opens the Blacksmith's shop")
 				var rows: Array = main.shop_menu._rows.filter(func(r: Dictionary) -> bool: return (r.panel as Control).visible)
-				_check(rows.size() == 1 and rows[0].def.id == &"blade", "it only sells the Sharp Blade")
+				_check(rows.is_empty() and main.shop_menu._empty_hint.visible,
+						"nothing for sale there (damage is a class upgrade now): it points to the upgrades menu")
 				_key(KEY_F, true)
 				_key(KEY_F, false)
 				_next()

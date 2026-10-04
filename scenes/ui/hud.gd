@@ -13,6 +13,7 @@ signal army_command_requested(order: int)
 signal ping_requested
 signal weapon_switch_requested
 signal ability_requested
+signal dash_requested
 
 const ARMY_ORDERS: PackedStringArray = ["Follow", "Charge", "Hold", "Kill"]
 const ARMY_KEYS: PackedStringArray = ["1", "2", "3", "4"]
@@ -30,6 +31,9 @@ const TOUCH_BUTTON := preload("res://assets/ui/touch/button_circle.png")
 const TOUCH_BUTTON_HELD := preload("res://assets/ui/touch/highlights/button_circle_highlight.png")
 const SPEAR_ICON := preload("res://assets/ui/icons/game/spear.svg")
 const SHIELD_ICON := preload("res://assets/ui/icons/game/shield.svg")
+const KNIFE_ICON := preload("res://assets/ui/icons/game/axe.svg")
+const DASH_ICON := preload("res://assets/ui/icons/game/cursor_move.svg")
+const UPGRADES_ICON := preload("res://assets/ui/icons/game/star_coin.svg")
 
 @onready var root: Control = $Root
 @onready var joystick: TouchJoystick = %Joystick
@@ -73,6 +77,13 @@ var _switch_button: TouchButton
 var shield_button: TouchButton
 ## Touch: the special ability (dim until enough XP).
 var ability_button: TouchButton
+## Touch: Dash Attack (Swordsman with the upgrade).
+var dash_button: TouchButton
+## Class upgrades (T / the upgrades button next to pause).
+var upgrade_sheet: UpgradeSheet
+var _upgrades_button: Button
+var _shield_icon: Texture2D
+var _knife_icon: Texture2D
 var _stall_prompt: Button
 var _stall_key: HBoxContainer
 var _stall_label: Label
@@ -128,6 +139,8 @@ func setup(player: Player, camps: Array[Camp]) -> void:
 	player.weapon_changed.connect(func(_weapon: String) -> void: _update_weapon_controls())
 	player.shield_changed.connect(_update_weapon_controls)
 	player.ability_changed.connect(_update_weapon_controls)
+	player.upgrades_changed.connect(_update_weapon_controls)
+	upgrade_sheet.set_player(player)
 	_update_weapon_controls()
 	player.health_changed.connect(_on_health_changed)
 	player.coins_changed.connect(_on_coins_changed)
@@ -178,6 +191,9 @@ func show_end(title: String, subtitle: String, restart_label: String = "Play aga
 	_ping_button.hide()
 	_ended = true
 	reset_touch_controls()
+	upgrade_sheet.close_sheet()
+	_upgrades_button.hide()
+	dash_button.hide()
 	joystick.hide()
 	melee_button.hide()
 	bow_stick.hide()
@@ -203,6 +219,7 @@ func reset_touch_controls() -> void:
 		_switch_button.reset()
 		shield_button.reset()
 		ability_button.reset()
+		dash_button.reset()
 
 
 func _process(delta: float) -> void:
@@ -365,9 +382,27 @@ func _build_extras() -> void:
 	_ping_button.visible = Net.is_online()
 	root.add_child(_ping_button)
 
+	# Class upgrades: a button next to pause / ping, and the bottom sheet it opens.
+	_upgrades_button = Button.new()
+	_upgrades_button.name = "UpgradesButton"
+	_upgrades_button.theme_type_variation = &"ButtonSquare"
+	_upgrades_button.focus_mode = Control.FOCUS_NONE
+	_upgrades_button.icon = UPGRADES_ICON
+	_upgrades_button.expand_icon = true
+	_upgrades_button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	if not Platform.mobile_layout:
+		_upgrades_button.tooltip_text = "Upgrades (T)"
+	_upgrades_button.pressed.connect(toggle_upgrades)
+	root.add_child(_upgrades_button)
+	upgrade_sheet = UpgradeSheet.new()
+	upgrade_sheet.name = "UpgradeSheet"
+	root.add_child(upgrade_sheet)
+	upgrade_sheet.toggled_open.connect(func(_open: bool) -> void: reset_touch_controls())
+
 	_build_downed_panel()
 	_build_weapon_controls()
 	_build_stall_prompt()
+	root.move_child(upgrade_sheet, -1)  # over the touch buttons
 
 	_revive_label = _small_label("", 26)
 	_revive_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
@@ -652,6 +687,19 @@ func _award_card(award: Dictionary) -> Control:
 # --- Weapons ------------------------------------------------------------------------
 
 ## Touch: the stick of the weapon in hand sits in the big slot, a small button above it switches.
+## A white glyph sized for a touch button (the glyphs are tight, the touch buttons want 44 px).
+func _touch_icon(glyph: Texture2D) -> Texture2D:
+	var image := glyph.get_image()
+	image.resize(44, 44, Image.INTERPOLATE_LANCZOS)
+	return ImageTexture.create_from_image(image)
+
+
+## Opens / closes the class upgrades sheet (not after the match ended).
+func toggle_upgrades() -> void:
+	if not _ended:
+		upgrade_sheet.toggle()
+
+
 ## Desktop: a weapon bar at the bottom right (the class's weapons, the one in hand lit, E to switch).
 func _build_weapon_controls() -> void:
 	# The glyph is tight (no padding like the 64 px RPG icons), so the touch stick gets a 44 px copy.
@@ -690,11 +738,28 @@ func _build_weapon_controls() -> void:
 	shield_button.button_texture = TOUCH_BUTTON
 	shield_button.held_texture = TOUCH_BUTTON_HELD
 	shield_button.icon_scale = 0.9
-	var shield_image := SHIELD_ICON.get_image()
-	shield_image.resize(44, 44, Image.INTERPOLATE_LANCZOS)
-	shield_button.icon = ImageTexture.create_from_image(shield_image)
+	_shield_icon = _touch_icon(SHIELD_ICON)
+	_knife_icon = _touch_icon(KNIFE_ICON)
+	shield_button.icon = _shield_icon
 	shield_button.visible = false
 	root.add_child(shield_button)
+
+	dash_button = TouchButton.new()
+	dash_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	dash_button.offset_left = -442.0
+	dash_button.offset_top = -176.0
+	dash_button.offset_right = -348.0
+	dash_button.offset_bottom = -82.0
+	dash_button.color = bow_stick.color
+	dash_button.held_color = bow_stick.held_color
+	dash_button.ring_color = bow_stick.ring_color
+	dash_button.button_texture = TOUCH_BUTTON
+	dash_button.held_texture = TOUCH_BUTTON_HELD
+	dash_button.icon_scale = 0.9
+	dash_button.icon = _touch_icon(DASH_ICON)
+	dash_button.visible = false
+	dash_button.pressed.connect(dash_requested.emit)
+	root.add_child(dash_button)
 
 	ability_button = TouchButton.new()
 	ability_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
@@ -743,9 +808,13 @@ func _update_weapon_controls() -> void:
 	var other := _player.other_weapon() if _player else ""
 	_switch_button.visible = touch and other != ""
 	_switch_button.icon = _weapon_icons.get(other)
-	shield_button.visible = touch and _player != null and _player.can_block()
+	# The shield button is the Bowman's knife once bought (both are the right mouse button / LT).
+	var knife := _player != null and _player.has_knife()
+	shield_button.icon = _knife_icon if knife else _shield_icon
+	shield_button.visible = touch and _player != null and (_player.can_block() or knife)
 	if not shield_button.visible:
 		shield_button.reset()
+	dash_button.visible = touch and _player != null and _player.has_dash()
 	ability_button.visible = touch and _player != null and _player.has_ability()
 	if ability_button.visible:
 		var icon_id := _player.class_def.ability_icon
@@ -824,7 +893,7 @@ func _apply_design() -> void:
 	buttons.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	buttons.add_theme_constant_override("separation", int(HudStyle.GAP))
 	left.add_child(buttons)
-	for button: Button in [pause_button, _ping_button]:
+	for button: Button in [pause_button, _upgrades_button, _ping_button]:
 		button.reparent(buttons, false)
 		button.custom_minimum_size = Vector2(HudStyle.BUTTON, HudStyle.BUTTON)
 		button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN

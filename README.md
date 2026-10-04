@@ -9,14 +9,20 @@ portrait on phones. There is no single player: host a game (alone is fine) or jo
 
 - **Classes** (picked in the lobby, with a preview of your hero and soldiers; `resources/data/classes/*.tres`, `ClassDef`): each hero fights
   only with its class's weapon, and nothing needs ammo.
-  - **Swordsman** (`human.glb`): wide sword swings that cut through crowds, and a round shield. Soldiers: sword and shield.
-  - **Spearman** (`keeper.glb`): straight spear stabs that pierce everything in a line; **E** switches to throwing spears
-    (to become a purchase later), and a tall rectangular shield. Soldiers: spears (longer reach).
+  - **Swordsman** (`human.glb`): wide sword swings that cut through crowds. Soldiers: sword and shield.
+  - **Spearman** (`keeper.glb`): straight spear stabs that pierce everything in a line. Soldiers: spears (longer reach).
   - **Bowman** (`archer.glb`): fast arrows. **Bow Rain** marks a large area with X, then LMB rains arrows
     into it. Soldiers: archers that stop at range and shoot.
-  - **Shields** (Swordsman 150, Spearman 200): hold **right mouse** / LT / the touch shield button to raise it. It
-    blocks every hit from the front (the damage goes into the shield) while up; you walk slower and can't attack.
-    It breaks when worn out and comes back when you respawn (buying a new one: planned).
+  - **Class upgrades** (press **T**, the gamepad View button, or the star button next to pause): a bottom sheet with
+    your class's upgrades, bought with coins anywhere (free in the Training Field, which also hands out the unlocks):
+    - Swordsman: Increase Damage, Fire Rate, **Knock Back or Wave** (pick one: hits shove enemies far back, or each
+      swing sends a slash wave through enemies), **Dash Attack** (C: dash through enemies, slashing each), Shield.
+    - Spearman: Increase Damage, Fire Rate, **Can Throw** (E switches to throwing spears), Shield. (Bull Run: later.)
+    - Bowman: Increase Damage, Fire Rate, Fire Range, **Penetration** (arrows go through up to 2 enemies),
+      **Knife** (right mouse: a quick stab up close).
+  - **Shields** (bought; Swordsman 150, Spearman 200): hold **right mouse** / LT / the touch shield button to raise it.
+    It blocks every hit from the front (the damage goes into the shield) while up; you walk slower and can't attack.
+    It breaks when worn out and comes back when you respawn.
   - Every class has a special ability charged by XP: Swordsman Whirlwind, Spearman Bull Rush, and Bowman Bow Rain.
 - Melee weapons are aim sticks (drag to keep swinging toward a direction, independent of movement); ranged = drag to
   aim, release to shoot. A tap auto-targets the nearest enemy. **Health** comes from potions (orc drops, chests).
@@ -38,8 +44,8 @@ portrait on phones. There is no single player: host a game (alone is fine) or jo
   They chase the attacker faster and much farther than usual, and give up only after losing sight for ~10 s.
 - **Coins & the town**: orcs, chests and destroyed camps give coins. Each spawn is a town (always the same layout:
   a paved square with the Barracks north, Blacksmith + Healer west, Bows & Spears east; kept away from orc camps)
-  with one stall per trade: Blacksmith (Sharp Blade: sword), Bows & Spears (Keen Points: arrows and spears),
-  Healer (Potion, Vitality) and Barracks (Recruit, Drill Soldiers, Command).
+  with one stall per trade: Healer (Potion, Vitality) and Barracks (Recruit, Drill Soldiers, Command); the Blacksmith
+  and Bows & Spears sell nothing for now (weapon upgrades are class upgrades, T).
   Walk up to a stall and press B (or tap its button) to open its shop. Items are data:
   `resources/data/upgrade_catalog.tres` (`stalls` = which stalls sell it); stalls are `scenes/world/shop_station.gd`.
 - **Difficulty curve**: each camp has a tier (distance from the start). Orcs are 0.75× strength near the start up to
@@ -125,13 +131,16 @@ portrait on phones. There is no single player: host a game (alone is fine) or jo
 | Action | Keyboard + mouse (PC) | Gamepad | Touch (phones) |
 |---|---|---|---|
 | Move | WASD / arrow keys | Left stick | Drag on the left side |
-| Training: choose hero / spawn orc | F beside a hero / orc station | LB / View | — |
+| Training: choose hero / spawn orc | F beside a hero / orc station | LB | — |
+| Class upgrades | T | View | Star button next to pause |
 | Sword / spear | Left mouse — swings / thrusts toward the cursor while held · J = nearest enemy | RB / X (nearest enemy) | Weapon stick: drag = direction, tap = nearest |
 | Bow / spear throw | Right mouse — hold to aim at the cursor, release to shoot | Right stick aims · RT / A shoots | Aim stick: drag to aim, release to shoot |
 | Quick shot (nearest enemy) | K | RT / A without aiming | Tap the aim stick |
-| Spearman: thrust ⇄ throw | E | Y | Small button above the weapon stick |
-| Shield (Swordsman, Spearman) | Right mouse (hold; turns toward the cursor) | LT (hold) | Shield button left of the weapon stick |
-| Use a stall | F | LB / View | Stall button |
+| Spearman: thrust ⇄ throw (Can Throw) | E | Y | Small button above the weapon stick |
+| Shield (Swordsman, Spearman, bought) | Right mouse (hold; turns toward the cursor) | LT (hold) | Shield button left of the weapon stick |
+| Knife (Bowman, bought) | Right mouse | LT | Shield button (shows a blade) |
+| Dash Attack (Swordsman, bought) | C (where you move, else toward the cursor) | L3 | Dash button left of the shield button |
+| Use a stall | F | LB | Stall button |
 | Pause | Esc / P | Start | II button / Android back |
 | Army orders (follow / charge / hold) | 1 / 2 / 3 (charge / hold at the cursor) | D-pad up / right / down | Buttons under the soldier count |
 | Ping · call for help | G or middle mouse · H | D-pad left | "!" button (online) |

@@ -26,6 +26,7 @@ var _army_title: Label
 var _army_detail: Label
 var _take_button: Button
 var _army_timer: float = 0.0
+var _empty_hint: Label  # a stall with nothing for sale points to the class upgrades (T)
 
 @onready var _coins_label: Label = %CoinsLabel
 @onready var _list: VBoxContainer = %List
@@ -38,6 +39,13 @@ func _ready() -> void:
 	hide()
 	_close_button.pressed.connect(close)
 	_build_army_row()
+	_empty_hint = Label.new()
+	_empty_hint.text = "Nothing for sale here right now.\nUpgrade your hero any time from the upgrades menu (%s)." \
+			% ("the button next to pause" if Platform.mobile_layout else "T")
+	_empty_hint.add_theme_font_size_override("font_size", 24)
+	_empty_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_empty_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_list.add_child(_empty_hint)
 	for def in catalog.upgrades:
 		_add_row(def)
 
@@ -54,9 +62,12 @@ func open(at: ShopStation) -> void:
 		return
 	stall = at
 	_title.text = at.title()
+	var selling := false
 	for row in _rows:
 		(row.panel as Control).visible = at.sells(row.def)
+		selling = selling or at.sells(row.def)
 	_army_panel.visible = at.stall_id == ShopStation.BARRACKS
+	_empty_hint.visible = not selling
 	if not online:
 		get_tree().paused = true
 	_refresh()

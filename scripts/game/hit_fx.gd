@@ -160,7 +160,7 @@ static func persistent_swing_arc(parent: Node3D, height: float, radius: float, c
 ## Spear stab: a narrow streak that shoots straight out along `yaw` to `length` (the spear's lane), pointed at
 ## the far end like the spearhead, then fades; a spark pops at the tip.
 static func stab(parent: Node3D, height: float, yaw: float, length: float, width: float, color: Color,
-		lifetime: float = 0.22) -> void:
+		lifetime: float = 0.22, live_direction: Callable = Callable()) -> void:
 	if not is_instance_valid(parent) or not parent.is_inside_tree():
 		return
 	_ensure_trail_material()
@@ -172,10 +172,17 @@ static func stab(parent: Node3D, height: float, yaw: float, length: float, width
 	streak.position = Vector3(0, height, 0)
 	streak.rotation.y = yaw
 	var tween := streak.create_tween()
-	tween.tween_method(func(t: float) -> void: _draw_stab(mesh, length, width, color, t), 0.0, 1.0, lifetime)
+	tween.tween_method(func(t: float) -> void:
+		if live_direction.is_valid():
+			var direction: Vector3 = live_direction.call()
+			streak.global_rotation = Vector3(0.0, atan2(direction.x, direction.z), 0.0)
+		_draw_stab(mesh, length, width, color, t), 0.0, 1.0, lifetime)
 	tween.tween_callback(streak.queue_free)
-	var tip := parent.global_position + Vector3(sin(yaw), 0.0, cos(yaw)) * length + Vector3(0, height, 0)
 	parent.get_tree().create_timer(lifetime * 0.3).timeout.connect(func() -> void:
+		if not is_instance_valid(parent):
+			return
+		var direction: Vector3 = live_direction.call() if live_direction.is_valid() else Vector3(sin(yaw), 0.0, cos(yaw))
+		var tip := parent.global_position + direction * length + Vector3(0, height, 0)
 		flash(tip, HIT_SPARK, Color(color, 0.9), 0.55, 0.14, Vector2(0.4, 1.0)))
 
 
@@ -283,6 +290,13 @@ static func block_impact(at: Vector3, normal: Vector3, broken: bool) -> void:
 		FloatingText3D.spawn(world, at + Vector3(0, 1.3, 0), "Shield broken!", Color(1.0, 0.72, 0.35), 46, true)
 	else:
 		FloatingText3D.spawn(world, at + Vector3(0, 1.2, 0), "Blocked", Color(0.75, 0.9, 1.0), 34)
+
+
+## Server-confirmed Bow Rain impacts use the same position on every peer.
+static func rain_impact(at: Vector3, normal: Vector3, damageable: bool) -> void:
+	var point := at + normal * 0.06
+	flash(point, HIT_SPARK, ArrowProjectile.RAIN_COLOR, 0.55, 0.18)
+	burst(point, Kind.METAL if damageable else Kind.DIRT, 7, normal)
 
 
 ## Little burst of chips / sparks at `at` (flying out around `direction`).

@@ -62,9 +62,22 @@ Run from the project folder (`G` = the Godot binary). Tests start the game norma
 "$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/mp_modes_host.gd &
 "$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/mp_modes_client.gd
 
+# Class upgrades (T sheet): cards per class, buying anywhere, damage / fire rate, and per class: shield, Knock Back
+# (locks Wave), Wave, Dash Attack · Can Throw · Fire Range, Penetration (3 orcs), Knife
+"$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/class_upgrades_test.gd --class=swordsman
+"$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/class_upgrades_test.gd --class=spearman
+"$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/class_upgrades_test.gd --class=bowman
+# Class upgrades online: client buys via the server, predicted dash, the host's Fire Range seen on the client
+"$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/class_upgrades_mp_test.gd --role=host --class=bowman --port=24705 &
+"$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/class_upgrades_mp_test.gd --role=client --class=swordsman --port=24705
+
 # Server browser + lobby: client finds the locked game, wrong password refused, right one joins, Ready, host kicks → notice
 "$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/lobby_test.gd --role=host --port=24685 &
 "$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/lobby_test.gd --role=client --port=24685
+
+# Multiplayer abilities: all classes, host/client casts, repeated casts, active-spawn visuals and authoritative impacts
+"$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/ability_multiplayer_test.gd --role=host --port=24675 &
+"$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/ability_multiplayer_test.gd --role=client --port=24675
 ```
 
 The multiplayer clients stay in the main menu after their host quits — stop them once the host prints `done`.

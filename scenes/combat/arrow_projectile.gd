@@ -1,14 +1,17 @@
 class_name ArrowProjectile
 extends Node3D
-## Flying arrow / thrown spear. Raycasts along its path each physics frame (no tunneling),
-## damages the first hostile thing with `take_damage`, passes through teammates, and stops at
-## trees/buildings. Point-blank shots count too: it spawns a little in front of the shooter (the player's
+## Flying arrow / thrown spear / sword wave. Raycasts along its path each physics frame (no tunneling),
+## damages the first hostile thing with `take_damage` (and `pierce` more behind it, each once), passes through
+## teammates, and stops at trees/buildings. A `sweep_radius` (the sword wave) also hits everything that wide
+## around its path. Point-blank shots count too: it spawns a little in front of the shooter (the player's
 ## arrows: at the bow), so the stretch from the shooter's body to the spawn point, and as far straight ahead,
 ## is checked first, and rays that start inside a body still hit it. Spawned by the server through NetSpawn; other peers only show the flight.
 
 @export var speed: float = 18.0
 @export var lifetime: float = 0.72
 @export_flags_3d_physics var hit_mask: int = GameConfig.LAYER_WORLD | GameConfig.LAYER_UNITS
+## > 0: also damages every hostile within this many m of its path (wide hits, e.g. the sword wave).
+@export var sweep_radius: float = 0.0
 
 ## Set before adding to the tree (from the spawn data).
 var start: Vector3
@@ -23,6 +26,8 @@ var shooter_path: NodePath
 var check_shooter_origin: bool = true
 ## Bow Rain arrows get local-only spawn and impact VFX on every peer.
 var rain_arrow: bool = false
+## Hostiles it may still fly through after hitting one (Penetration upgrade; the sword wave: all).
+var pierce: int = 0
 
 const RAIN_REVEAL_DELAY: float = 0.08
 ## Only Bow Rain gets a wider hit volume; ordinary bow shots remain precise rays.
@@ -32,6 +37,8 @@ const RAIN_COLOR := Color(1.0, 0.76, 0.32, 0.9)
 var _shooter: Node3D
 var _age: float = 0.0
 var _rain_hit_cast: ShapeCast3D
+var _sweep_cast: ShapeCast3D
+var _hit_ids: Dictionary = {}  # instance ids already damaged (piercing shots hit each target once)
 
 
 func _ready() -> void:
@@ -52,6 +59,16 @@ func _ready() -> void:
 		visible = false
 		HitFx.flash(start, HitFx.COMBO_RING, RAIN_COLOR, 0.85, 0.22, Vector2(0.35, 1.35))
 		HitFx.flash(start, HitFx.REVIVE_SPARKLE, RAIN_COLOR, 0.62, 0.2)
+	if sweep_radius > 0.0:
+		_sweep_cast = ShapeCast3D.new()
+		_sweep_cast.top_level = true
+		_sweep_cast.enabled = false
+		_sweep_cast.collision_mask = hit_mask & ~GameConfig.LAYER_WORLD
+		_sweep_cast.max_results = 16
+		var sweep_sphere := SphereShape3D.new()
+		sweep_sphere.radius = sweep_radius
+		_sweep_cast.shape = sweep_sphere
+		add_child(_sweep_cast)
 	if not shooter_path.is_empty():
 		_shooter = get_node_or_null(shooter_path) as Node3D
 	if multiplayer.is_server() and is_instance_valid(_shooter) and check_shooter_origin:
@@ -70,10 +87,10 @@ func _physics_process(delta: float) -> void:
 	_age += delta
 	if rain_arrow:
 		visible = _age >= RAIN_REVEAL_DELAY and _age < lifetime
-	if not multiplayer.is_server() and not rain_arrow:
-		# Ordinary arrows are visual-only on peers; the server removes them after a hit.
+	if not multiplayer.is_server():
+		# All projectiles are visual-only on peers; the server owns hits and impact effects.
 		global_position = to
-		visible = _age < lifetime
+		visible = _age < lifetime and (not rain_arrow or _age >= RAIN_REVEAL_DELAY)
 		return
 	if _hit_something(from, to):
 		if multiplayer.is_server():
@@ -95,10 +112,12 @@ func _physics_process(delta: float) -> void:
 func _hit_something(from: Vector3, to: Vector3) -> bool:
 	if rain_arrow and _hit_rain_target(from, to):
 		return true
+	if _sweep_cast and multiplayer.is_server():
+		_sweep_hits(from, to)
 	var exclude: Array[RID] = []
 	if is_instance_valid(_shooter) and _shooter is CollisionObject3D:
 		exclude.append((_shooter as CollisionObject3D).get_rid())
-	for attempt in 4:
+	for attempt in 6:
 		var query := PhysicsRayQueryParameters3D.create(from, to, hit_mask)
 		query.exclude = exclude
 		query.hit_from_inside = true
@@ -110,12 +129,37 @@ func _hit_something(from: Vector3, to: Vector3) -> bool:
 			# Teammate: fly through.
 			exclude.append((collider as CollisionObject3D).get_rid())
 			continue
+		if collider.has_method("take_damage") and _hit_ids.has(collider.get_instance_id()):
+			exclude.append((collider as CollisionObject3D).get_rid())  # already hit (piercing): fly on
+			continue
 		if rain_arrow:
 			_show_rain_impact(hit.position, hit.normal, collider.has_method("take_damage"))
 		if multiplayer.is_server() and collider.has_method("take_damage"):
+			_hit_ids[collider.get_instance_id()] = true
 			collider.take_damage(damage, _shooter if is_instance_valid(_shooter) else self, false, crit)
+		if pierce > 0 and collider.has_method("take_damage"):
+			pierce -= 1
+			exclude.append((collider as CollisionObject3D).get_rid())
+			continue
 		return true
 	return false
+
+
+## Server: everything hostile within `sweep_radius` of this frame's travel takes the hit once (it flies on).
+func _sweep_hits(from: Vector3, to: Vector3) -> void:
+	_sweep_cast.global_position = from
+	_sweep_cast.target_position = to - from
+	_sweep_cast.clear_exceptions()
+	if is_instance_valid(_shooter) and _shooter is CollisionObject3D:
+		_sweep_cast.add_exception(_shooter as CollisionObject3D)
+	_sweep_cast.force_shapecast_update()
+	for index in _sweep_cast.get_collision_count():
+		var collider := _sweep_cast.get_collider(index)
+		if collider == null or collider.get("team_id") == team_id or not collider.has_method("take_damage") \
+				or _hit_ids.has(collider.get_instance_id()):
+			continue
+		_hit_ids[collider.get_instance_id()] = true
+		collider.take_damage(damage, _shooter if is_instance_valid(_shooter) else self, false, crit)
 
 
 ## Sweep the wider Bow Rain sphere over this frame's travel. Non-damageable scenery still
@@ -151,6 +195,9 @@ func _hit_rain_target(from: Vector3, to: Vector3) -> bool:
 
 
 func _show_rain_impact(at: Vector3, normal: Vector3, damageable: bool) -> void:
-	var point := at + normal * 0.06
-	HitFx.flash(point, HitFx.HIT_SPARK, RAIN_COLOR, 0.55, 0.18)
-	HitFx.burst(point, HitFx.Kind.METAL if damageable else HitFx.Kind.DIRT, 7, normal)
+	if not multiplayer.is_server():
+		return
+	if is_instance_valid(HitFx.main) and Net.is_online():
+		HitFx.main.rpc("_net_rain_impact", at, normal, damageable)
+	else:
+		HitFx.rain_impact(at, normal, damageable)

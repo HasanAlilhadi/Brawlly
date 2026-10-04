@@ -18,6 +18,7 @@ const PROJECTILE_SCENES := {
 	&"arrow": preload("res://scenes/combat/arrow_projectile.tscn"),
 	&"spear": preload("res://scenes/combat/spear_projectile.tscn"),
 	&"player_spear": preload("res://scenes/combat/player_spear_projectile.tscn"),
+	&"sword_wave": preload("res://scenes/combat/sword_wave_projectile.tscn"),
 }
 ## Desktop monitors show the world from a bit further away than phones.
 const DESKTOP_CAMERA_ZOOM: float = 1.25
@@ -66,6 +67,7 @@ var _started: bool = false
 var _game_over: bool = false
 var _melee_send_timer: float = 0.0
 var _shoot_send_timer: float = 0.0
+var _knife_send_timer: float = 0.0
 var _stall: ShopStation  # the trading post stall the local player stands at
 var _gate: ShopStation  # the barracks pen gate the local player stands at (with soldiers waiting there)
 var _current_town: Node3D
@@ -79,6 +81,7 @@ var _vibrate_cooldown: float = 0.0
 var _respawn_left: float = 0.0
 var _mouse_attack: bool = false
 var _mouse_block: bool = false  # right mouse holds the shield up (melee weapon in hand)
+var _mouse_knife: bool = false  # right mouse stabs with the knife (Bowman with the Knife upgrade)
 var _mouse_bow: bool = false
 var _aim_cursor: ImageTexture
 var _bow_cursor: bool = false
@@ -142,6 +145,7 @@ func _ready() -> void:
 	hud.bow_stick.tapped.connect(func() -> void: _fire(Vector3.ZERO))
 	hud.melee_button.tapped.connect(_melee_once)
 	hud.weapon_switch_requested.connect(_switch_weapon)
+	hud.dash_requested.connect(_dash)
 	hud.ability_requested.connect(_use_ability)
 	hud.army_command_requested.connect(_on_army_button)
 	hud.ping_requested.connect(func() -> void: _ping(_ahead_point(0.0)))
@@ -278,6 +282,8 @@ func _spawn_item(data: Dictionary) -> Node:
 		projectile.rain_arrow = data.get("rain_arrow", false)
 		if data.get("speed", 0.0) > 0.0:
 			projectile.speed = data.speed
+		projectile.pierce = data.get("pierce", 0)
+		projectile.lifetime *= data.get("lifetime_scale", 1.0)
 		node = projectile
 	node.name = data.name
 	return node
@@ -401,6 +407,9 @@ func _physics_process(delta: float) -> void:
 	var block := local_player.can_block() and (_mouse_block or pad_block or hud.shield_button.is_held)
 	if block and _mouse_block:
 		aim = _cursor_direction()
+	# Knife (Bowman with the upgrade): right mouse toward the cursor, LT / the touch button toward the aim or ahead.
+	var knife_held := local_player.has_knife() and (_mouse_knife or pad_block or hud.shield_button.is_held)
+	var knife_aim := _cursor_direction() if _mouse_knife else aim
 	var use_held := (_attack_key_held() or Input.is_action_pressed(&"shoot")) and not _bow_rain_targeting
 	var melee_held := melee and not block and melee_aim == Vector3.ZERO and (hud.melee_button.is_held or use_held)
 	var shoot_held := not melee and use_held
@@ -410,6 +419,8 @@ func _physics_process(delta: float) -> void:
 			local_player.attack_melee()
 		if shoot_held:
 			local_player.shoot(aim)
+		if knife_held:
+			local_player.knife_attack(knife_aim)
 		return
 	# Client: move / aim locally right away (prediction), send everything to the server.
 	local_player.predict_input = move if not local_player.is_dead else Vector2.ZERO
@@ -430,6 +441,10 @@ func _physics_process(delta: float) -> void:
 	if shoot_held and _shoot_send_timer <= 0.0:
 		_shoot_send_timer = ACTION_SEND_INTERVAL
 		local_player.net_shoot.rpc_id(1, aim)
+	_knife_send_timer -= delta
+	if knife_held and _knife_send_timer <= 0.0:
+		_knife_send_timer = ACTION_SEND_INTERVAL
+		local_player.net_knife.rpc_id(1, knife_aim)
 
 
 ## Mouse buttons only count when they didn't land on the HUD (pause / shop buttons, minimap).
@@ -462,7 +477,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			_command_army(Player.Order.KILL, _cursor_point())
 		get_viewport().set_input_as_handled()
 		return
-	if real_click and local_player.holds_ranged() and (button.is_action(&"attack") or button.is_action(&"aim_bow")):
+	if real_click and button.is_action(&"block") and local_player.has_knife():
+		_mouse_knife = true  # the Bowman's right mouse stabs once the knife is bought (instead of aiming)
+	elif real_click and local_player.holds_ranged() and (button.is_action(&"attack") or button.is_action(&"aim_bow")):
 		_mouse_bow = true
 		_mouse_bow_button = button.button_index
 	elif real_click and button.is_action(&"block") and local_player.can_block():
@@ -474,6 +491,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		_switch_weapon()
 	elif event.is_action_pressed(&"ability") and not event.is_echo():
 		_use_ability()
+	elif event.is_action_pressed(&"dash") and not event.is_echo():
+		_dash()
+	elif event.is_action_pressed(&"upgrades") and not event.is_echo():
+		hud.toggle_upgrades()
 	elif event.is_action_pressed(&"interact") and not event.is_echo() and training_mode:
 		_interact_training()
 		get_viewport().set_input_as_handled()
@@ -501,6 +522,7 @@ func _input(event: InputEvent) -> void:
 		_mouse_attack = false
 	if button.is_action(&"block"):
 		_mouse_block = false
+		_mouse_knife = false
 	if _mouse_bow and button.button_index == _mouse_bow_button:
 		_mouse_bow = false
 		_fire(_cursor_aim())
@@ -604,6 +626,24 @@ func _cancel_bow_rain() -> void:
 		local_player.set_bow_rain_preview(Vector3.ZERO, false)
 
 
+## C / L3 / the touch dash button (Swordsman with Dash Attack): along the movement input, else toward the
+## mouse cursor, else straight ahead.
+func _dash() -> void:
+	if local_player == null or _game_over or not local_player.has_dash():
+		return
+	var move := hud.joystick.output
+	var keys := Input.get_vector(&"move_left", &"move_right", &"move_up", &"move_down")
+	if keys != Vector2.ZERO:
+		move = keys
+	var direction := Vector3.ZERO
+	if move.length() > 0.2:
+		var world := camera.to_world(move)
+		direction = Vector3(world.x, 0.0, world.y)
+	elif not Platform.touch_mode:
+		direction = _cursor_direction()
+	local_player.request_dash(direction)
+
+
 ## E / Y / the HUD switch button: next weapon in hand (drops any aim in progress).
 func _switch_weapon() -> void:
 	if local_player == null or _game_over or local_player.is_dead:
@@ -649,6 +689,7 @@ func _on_paused() -> void:
 	hud.reset_touch_controls()
 	_mouse_attack = false
 	_mouse_bow = false
+	_mouse_knife = false
 	_mouse_click_left = 0.0
 	if local_player:
 		local_player.clear_aim()
@@ -1008,6 +1049,11 @@ func _on_player_died(unit: Unit) -> void:
 
 
 ## Our own hits on other devices: the server sends the damage number here.
+@rpc("authority", "call_local", "reliable")
+func _net_rain_impact(at: Vector3, normal: Vector3, damageable: bool) -> void:
+	HitFx.rain_impact(at, normal, damageable)
+
+
 @rpc("authority", "call_remote", "unreliable")
 func _net_hit_number(at: Vector3, amount: float, crit: bool, is_melee: bool) -> void:
 	HitFx.show_number(at, amount, crit, is_melee)

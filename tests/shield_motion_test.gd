@@ -35,6 +35,9 @@ func _process(delta: float) -> void:
 		return
 	player = players[0]
 	var main := get_tree().current_scene
+	if not player.has_shield():
+		player.grant_upgrade(&"shield")  # a class upgrade: owned before the motion checks
+		return
 	match step:
 		0:
 			var idle := _rel()

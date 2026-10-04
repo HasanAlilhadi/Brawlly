@@ -33,6 +33,10 @@ const FONT_BUTTON: int = 20
 const FONT_TITLE: int = 24
 const FONT_HEADLINE: int = 44
 
+## Upgrades sheet (T): at most this wide; one card per class upgrade.
+const UPGRADE_SHEET_WIDTH: float = 1480.0
+const UPGRADE_CARD: Vector2 = Vector2(228.0, 176.0)
+
 ## Weapon slot in hand vs carried.
 const SLOT_ACTIVE: Color = Color.WHITE
 const SLOT_INACTIVE: Color = Color(1, 1, 1, 0.4)

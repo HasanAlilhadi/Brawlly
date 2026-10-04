@@ -78,6 +78,8 @@ const ARM_BOTH: int = 3
 @export var free_on_death: bool = true
 ## How far hits push this unit (0 = not at all; giants barely move).
 @export var knockback_taken: float = 1.0
+## How hard this unit's melee hits shove (× the target's knockback_taken; the Knock Back upgrade raises it).
+var knockback_power: float = 1.0
 ## Health regained per second after `regen_delay` seconds without taking damage (0 = off).
 @export var regen_per_second: float = 0.0
 @export var regen_delay: float = 5.0
@@ -507,7 +509,8 @@ func take_damage(amount: float, attacker: Node3D = null, is_melee: bool = true, 
 		var away := global_position - attacker.global_position
 		away.y = 0.0
 		if away.length_squared() > 0.0001:
-			_knockback = away.normalized() * (4.5 if crit else 3.0) * knockback_taken
+			var power: Variant = attacker.get("knockback_power") if is_melee else null
+			_knockback = away.normalized() * (4.5 if crit else 3.0) * knockback_taken * (float(power) if power != null else 1.0)
 	var dealt := minf(amount, health)  # numbers show real damage, not overkill
 	health = maxf(health - amount, 0.0)
 	_since_hit = 0.0

@@ -79,9 +79,9 @@ func _tick(delta: float) -> bool:
 			if pt > 3:
 				var shop: ShopMenu = main.get_node("ShopMenu")
 				player.coins += 100
-				var blade: UpgradeDef
+				var vitality: UpgradeDef
 				for def in shop.catalog.upgrades:
-					if def.id == &"blade": blade = def
+					if def.id == &"vitality": vitality = def
 				var stalls := get_tree().get_nodes_in_group(&"shop_stations")
 				var nearest_camp := INF
 				for stall: ShopStation in stalls:
@@ -89,14 +89,14 @@ func _tick(delta: float) -> bool:
 						nearest_camp = minf(nearest_camp, stall.global_position.distance_to(c.global_position))
 				printerr("stalls=%d nearest camp to a stall=%.1f m" % [stalls.size(), nearest_camp])
 				if stalls.size() != ShopStation.ORDER.size() or nearest_camp < 17.0: printerr("FAILED trading post")
-				if player.buy_upgrade(blade): printerr("FAILED bought the blade away from the Blacksmith")
+				if player.buy_upgrade(vitality): printerr("FAILED bought Vitality away from the Healer")
 				for stall: ShopStation in stalls:
 					if stall.stall_id == &"armory": player.global_position = stall.front()
-				if player.buy_upgrade(blade): printerr("FAILED Bows & Spears sold the blade")
+				if player.buy_upgrade(vitality): printerr("FAILED Bows & Spears sold Vitality")
 				for stall: ShopStation in stalls:
-					if stall.stall_id == &"blacksmith": player.global_position = stall.front()
-				player.request_buy(blade)
-				_next("bought blade: sword %.0f, coins %d, levels %s" % [player.melee_damage, player.coins, player.upgrade_levels])
+					if stall.stall_id == &"healer": player.global_position = stall.front()
+				player.request_buy(vitality)
+				_next("bought vitality: max health %.0f, coins %d, levels %s" % [player.max_health, player.coins, player.upgrade_levels])
 		6:
 			# Barracks: soldiers cost 50 each and train one after another (10 s each), wait in the pen,
 			# and join when taken (at the pen gate or the shop).
