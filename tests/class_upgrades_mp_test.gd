@@ -84,6 +84,10 @@ func _client() -> void:
 	var me: Player = _players().me
 	var host: Player = _players().other
 	var hud: Hud = get_tree().current_scene.get_node("HUD")
+	# Animals are server units: the client shows them with their species' model.
+	var animals := get_tree().get_nodes_in_group(&"animals")
+	_check(animals.size() >= 10 and animals.all(func(a: Animal) -> bool: return a.model.get_child_count() > 0 and a.team_id == GameConfig.ANIMAL_TEAM),
+			"the herds show on the client (%d animals)" % animals.size())
 	var end := Time.get_ticks_msec() + 5000
 	while me.coins < 1000 and Time.get_ticks_msec() < end:
 		await get_tree().process_frame

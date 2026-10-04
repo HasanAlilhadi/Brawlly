@@ -12,6 +12,8 @@ const SOLDIER_TRAIN_TIME: float = 10.0
 
 ## Orcs are their own team, hostile to everyone.
 const ORC_TEAM: int = -1
+## Wild animals (Animal): fair game for heroes and soldiers, but orcs and animals leave each other alone.
+const ANIMAL_TEAM: int = -2
 
 # Physics layer bits (Project Settings → Layer Names mirror these).
 const LAYER_WORLD: int = 1      # ground props, trees, camps, chests
@@ -49,7 +51,10 @@ static func is_gone(node: Variant) -> bool:
 static func is_hostile(a: Object, b: Object) -> bool:
 	var team_a: Variant = a.get("team_id")
 	var team_b: Variant = b.get("team_id")
-	return team_a != null and team_b != null and team_a != team_b
+	if team_a == null or team_b == null or team_a == team_b:
+		return false
+	# Orcs and animals ignore each other.
+	return not ((team_a == ORC_TEAM and team_b == ANIMAL_TEAM) or (team_a == ANIMAL_TEAM and team_b == ORC_TEAM))
 
 
 ## The player (peer id) who controls `node`: a player, one of their soldiers, or their arrow. 0 = nobody.

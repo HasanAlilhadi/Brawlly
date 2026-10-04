@@ -260,7 +260,8 @@ func _follow_server(delta: float) -> void:
 func _predict(delta: float) -> void:
 	var move := _prediction_move_input(delta).limit_length(1.0)
 	var strength := move.length()
-	velocity = move * move_speed * (0.4 if _full_body_busy() else 1.0)
+	velocity = move * move_speed * (0.4 if _full_body_busy() else 1.0) + _knockback
+	_knockback = _knockback.move_toward(Vector3.ZERO, delta * 22.0)
 	move_and_slide()
 	global_position = GameConfig.clamp_to_world(Vector3(global_position.x, 0.0, global_position.z))
 	# Reconcile: the server's position trails ours by the network delay, so only correct real drift.
@@ -527,6 +528,23 @@ func take_damage(amount: float, attacker: Node3D = null, is_melee: bool = true, 
 	_on_damaged(attacker)
 	if health <= 0.0:
 		die()
+
+
+## Server: push this unit along `push` (m/s, fades out fast) whatever its knockback_taken — a ram (the wild
+## pig), not a hit. The predicting owner's client is pushed at once too.
+func shove(push: Vector3) -> void:
+	if is_dead:
+		return
+	push.y = 0.0
+	_knockback = push
+	if multiplayer.has_multiplayer_peer() and multiplayer.is_server() and Net.is_online():
+		_net_shove.rpc(push)
+
+
+@rpc("authority", "call_remote", "reliable")
+func _net_shove(push: Vector3) -> void:
+	if is_predicted:
+		_knockback = push
 
 
 func heal(amount: float) -> void:

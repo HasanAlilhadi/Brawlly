@@ -24,6 +24,11 @@ const CHUNK_SIZE: float = 40.0
 const WAVE_GATE_RADIUS: float = 5.0
 
 var camp_count: int = 20
+## Animal groups grazing around the map (AnimalHerd); each species gets its share.
+var herd_count: int = 16
+## Herds stay this far from spawn points (wild pigs: twice as far) and this far apart.
+var herd_spawn_distance: float = 14.0
+var herd_spacing: float = 14.0
 var tree_count: int = 520
 var chest_count: int = 35
 ## No camp closer than this to a spawn point, so players never start next to orcs.
@@ -59,6 +64,7 @@ func build(world: Node3D) -> Array[Camp]:
 	_add_ground()
 	_add_border()
 	var camps := _add_camps()
+	_add_herds()
 	_add_chests()
 	_add_trees()
 	_add_decor()
@@ -119,6 +125,36 @@ func _add_border() -> void:
 		transforms.append(Transform3D(Basis(Vector3.UP, PI * 0.5), Vector3(-edge, 0, t)))
 		transforms.append(Transform3D(Basis(Vector3.UP, PI * 0.5), Vector3(edge, 0, t)))
 	_add_multimesh(FENCE_MODEL, transforms, true)
+
+
+## Animal herds in open ground away from the spawns and camps; species take turns so each gets herds.
+func _add_herds() -> void:
+	var species: Array = Animal.SPECIES.keys()
+	var placed: Array[Vector3] = []
+	var tries := 0
+	while placed.size() < herd_count and tries < 4000:
+		tries += 1
+		var id: String = species[placed.size() % species.size()]
+		var pos := _random_point(8.0)
+		var away := herd_spawn_distance * (2.0 if id == "hog" else 1.0)
+		if _distance_to_spawn(pos) < away or not _is_free(pos, 4.0):
+			continue
+		var too_close := false
+		for other in placed:
+			if pos.distance_to(other) < herd_spacing:
+				too_close = true
+				break
+		if too_close:
+			continue
+		placed.append(pos)
+		_occupy(pos, 2.5)  # a little meadow: no trees right on top of it
+		var herd := AnimalHerd.new()
+		herd.name = "Herd_%d" % (placed.size() - 1)
+		herd.species = id
+		var sizes: Vector2i = AnimalHerd.SIZES[id]
+		herd.size = randi_range(sizes.x, sizes.y)
+		herd.position = pos
+		_world.add_child(herd)
 
 
 func _add_camps() -> Array[Camp]:

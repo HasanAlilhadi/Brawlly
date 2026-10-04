@@ -235,6 +235,22 @@ by touch index so the joystick and buttons work together with multi-touch.
 - **Deaths drop nothing**: weapons come from the class and coins stay.
   Clips `crawl` (moving) / `downed` (still) come from `assets/characters/animations/archer_downed.glb` (made in Blender on
   the archer armature, copied into each class model's library by `Player._add_downed_anims()`, track paths re-rooted); while downed the arm holds stay off and the sword / bow are hidden.
+- **Animals** (`Animal`, scenes/characters/animal.gd/.tscn, NetSpawn kind `animal` with "species" + "home"; test
+  `tests/animal_test.gd`): Kenney Cube Pets from `assets/characters/pets/` (clips idle / walk / run / eat), team
+  `GameConfig.ANIMAL_TEAM` (-2: heroes and soldiers can hit them, orcs and animals ignore each other — `is_hostile`),
+  layer enemies, group `animals`. Species rows in `Animal.SPECIES` (model, temper, health, walk / run speed, scale,
+  radius); `set_species()` on every peer before entering the tree puts the pet in a scaled "Model" holder (some clips
+  key the pet root's scale) and sets health then (Unit._ready lowering it from 100 would play the hit squash). Shy
+  (pig, cow, deer, fox): graze around `home` (walk, eat), run from heroes / soldiers within `FLEE_RANGE` or who hit
+  them, the herd bolts together (`alarm`). Wild (hog): anyone within `AGGRO_RANGE` or who hits it → wind-up, a
+  straight `CHARGE_SPEED` dash that rams the first hero / soldier (`damage`, `Unit.shove()` — pushes even heroes,
+  whose knockback_taken is 0; the owner's predicting client gets it by RPC), rest, again until `CALM_TIME` after the
+  target got away; while angry it is in `active_enemies` and its `target` is set, so soldiers defend against it.
+  Deaths drop `COINS_MIN`..`COINS_MAX` (3..8) coins and a health potion `HEALTH_DROP_CHANCE` (20%). Far from every
+  hero (`SLEEP_RANGE`) they stand still. **Herds** (`AnimalHerd`, scenes/world/animal_herd.gd, group `herds`):
+  `WorldBuilder._add_herds()` places `herd_count` (16) of them, species in turn, away from spawns (wild pigs twice
+  as far) and camps; main starts them with the camps; a wiped-out herd comes back `RESPAWN_TIME` later when no
+  hero is within `RESPAWN_CLEAR`. New species = a `SPECIES` row + `AnimalHerd.SIZES`.
 - **World events** (`WorldEvents`, setting `events`): `spawn_goblin()` / `spawn_warlord()` (server; tests call them
   directly). `TreasureGoblin` (NetSpawn kind `goblin`, orc team, flees), `Warlord` (extends `Enemy`, warband orcs
   have `Enemy.warlord` set and follow via `follow_point()`, its warband is routed when it falls).
@@ -315,9 +331,9 @@ by touch index so the joystick and buttons work together with multi-touch.
   yellow / purple). Unit colors are computed in `main._spawn_unit` on every peer from `owner_peer` — never send a
   color in spawn data for players / soldiers. Server-made text (announcements, match over) names teams with
   `{team:N}` / `{label:N}` tokens that `Net.localize()` resolves on each device.
-- **Teams**: `team_id` on units/camps/projectiles (`GameConfig.ORC_TEAM` = -1 for orcs). Hostility =
+- **Teams**: `team_id` on units/camps/projectiles (`GameConfig.ORC_TEAM` = -1 for orcs, `ANIMAL_TEAM` = -2). Hostility =
   `GameConfig.is_hostile(a, b)`; groups: `players`, `allies`, `player_units` (players+allies), `enemies`,
-  `active_enemies`, `camps`, `units`. `owner_peer` = controlling player (kill/camp credit).
+  `active_enemies`, `camps`, `units`, `animals`, `herds`. `owner_peer` = controlling player (kill/camp credit).
 - **Input**: `main.gd` reads HUD/keyboard and calls `Player.set_input/attack_melee/shoot` on the server, or the
   `Player.net_*` RPCs from clients (validated by sender). Purchases: `Player.request_buy()`.
 - **Match flow**: menu → lobby (`Net.host()` / `join()`; tests: `open_offline_lobby()`) → `Net.start_game()` loads main on

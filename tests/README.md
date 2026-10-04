@@ -35,6 +35,11 @@ Run from the project folder (`G` = the Godot binary). Tests start the game norma
 # trapped in a cup of walls follows the hero's trail out, soldiers only walk or run (--shots=<dir> with a window: frames of a stab)
 "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/ally_test.gd
 
+# Animals: every species' model / size / team, orcs ignore them, shy herds flee together, the wild pig rams (damage +
+# shove) and calms down, soldiers fight an angry wild pig only, 3..8 coins + ~20% health drops, herds respawn
+# (--shot=<png> with a window: a close look at every species)
+"$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/animal_test.gd
+
 # World events + army orders + pings + awards (solo)
 "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/events_test.gd
 

@@ -10,6 +10,7 @@ const PLAYER_SCENE := preload("res://scenes/characters/player.tscn")
 const ALLY_SCENE := preload("res://scenes/characters/ally.tscn")
 const PICKUP_SCENE := preload("res://scenes/items/pickup.tscn")
 const GOBLIN_SCENE := preload("res://scenes/characters/treasure_goblin.tscn")
+const ANIMAL_SCENE := preload("res://scenes/characters/animal.tscn")
 const TRAINING_FIELD_SCENE := preload("res://scenes/training/training_field.tscn")
 ## PC cursor: the kit's gold sword while playing (menus use the gauntlet from Project Settings).
 const MATCH_CURSOR := preload("res://assets/ui/cursors/cursor_sword_gold.png")
@@ -223,6 +224,11 @@ func _spawn_unit(data: Dictionary) -> Node:
 			var ally := ALLY_SCENE.instantiate() as Ally
 			ally.weapon = data.get("weapon", "sword")
 			unit = ally
+		&"animal":
+			var animal := ANIMAL_SCENE.instantiate() as Animal
+			animal.set_species(data.get("species", "pig"))
+			animal.home = data.get("home", data.pos)
+			unit = animal
 		&"goblin":
 			unit = GOBLIN_SCENE.instantiate() as TreasureGoblin
 			unit.max_health *= data.get("health_scale", 1.0)
@@ -346,6 +352,8 @@ func _on_world_ready(peer: int) -> void:
 		_spawn_player(p)
 	for camp in _camps:
 		camp.start()
+	for herd in get_tree().get_nodes_in_group(&"herds"):
+		(herd as AnimalHerd).start()
 
 
 func _on_peer_left(peer: int) -> void:
