@@ -26,6 +26,10 @@ Run from the project folder (`G` = the Godot binary). Tests start the game norma
 # point-blank arrows hit an orc / a camp wall right in front of the player
 "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/ai_test.gd
 
+# Class balance bench (prints a table, no pass/fail): real DPS single / crowd / line, ability damage per use,
+# javelin / knife / dash / wave, soldier DPS, maxed upgrades, camera reach per zoom. Run it for all three classes.
+"$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/balance_test.gd --class=swordsman
+
 # Soldiers: spear soldiers only stab, archers shoot from half the hero's bow range / step back / walk around a
 # wall in the way / line up behind the hero, swordsmen spread over orcs and defend the hero first, a soldier
 # trapped in a cup of walls follows the hero's trail out, soldiers only walk or run (--shots=<dir> with a window: frames of a stab)

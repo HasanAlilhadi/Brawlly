@@ -173,6 +173,8 @@ func _process(delta: float) -> void:
 				var orc := NetSpawn.unit(&"enemy", Vector3(x, 0.0, 14.0),
 						{"scene": ORC_SCENE, "strength": 1.0, "coins": 0.0}) as Enemy
 				orc.set_physics_process(false)
+				orc.max_health = 5000.0  # one charge hit would kill a normal orc
+				orc.health = 5000.0
 				lane_orcs.append(orc)
 			normal_collision_mask = player.collision_mask
 			player.request_ability()

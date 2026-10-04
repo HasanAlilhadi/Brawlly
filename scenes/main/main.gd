@@ -26,6 +26,8 @@ const DESKTOP_CAMERA_ZOOM: float = 1.25
 const CAMERA_ZOOM: float = 1.2
 ## Extra zoom-out while holding a ranged weapon, so you see further where you shoot.
 const WEAPON_CAMERA_ZOOM: Dictionary = {"spear": 0.05, "javelin": 0.1, "bow": 0.2}
+## Share of the Fire Range gain the camera zooms out by (1 = in proportion: +50% range, +50% further out).
+const RANGE_CAMERA_ZOOM: float = 0.8
 ## Army orders from the keyboard / buttons without a cursor point: this far in front of the player.
 const ORDER_AHEAD: float = 9.0
 
@@ -754,12 +756,16 @@ func _interact_training() -> void:
 	_switch_training_class()
 
 
-## Default zoom + a bit more with the bow / spear in hand.
+## Default zoom + a bit more with the bow / spear in hand; with the bow, Fire Range zooms out further
+## (in step with the longer range, `RANGE_CAMERA_ZOOM` of it), so you see as far as you shoot.
 func _update_camera_zoom() -> void:
 	var extra := 0.0
+	var range_scale := 1.0
 	if is_instance_valid(local_player):
 		extra = WEAPON_CAMERA_ZOOM.get(local_player.current_weapon(), 0.0)
-	camera.zoom = CAMERA_ZOOM + extra
+		if local_player.current_weapon() == "bow":
+			range_scale = 1.0 + RANGE_CAMERA_ZOOM * (local_player.aim_range_scale() - 1.0)
+	camera.zoom = (CAMERA_ZOOM + extra) * range_scale
 
 
 ## The trading post stall the local player stands at: highlight it, show the HUD prompt, and close its

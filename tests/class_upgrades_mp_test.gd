@@ -76,7 +76,7 @@ func _host() -> void:
 	_check(client.upgrade_level(&"sword_dash") == 1 and client.coins == 1000 - _def(&"sword_dash").cost_at(0),
 			"the client's Dash Attack purchase reached the server (coins %d)" % client.coins)
 	me.request_buy(_def(&"bow_range"))
-	_check(is_equal_approx(me.aim_range, 14.5), "host Bowman: Fire Range on the server (%.1f m)" % me.aim_range)
+	_check(is_equal_approx(me.aim_range, 14.0), "host Bowman: Fire Range on the server (%.1f m)" % me.aim_range)
 	await get_tree().create_timer(16.0).timeout
 
 
@@ -108,9 +108,9 @@ func _client() -> void:
 	_check(server_moved > 3.0, "the server dashed too (%.2f m)" % server_moved)
 	_check(me.global_position.distance_to(me.net_position) < 0.8, "client and server agree on where the dash ended")
 	end = Time.get_ticks_msec() + 5000
-	while not is_equal_approx(host.aim_range, 14.5) and Time.get_ticks_msec() < end:
+	while not is_equal_approx(host.aim_range, 14.0) and Time.get_ticks_msec() < end:
 		await get_tree().process_frame
-	_check(is_equal_approx(host.aim_range, 14.5), "the host Bowman's Fire Range shows on the client too (%.1f m)" % host.aim_range)
+	_check(is_equal_approx(host.aim_range, 14.0), "the host Bowman's Fire Range shows on the client too (%.1f m)" % host.aim_range)
 	# Army tab: a soldier recruited away from the barracks joins the client 10 s later.
 	var joined := [false]
 	me.soldier_ready.connect(func(at_barracks: bool) -> void: joined[0] = not at_barracks)

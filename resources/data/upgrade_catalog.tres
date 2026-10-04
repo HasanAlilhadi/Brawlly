@@ -131,12 +131,12 @@ excludes = Array[StringName]([&"sword_wave"])
 script = ExtResource("2_def")
 id = &"sword_wave"
 title = "Wave"
-description = "Each swing also sends a slash wave through enemies (60% damage)"
+description = "Each swing also sends a slash wave through enemies (40% damage, up to 4 enemies)"
 icon = ExtResource("glyph_ghost")
 base_cost = 160
 cost_growth = 1.0
 max_level = 1
-amount = 0.6
+amount = 0.4
 classes = Array[StringName]([&"swordsman"])
 excludes = Array[StringName]([&"sword_knockback"])
 
@@ -213,11 +213,11 @@ classes = Array[StringName]([&"bowman"])
 script = ExtResource("2_def")
 id = &"bow_range"
 title = "Fire Range"
-description = "+2.5 m arrow range"
+description = "+2 m arrow range (the camera zooms out to match)"
 icon = ExtResource("glyph_target")
 base_cost = 50
 max_level = 3
-amount = 2.5
+amount = 2.0
 classes = Array[StringName]([&"bowman"])
 
 [sub_resource type="Resource" id="Upgrade_bow_pierce"]
@@ -253,7 +253,7 @@ icon = ExtResource("glyph_axe")
 base_cost = 80
 cost_growth = 1.0
 max_level = 1
-amount = 30.0
+amount = 22.0
 classes = Array[StringName]([&"bowman"])
 key_hint = "RMB"
 

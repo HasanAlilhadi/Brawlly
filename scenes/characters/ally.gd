@@ -50,8 +50,8 @@ const STAB_REACH: float = 0.55
 ## (an arrow for the bow).
 const WEAPON_STATS: Dictionary = {
 	"sword": {},
-	"spear": {"damage": 11.0, "range": 1.45, "cooldown": 1.1},
-	"bow": {"damage": 9.0, "health": 65.0, "cooldown": 1.4},
+	"spear": {"damage": 11.5, "range": 1.45, "cooldown": 1.1},
+	"bow": {"damage": 11.0, "health": 65.0, "cooldown": 1.2},
 }
 
 @export var aggro_range: float = 6.0

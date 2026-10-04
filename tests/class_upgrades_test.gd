@@ -299,8 +299,11 @@ func _spearman() -> void:
 func _bowman() -> void:
 	# Range.
 	var range_before := player.aim_range
+	var zoom_before: float = main.camera.zoom
 	_check(await _buy(&"bow_range"), "bought Fire Range")
-	_check(is_equal_approx(player.aim_range, range_before + 2.5), "aim range %.1f -> %.1f m" % [range_before, player.aim_range])
+	_check(is_equal_approx(player.aim_range, range_before + _def(&"bow_range").amount), "aim range %.1f -> %.1f m" % [range_before, player.aim_range])
+	await get_tree().process_frame
+	_check(main.camera.zoom > zoom_before + 0.05, "Fire Range zooms the camera out (%.2f -> %.2f)" % [zoom_before, main.camera.zoom])
 	player.global_position = LANE_START
 	var target := _orc(LANE_START + Vector3(0, 0, player.aim_range - 0.5))
 	await _wait(0.1)

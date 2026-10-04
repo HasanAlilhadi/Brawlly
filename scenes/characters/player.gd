@@ -74,8 +74,8 @@ const REVIVE_RING_TEXTURE := preload("res://assets/vfx/light_masks/ring_a.png")
 const WEAPONS: Dictionary = {
 	"sword": {"melee": true, "hand": ARM_RIGHT, "icon": "sword", "name": "Sword", "arc": 80.0, "reach": 1.55,
 			"cooldown": 0.5},
-	"spear": {"melee": true, "hand": ARM_RIGHT, "icon": "spear", "name": "Spear", "lane": 0.7, "reach": 2.4,
-			"cooldown": 0.7},
+	"spear": {"melee": true, "hand": ARM_RIGHT, "icon": "spear", "name": "Spear", "lane": 0.8, "reach": 2.6,
+			"cooldown": 0.65},
 	"javelin": {"melee": false, "hand": ARM_RIGHT, "icon": "spear", "name": "Throw"},
 	"bow": {"melee": false, "hand": ARM_LEFT, "icon": "bow", "name": "Bow"},
 }
@@ -161,7 +161,7 @@ const WHIRLWIND_TICK: float = 360.0 / WHIRLWIND_SPIN
 ## Bull Rush (Spearman ability): sprint through enemies, turn slowly toward WASD input and damage each target
 ## once. Enemy collision exceptions are temporary; world walls and buildings still stop the charge.
 const BULL_RUSH_SPEED: float = 2.2
-const BULL_RUSH_DAMAGE: float = 2.0
+const BULL_RUSH_DAMAGE: float = 4.0
 const BULL_RUSH_RADIUS: float = 0.72
 ## Heavy steering: normal movement turns immediately; Bull Rush can turn only this many degrees per second.
 const BULL_RUSH_TURN_SPEED: float = 105.0
@@ -171,9 +171,9 @@ const BOW_RAIN_RADIUS: float = 4.05
 const BOW_RAIN_RANGE: float = 14.0
 const BOW_RAIN_HEIGHT: float = 7.0
 const BOW_RAIN_TOTAL_ARROWS: int = 100
-const BOW_RAIN_TARGETED_ARROWS: int = 5
+const BOW_RAIN_TARGETED_ARROWS: int = 3
 const BOW_RAIN_COVERAGE_BLOCK: int = 10
-const BOW_RAIN_DAMAGE: float = 0.45
+const BOW_RAIN_DAMAGE: float = 1.2
 const BOW_RAIN_ARROW_SPEED: float = 16.0
 const BOW_RAIN_EDGE_MARGIN: float = 0.25
 const BOW_RAIN_SHADER := preload("res://assets/shaders/bow_rain_area.gdshader")
@@ -194,16 +194,18 @@ const KNIFE_SCENE := preload("res://assets/items/dungeon/sword.glb")
 const KNIFE_SCALE: float = 0.55
 const KNIFE_REACH: float = 1.0
 const KNIFE_ARC: float = 50.0
-const KNIFE_COOLDOWN: float = 0.45
+const KNIFE_COOLDOWN: float = 0.5
 const KNIFE_HIT_DELAY: float = 0.12
 ## Wave (Swordsman): each swing also sends a slash wave forward (`sword_wave` projectile) that goes through enemies.
 const WAVE_HEIGHT: float = 0.5
+## The wave goes through this many enemies after the first.
+const WAVE_PIERCE: int = 3
 
-@export var arrow_damage: float = 25.0
+@export var arrow_damage: float = 22.0
 @export var shoot_cooldown: float = 0.4
 ## Spear: thrusts (melee) and throws (javelin) deal this; throws are slower than arrows.
-@export var spear_damage: float = 35.0
-@export var spear_cooldown: float = 1.0
+@export var spear_damage: float = 42.0
+@export var spear_cooldown: float = 1.1
 @export var aim_range: float = 12.0
 ## Middle of the sword's handle (model space): the slash turns the blade around it, so it stays in the fist.
 @export var sword_grip_point: Vector3 = Vector3(0.0, 0.027, 0.0)
@@ -1215,7 +1217,7 @@ func _apply_melee() -> void:
 	direction.y = 0.0
 	direction = direction.normalized()
 	NetSpawn.projectile(&"sword_wave", global_position + Vector3(0.0, WAVE_HEIGHT, 0.0) + direction * 0.5, direction,
-			melee_damage * sword_wave, self, false, false, 0.0, false, {"pierce": 99})
+			melee_damage * sword_wave, self, false, false, 0.0, false, {"pierce": WAVE_PIERCE})
 
 
 ## Sword stick aim: face `direction` (shows a short wedge for the local player). ZERO = released.
@@ -2230,6 +2232,11 @@ func _apply_dash() -> void:
 
 
 # --- Knife (Bowman) ---------------------------------------------------------------
+
+## Bow range now / at the start (Fire Range upgrades raise it; the camera zooms out with it).
+func aim_range_scale() -> float:
+	return aim_range / _base_aim_range if _base_aim_range > 0.0 else 1.0
+
 
 func has_knife() -> bool:
 	return knife_damage > 0.0

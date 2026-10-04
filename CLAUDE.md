@@ -81,7 +81,8 @@ by touch index so the joystick and buttons work together with multi-touch.
   `tests/screenshot_test.gd` (with and without `--mobile`). Touch controls still handle input in `_input` by touch index.
 - 3D cameras: FOV applies to the screen's short side (`FollowCamera3D.fit_fov_to_short_side`). "Off-screen"
   distances must hold for the wide desktop view (e.g. `WorldEvents.goblin_distance`). Camera zoom (main.gd):
-  offset × `DESKTOP_CAMERA_ZOOM` (desktop) × `camera.zoom` = `CAMERA_ZOOM` 1.2 + `WEAPON_CAMERA_ZOOM` (spear +0.1, bow +0.2).
+  offset × `DESKTOP_CAMERA_ZOOM` (desktop) × `camera.zoom` = `CAMERA_ZOOM` 1.2 + `WEAPON_CAMERA_ZOOM` (spear +0.1, bow +0.2),
+  with the bow × the Fire Range gain (`RANGE_CAMERA_ZOOM` × (`Player.aim_range_scale()` − 1)): see as far as you shoot.
   R (`rotate_camera`) orbits the camera 90° (`FollowCamera3D.rotate_step`): screen-space input (WASD, sticks,
   touch) goes through `camera.to_world()` / `main._screen_to_world()`; the minimap turns with the view; world labels
   that stack must use screen-space `Label3D.offset`, not height, so they hold from every side.
@@ -143,9 +144,9 @@ by touch index so the joystick and buttons work together with multi-touch.
   archers shoot from `Ally.archer_range()`, spear soldiers only stab). A class is locked to its weapons; nothing has ammo. `keeper.glb` is a rigid
   Graveyard Kit model skinned onto the human's armature by `tools/blender_keeper_rig.py` (same bones and clips).
 - Anything damageable implements `take_damage(amount, attacker = null, is_melee = true)`.
-- **Weapons**: `Player.WEAPONS` rows (melee: `arc` / `reach` / `cooldown`): sword (melee 40, 80° wedge, cleaves),
-  spear (stab 35 = `spear_damage`, a straight 0.7 m × 2.4 m lane with a pointed end that pierces a line; `HitFx.stab` streak, not the sword's sweep), javelin (the spear thrown: `player_spear`
-  projectile, `spear_cooldown` 1 s), bow (arrows 25, 0.4 s). No ammo anywhere (no ammo pickups, shop items or counters).
+- **Weapons**: `Player.WEAPONS` rows (melee: `arc` / `reach` / `cooldown`): sword (melee 36 / 0.5 s, 80° wedge, cleaves),
+  spear (stab 42 = `spear_damage` / 0.65 s, a straight 0.8 m × 2.6 m lane with a pointed end that pierces a line; `HitFx.stab` streak, not the sword's sweep), javelin (the spear thrown: `player_spear`
+  projectile, `spear_cooldown` 1.1 s), bow (arrows 22, 0.4 s). No ammo anywhere (no ammo pickups, shop items or counters).
   Weapon damage / speed / range come only from the class upgrades (below).
   Chests are broken open by any weapon (group `breakable`, 60 hp), not opened by walking up. Shots fly at 0.55–0.7 m, so
   anything hittable needs collision up to `GameConfig.HIT_HEIGHT` (1 m); aimed shots fly exactly where aimed (no snapping); a quick shot / tap with no aim auto-targets the nearest enemy. Melee hits exactly the aim marker (`Player.melee_outline()` → `_melee_query` prism + `_melee_indicator`: a `melee_arc()` fan or a `melee_lane()` lane, out to `melee_reach()`), aimed where the swing started (`Unit._melee_dir`); other units keep the sphere in `Unit._melee_query`. The player carries `Player.weapons` (from the class) and holds one
@@ -268,8 +269,16 @@ by touch index so the joystick and buttons work together with multi-touch.
   with `tools/render_portrait.gd` into `assets/ui/icons/portraits/` (Warlord).
 - **Pings**: `main._ping()` → server `_on_ping()` (rate-limited) → teammates' `PingMarker`. Things that should get a
   screen-edge arrow + minimap diamond join group `tracked` with metas `marker_color` / `marker_label`.
-- Balance reference (base stats, before camp tier 0.75–1.35×): player 150hp, sword 40 (cleaves), arrow 25, spear 35, regen 6/s;
-  soldier 80hp/12 (sword), 80/11 (spear, 1.45 reach), 65/9 (bow, arrows from 7 m); orc spearman 80/10; swordsman 95/11; thrower 55hp, spear 10; giant 500/26.
+- **Class balance** (measure with `tests/balance_test.gd --class=<id>`: real DPS on still orcs, crits off — rerun all three
+  after any weapon / ability / upgrade change). Rule: melee hits hardest, reach costs a little damage, range costs
+  more; speeds close enough that melee catches the Bowman; the three abilities deal about the same on a crowd.
+  Base (150 hp each, regen 6/s): Swordsman 3.7 m/s, sword 72 dps (crowd ~3×), shield 150, Whirlwind 180 per enemy
+  (~1080 on 6); Spearman 3.5 m/s, spear 68 dps with 2.6 m reach (pierces ~2), javelin ~38 dps, shield 200, Bull Rush
+  4 × spear damage = 168 per enemy crossed (~1000 on 6); Bowman 3.6 m/s, bow 58 dps at 12 m, no shield, knife 44 dps,
+  Bow Rain ~110 per enemy on 6 (+ it keeps shooting, ~950). Damage +20% × 5 and Fire Rate +15% × 3 are the same for
+  every class (maxed ×2.9 for all). Soldiers: sword 80 hp / 12 dps, spear 80 / ~10.5 (1.45 m reach), bow 65 / ~9.6 (from
+  half the hero's bow range). Orcs (before camp tier 0.75–1.35×): spearman 80/10; swordsman 95/11; thrower 55hp,
+  spear 10; giant 500/26.
 - Use `GameConfig.is_gone(node)` for target checks (handles freed nodes).
 - AI targeting is sticky: pick targets with `Unit.choose_target(current, candidate, keep_range)` (keeps the current
   one for `TARGET_LOCK_TIME` and switches only to a much closer one). `Enemy.provoke(attacker, direct)`: squad alerts

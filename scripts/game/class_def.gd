@@ -12,7 +12,8 @@ const CATALOG_PATH := "res://resources/data/class_catalog.tres"
 @export var model: PackedScene
 @export var weapons: PackedStringArray = PackedStringArray()
 @export var ally_weapon: String = "sword"
-## Running speed in m/s (0: the player scene's move_speed): Bowman fastest, then Swordsman, then Spearman.
+## Running speed in m/s (0: the player scene's move_speed): Swordsman fastest (melee must catch the Bowman),
+## then Bowman, then Spearman (biggest shield).
 @export var move_speed: float = 0.0
 ## Running speed while carrying an unbroken shield (0: same as move_speed). Raised, it is × Player.BLOCK_SPEED.
 @export var shield_move_speed: float = 0.0

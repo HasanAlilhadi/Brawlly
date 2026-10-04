@@ -26,6 +26,8 @@ static var _burst_meshes: Dictionary = {}
 static var _flash_materials: Dictionary = {}
 static var _arc_material: StandardMaterial3D
 static var _stop_until_ms: int = 0
+## Off: no hit-stop (benchmarks measure damage per game second; the freeze runs on the wall clock).
+static var hit_stop_enabled: bool = true
 static var _kick_frame: int = -1
 
 
@@ -86,7 +88,7 @@ static func show_number(at: Vector3, amount: float, crit: bool, is_melee: bool) 
 ## A brief freeze that makes melee hits feel heavy. Solo only (online it would freeze everyone).
 ## Overlapping calls extend the running freeze instead of ending it early.
 static func hit_stop(seconds: float) -> void:
-	if not is_instance_valid(world) or Net.is_online():
+	if not is_instance_valid(world) or Net.is_online() or not hit_stop_enabled:
 		return
 	var running := _stop_until_ms > Time.get_ticks_msec()
 	_stop_until_ms = maxi(_stop_until_ms, Time.get_ticks_msec() + int(seconds * 1000.0))
