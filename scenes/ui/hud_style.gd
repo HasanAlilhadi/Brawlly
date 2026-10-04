@@ -37,12 +37,9 @@ const FONT_HEADLINE: int = 44
 const UPGRADE_SHEET_WIDTH: float = 1480.0
 const UPGRADE_CARD: Vector2 = Vector2(228.0, 176.0)
 ## Its handle at the bottom edge ("T  Upgrades"): height, how much of it hides below the edge, hover lift.
-const UPGRADES_TAB_HEIGHT: float = 50.0
+const UPGRADES_TAB_HEIGHT: float = 64.0
 ## Room on each side of its key and text (the tab is as wide as its content).
 const UPGRADES_TAB_PAD: float = 16.0
-## Its key cap and the letter on it (small: a hint, not a button).
-const UPGRADES_TAB_KEY: float = 24.0
-const UPGRADES_TAB_KEY_FONT: int = 15
 const UPGRADES_TAB_TUCK: float = 12.0
 const UPGRADES_TAB_LIFT: float = 6.0
 
