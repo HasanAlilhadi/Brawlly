@@ -98,13 +98,14 @@ func _update_key() -> void:
 	_key.visible = not Platform.touch_mode
 
 
-## The coin shows while any upgrade on the sheet (hero or army) can be bought right now.
+## The coin shows while any upgrade on the sheet (hero or army) can be bought right now (potions don't count:
+## they would light it up after every hit).
 func _refresh() -> void:
 	if _player == null or not is_instance_valid(_player):
 		return
 	var affordable := false
-	for def in _player.class_upgrades() + _player.sheet_items():
-		if _player.can_buy(def):
+	for def in _player.class_upgrades() + _player.sheet_items(&"hero") + _player.sheet_items(&"army"):
+		if _player.can_buy(def) and not (def.is_consumable() and def.sheet == &"hero"):
 			affordable = true
 			break
 	_coin.visible = affordable

@@ -1,7 +1,7 @@
 extends Node
 ## Class upgrades sheet (T) and every upgrade's effect, for the class passed with --class:
-## - all: T opens the sheet with only this class's cards; buying from a card (anywhere, no stall) spends coins;
-##   Increase Damage / Fire Rate change the stats.
+## - all: T opens the sheet: this class's cards, then Vitality and Potion; buying from a card (anywhere) spends
+##   coins; Increase Damage / Fire Rate change the stats. Army tab: Recruit, Soldier Damage / Health, Command.
 ## - swordsman: no shield until bought; Knock Back shoves far and locks Wave; Wave sends a slash through two orcs;
 ##   Dash Attack moves ~4.5 m and hits each orc crossed once, then cools down.
 ## - spearman: stab only until Can Throw (then E switches to throwing); shield bought.
@@ -65,7 +65,7 @@ func _clear_units() -> void:
 			node.queue_free()
 
 
-## Scenery (trees, town decor, buildings) stops shots and dashes; switch its collision off so the lanes only
+## Scenery (trees, camps, chests) stops shots and dashes; switch its collision off so the lanes only
 ## measure the upgrades.
 func _clear_scenery() -> void:
 	for node in main.find_children("*", "CollisionObject3D", true, false):
@@ -118,14 +118,16 @@ func _sheet() -> void:
 			"it slides up over several frames (%.0f -> %.0f px over %d frames)" % [tops[0] if tops else 0.0, tops[-1] if tops else 0.0, tops.size()])
 	var cards := hud.upgrade_sheet.find_child("UpgradeCards", true, false).get_children()
 	var expected := player.class_upgrades().size()
-	_check(cards.size() == expected and expected >= 4, "%d cards, all for the %s" % [cards.size(), player.class_def.display_name])
-	for card in cards:
-		var def := _def(StringName(String(card.name).trim_prefix("Card_")))
-		_check(def != null and def.classes.has(player.class_def.id), "%s belongs to this class" % card.name)
+	var names := cards.map(func(card: Node) -> String: return String(card.name).trim_prefix("Card_"))
+	_check(cards.size() == expected + 2 and expected >= 4 and names.slice(expected) == ["vitality", "potion"],
+			"%d class cards for the %s, then Vitality and Potion (%s)" % [expected, player.class_def.display_name, names])
+	for i in mini(expected, cards.size()):
+		var def := _def(StringName(names[i]))
+		_check(def != null and def.classes.has(player.class_def.id), "%s belongs to this class" % cards[i].name)
 	var prefix := {&"swordsman": "sword", &"spearman": "spear", &"bowman": "bow"}[player.class_def.id] as String
 	var coins := player.coins
 	var damage_before := _damage()
-	_check(await _buy(StringName(prefix + "_damage")), "bought Increase Damage away from any stall")
+	_check(await _buy(StringName(prefix + "_damage")), "bought Increase Damage anywhere")
 	_check(player.coins == coins - _def(StringName(prefix + "_damage")).cost_at(0), "it cost coins (%d -> %d)" % [coins, player.coins])
 	_check(is_equal_approx(_damage(), damage_before * 1.2), "damage +20%% (%.1f -> %.1f)" % [damage_before, _damage()])
 	var cooldown_before := _cooldown()
@@ -141,16 +143,19 @@ func _sheet() -> void:
 	await _army(hud)
 
 
-## Army tab: recruit away from any barracks (joins beside you after 10 s), Soldier Damage / Health max at 3 levels each.
+## Army tab: recruit anywhere (joins beside you after 10 s), Soldier Damage / Health max at 3 levels each.
 func _army(hud: Hud) -> void:
 	(hud.upgrade_sheet.find_child("ArmyTab", true, false) as Button).pressed.emit()
 	(hud.upgrade_sheet.find_child("ArmyTab", true, false) as Button).button_pressed = true
 	await _wait(0.2)
 	_check((hud.upgrade_sheet.find_child("ArmyCards", true, false) as Control).visible
 			and not (hud.upgrade_sheet.find_child("UpgradeCards", true, false) as Control).visible, "the Army tab shows the soldier cards")
+	var army := hud.upgrade_sheet.find_child("ArmyCards", true, false).get_children().map(
+			func(card: Node) -> String: return String(card.name).trim_prefix("Card_"))
+	_check(army == ["recruit", "soldier_damage", "soldier_health", "command"], "Army cards: %s" % [army])
 	var coins := player.coins
 	var before := player.followers().size()
-	_check(await _buy(&"recruit"), "bought a soldier away from the barracks")
+	_check(await _buy(&"recruit"), "bought a soldier from the Army tab")
 	_check(player.coins == coins - 50 and player.soldiers_training == 1, "50 coins, one soldier training")
 	await _wait(1.0)
 	var status := (hud.upgrade_sheet.find_child("RecruitStatus", true, false) as Label).text
@@ -158,7 +163,7 @@ func _army(hud: Hud) -> void:
 	await _wait(8.5)
 	_check(player.followers().size() == before, "not before 10 s")
 	await _wait(1.0)
-	var joined := player.followers().filter(func(a: Node) -> bool: return not a.get("penned"))
+	var joined := player.followers()
 	_check(joined.size() == before + 1, "after 10 s a soldier joins (%d following)" % joined.size())
 	if not joined.is_empty():
 		_check((joined[-1] as Node3D).global_position.distance_to(player.global_position) < 3.0, "it appears right beside you")

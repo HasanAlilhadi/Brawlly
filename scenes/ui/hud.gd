@@ -8,7 +8,6 @@ extends CanvasLayer
 signal restart_requested
 signal main_menu_requested
 signal pause_requested
-signal shop_requested
 signal army_command_requested(order: int)
 signal ping_requested
 signal weapon_switch_requested
@@ -20,7 +19,7 @@ const ARMY_KEYS: PackedStringArray = ["1", "2", "3", "4"]
 ## The Warlord's bar shows while it is this close to you.
 const BOSS_BAR_RANGE: float = 40.0
 const DOWNED_PANEL_WIDTH: float = 380.0
-## Above the upgrades tab on the bottom edge (stall prompt, "You're down" card).
+## Above the upgrades tab on the bottom edge ("You're down" card).
 const DOWNED_PANEL_MARGIN: float = HudStyle.UPGRADES_TAB_HEIGHT - HudStyle.UPGRADES_TAB_TUCK + HudStyle.GAP * 3.0
 ## Touch layouts lift the card above the sticks.
 const DOWNED_PANEL_TOUCH_LIFT: float = 300.0
@@ -86,9 +85,6 @@ var _upgrades_button: Button
 var _upgrades_tab: UpgradesTab
 var _shield_icon: Texture2D
 var _knife_icon: Texture2D
-var _stall_prompt: Button
-var _stall_key: HBoxContainer
-var _stall_label: Label
 var _weapon_bar: PanelContainer
 var _weapon_slots: HBoxContainer
 var _weapon_icons: Dictionary = {}  # weapon id -> texture for the touch buttons
@@ -147,8 +143,7 @@ func setup(player: Player, camps: Array[Camp]) -> void:
 	_update_weapon_controls()
 	player.health_changed.connect(_on_health_changed)
 	player.coins_changed.connect(_on_coins_changed)
-	player.soldier_ready.connect(func(at_barracks: bool) -> void:
-		show_toast("A soldier is ready at the barracks" if at_barracks else "A soldier joined you"))
+	player.soldier_ready.connect(func() -> void: show_toast("A soldier joined you"))
 	_on_coins_changed(player.coins)
 	_on_health_changed(player.health, player.max_health)
 	minimap.setup(player, camps)
@@ -207,7 +202,6 @@ func show_end(title: String, subtitle: String, restart_label: String = "Play aga
 	ability_button.hide()
 	_weapon_bar.hide()
 	pause_button.hide()
-	_stall_prompt.hide()
 	end_title.text = title
 	end_subtitle.text = subtitle
 	end_subtitle.visible = subtitle != ""
@@ -411,7 +405,6 @@ func _build_extras() -> void:
 
 	_build_downed_panel()
 	_build_weapon_controls()
-	_build_stall_prompt()
 	root.move_child(_upgrades_tab, -1)
 	root.move_child(upgrade_sheet, -1)  # over the touch buttons and its tab
 
@@ -426,75 +419,6 @@ func _build_extras() -> void:
 	root.add_child(_revive_label)
 
 	_build_end_screen()
-
-
-## "F  Blacksmith" (bottom center) while the local player stands at a trading post stall; click / tap it
-## or press interact to open that stall's shop.
-func _build_stall_prompt() -> void:
-	_stall_prompt = Button.new()
-	_stall_prompt.theme_type_variation = &"ButtonBeige"
-	_stall_prompt.focus_mode = Control.FOCUS_NONE
-	_stall_prompt.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	_stall_prompt.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	_stall_prompt.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	_stall_prompt.offset_bottom = -DOWNED_PANEL_MARGIN
-	_stall_prompt.pressed.connect(shop_requested.emit)
-	# Key + label, centered on the button's face: inset by the style's content margins (the beige
-	# button has a drop-shadow lip at the bottom, so its face sits a little above the rect's middle).
-	var row := HBoxContainer.new()
-	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", int(HudStyle.GAP))
-	row.set_anchors_preset(Control.PRESET_FULL_RECT)
-	var face := _stall_prompt.get_theme_stylebox(&"normal")
-	row.offset_left = face.get_margin(SIDE_LEFT)
-	row.offset_top = face.get_margin(SIDE_TOP)
-	row.offset_right = -face.get_margin(SIDE_RIGHT)
-	row.offset_bottom = -face.get_margin(SIDE_BOTTOM)
-	_stall_prompt.add_child(row)
-	_stall_key = HBoxContainer.new()
-	_stall_key.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_child(_stall_key)
-	_stall_label = Label.new()
-	_stall_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_stall_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_stall_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	_stall_label.add_theme_font_size_override("font_size", HudStyle.FONT_TITLE)
-	row.add_child(_stall_label)
-	_stall_prompt.hide()
-	$Root.add_child(_stall_prompt)
-
-
-## Every frame from main.gd: the stall the local player can use (null = none).
-## `take_soldiers` > 0: the player stands at the barracks pen gate — "Take N soldiers" instead of the shop.
-func set_stall(stall: ShopStation, take_soldiers: int = 0) -> void:
-	_stall_prompt.visible = stall != null and not _ended
-	if not _stall_prompt.visible:
-		return
-	var key := "touch/tap" if Platform.touch_mode else "keyboard/f"
-	var allowed := stall.can_access(_player)
-	var text := stall.title_for(_player)
-	var ready := _player.penned_soldiers().size() if allowed and stall.stall_id == ShopStation.BARRACKS else 0
-	if allowed and take_soldiers > 0:
-		text = "Take %d soldier%s" % [take_soldiers, "" if take_soldiers == 1 else "s"]
-	elif ready > 0:
-		text += "  (%d ready)" % ready
-	if _stall_label.text != text or _stall_key.get_meta(&"key", "") != key:
-		_stall_label.text = text
-		_stall_key.set_meta(&"key", key)
-		for child in _stall_key.get_children():
-			child.queue_free()
-		_stall_key.add_child(UiKit.prompt(key, HudStyle.KEY))
-		# Button = content (key + gap + label) + the style's content margins, so the row fills the face exactly.
-		var face := _stall_prompt.get_theme_stylebox(&"normal")
-		var label_size := _stall_label.get_minimum_size()
-		var content := Vector2(HudStyle.KEY + HudStyle.GAP + label_size.x, maxf(HudStyle.KEY, label_size.y))
-		_stall_prompt.custom_minimum_size = content + Vector2(face.get_margin(SIDE_LEFT) + face.get_margin(SIDE_RIGHT),
-				face.get_margin(SIDE_TOP) + face.get_margin(SIDE_BOTTOM))
-		_stall_prompt.offset_left = -_stall_prompt.custom_minimum_size.x * 0.5
-		_stall_prompt.offset_right = _stall_prompt.custom_minimum_size.x * 0.5
-	_stall_prompt.offset_bottom = -(DOWNED_PANEL_TOUCH_LIFT if Platform.touch_mode else DOWNED_PANEL_MARGIN)
-	_stall_prompt.offset_top = _stall_prompt.offset_bottom - _stall_prompt.custom_minimum_size.y
 
 
 ## "You're down" card (bottom center, clear of the player): skull badge, bleed-out bar with seconds,

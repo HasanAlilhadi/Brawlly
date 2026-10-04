@@ -85,7 +85,7 @@ func _process(delta: float) -> void:
 				return
 			player.max_health = 1e6
 			player.health = 1e6
-			# Open ground south of the town (the town's buildings and benches would get in the way).
+			# Open ground south of the spawn area.
 			player.global_position = main.game_mode.spawn_point_for(1) + Vector3(0, 0, 26)
 			for node in get_tree().get_nodes_in_group(&"enemies"):
 				if (node as Node3D).global_position.distance_to(player.global_position) < 30.0:

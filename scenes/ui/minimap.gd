@@ -2,7 +2,7 @@ class_name Minimap
 extends Control
 ## Whole-world map. Shows only what the local player's side may know:
 ## - objectives: the King of the Hill zone (holder's color, pulses while contested)
-## - camps as tent badges (red = active, bigger = more orcs; grey + cross = destroyed) and trading posts
+## - camps as tent badges (red = active, bigger = more orcs; grey + cross = destroyed)
 ## - friends only: teammates as arrows pointing where they face (their player colors; you are white) and
 ##   friendly soldiers as dots. Hostile players and their soldiers are never drawn (versus modes).
 ## - everything in the "tracked" group (treasure goblin, Warlord, downed teammates, pings): a round badge
@@ -10,7 +10,6 @@ extends Control
 ## The map turns with the camera (`FollowCamera3D.view_yaw()`), so up on the map is always up on screen.
 
 const TENT_ICON := preload("res://assets/ui/icons/game/tent.svg")
-const SHOP_ICON := preload("res://assets/ui/icons/game/shop.svg")
 const CROWN_ICON := preload("res://assets/ui/icons/game/crown.svg")
 const OUTLINE := Color(0, 0, 0, 0.7)
 
@@ -18,16 +17,12 @@ const OUTLINE := Color(0, 0, 0, 0.7)
 @export var grid_color: Color = Color(1, 1, 1, 0.07)
 @export var camp_color: Color = Color(0.85, 0.22, 0.18)
 @export var ruin_color: Color = Color(0.42, 0.42, 0.4)
-@export var shop_color: Color = Color(0.85, 0.62, 0.2)
 @export var ally_color: Color = Color(0.35, 0.65, 1.0)
 @export var player_color: Color = Color.WHITE
 
 var _player: Node3D
 var _camps: Array[Camp] = []
 var _redraw_timer: float = 0.0
-## Trading post centers (static world, found once).
-var _posts: Array[Vector3] = []
-var _posts_found: bool = false
 var _time: float = 0.0
 ## Camera turn the map is drawn for (radians).
 var _view_yaw: float = 0.0
@@ -64,8 +59,6 @@ func _draw() -> void:
 	for camp in _camps:
 		if is_instance_valid(camp):
 			_draw_camp(camp, k)
-	for post in _trading_posts():
-		_draw_badge(_to_map(post), 4.2 * k, shop_color, SHOP_ICON)
 	for ally in get_tree().get_nodes_in_group(&"allies"):
 		if not ally.is_inside_tree() or not _is_friend(ally):
 			continue
@@ -131,21 +124,6 @@ func _draw_camp(camp: Camp, k: float) -> void:
 		draw_line(at + Vector2(half, -half) * 0.7, at + Vector2(-half, half) * 0.7, cross, 1.5 * k)
 		return
 	_draw_badge(at, (3.2 + clampf(camp.squad_size / 5.0, 0.0, 2.8)) * k, camp_color, TENT_ICON)
-
-
-## Center of each trading post (the stalls around a spawn, named "Stall_<post>_<kind>").
-func _trading_posts() -> Array[Vector3]:
-	if _posts_found:
-		return _posts
-	var sums := {}
-	for node in get_tree().get_nodes_in_group(&"shop_stations"):
-		var post := String(node.name).get_slice("_", 1)
-		var entry: Array = sums.get(post, [Vector3.ZERO, 0])
-		sums[post] = [entry[0] + (node as Node3D).global_position, entry[1] + 1]
-	for post in sums:
-		_posts.append(sums[post][0] / float(sums[post][1]))
-	_posts_found = not sums.is_empty()
-	return _posts
 
 
 # --- Tracked ------------------------------------------------------------------------

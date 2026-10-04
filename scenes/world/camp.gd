@@ -261,7 +261,7 @@ func take_damage(amount: float, attacker: Node3D = null, is_melee: bool = true, 
 
 func _destroy() -> void:
 	# Without their camp the surviving orcs are routed: they fall and drop their loot (soldiers are
-	# bought at the barracks, not won here).
+	# recruited from the upgrades sheet, not won here).
 	for enemy in _squad:
 		if enemy and not enemy.is_dead:
 			enemy.die()

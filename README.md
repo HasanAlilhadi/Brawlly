@@ -15,9 +15,10 @@ portrait on phones. There is no single player: host a game (alone is fine) or jo
     into it. Soldiers: archers that stop at range and shoot.
   - **Upgrades sheet** (press **T**, the gamepad View button, click the "T Upgrades" tab at the bottom of the screen or
     the star button next to pause; a coin on the tab means you can afford something): slides up from the
-    bottom with two tabs. **Army**: recruit a soldier anywhere (50 coins; it trains 10 s, then joins you on the spot)
-    and **Soldier Damage** / **Soldier Health** (+25% each, 3 levels each). **Hero**: your class's upgrades, bought with
-    coins anywhere (free in the Training Field, which also hands out the unlocks):
+    bottom with two tabs. Everything in the game is bought here. **Army**: recruit a soldier anywhere (50 coins; it
+    trains 10 s, then joins you on the spot), **Soldier Damage** / **Soldier Health** (+25% each, 3 levels each) and
+    **Command** (+1 army size). **Hero**: **Vitality** (+30 max health), **Potion** (heal 60, buy again and again) and
+    your class's upgrades, bought with coins anywhere (free in the Training Field, which also hands out the unlocks):
     - Swordsman: Increase Damage, Fire Rate, **Knock Back or Wave** (pick one: hits shove enemies far back, or each
       swing sends a slash wave through enemies), **Dash Attack** (C: dash through enemies, slashing each), Shield.
     - Spearman: Increase Damage, Fire Rate, **Can Throw** (E switches to throwing spears), Shield. (Bull Run: later.)
@@ -30,28 +31,24 @@ portrait on phones. There is no single player: host a game (alone is fine) or jo
 - Melee weapons are aim sticks (drag to keep swinging toward a direction, independent of movement); ranged = drag to
   aim, release to shoot. A tap auto-targets the nearest enemy. **Health** comes from potions (orc drops, chests).
 - **Chests** have five rarities: Common (gray), Uncommon (green), Rare (blue), Epic (purple), and Legendary (gold).
-  Higher rarities are tougher and drop progressively more ammo, healing, and coins. Town starter chests are always
-  Uncommon so every player/team begins with the same reward; world chests roll 55% / 25% / 12% / 6% / 2%.
+  Higher rarities are tougher and drop progressively more ammo, healing, and coins. The starter chest next to
+  each spawn is always Uncommon so every player/team begins with the same reward; world chests roll 55% / 25% / 12% / 6% / 2%.
 - **Orc camps**: small squads (≤ 7) live in a tent, bigger ones in a house. Each camp has a squad (≈4–6 near the start up to 20–25 at the edges; bigger squads get a bigger, tougher house). Killed orcs respawn after 10 s
   until the house is destroyed. Destroying it routes the surviving orcs (they fall and drop their loot) and
   spills coins.
-- **Soldiers** are bought from the upgrades sheet's Army tab anywhere (they join you after 10 s), or at the trading
-  post's **Barracks** (a walled training compound): 50 coins each, trained
-  one after another (10 s each), then they wait in its courtyard until you take them at its gate (E / tap) or with
-  the Barracks shop's **Take** button. They follow and fight for
-  you; dead soldiers never come back. Army cap 10 (following + in the pen + training); **Command** raises it by 1
-  per level (100 coins each) up to 15.
+- **Soldiers** are recruited from the upgrades sheet's Army tab, anywhere: 50 coins each, trained one after another
+  (10 s each), then each appears right behind you. They follow and fight for you; dead soldiers never come back.
+  Army cap 10 (following + training); **Command** (Army tab) raises it by 1 per level (100 coins each) up to 15.
 - **Orc types**: Spearman (basic; carries the arena sword), Swordsman (tougher, faster attacks; orc sword), Spear Thrower (throws spears from ~8 units,
   backs off when you close in), Giant (huge, slow, heavy punches that hit everything in front). Camps mix them:
   ~25% swordsmen, ~20% throwers, rest spearmen, plus 1 giant at 10+ orcs and 2 at 18+.
 - **Aggro**: hitting an orc or its camp (even with an arrow from far away) alerts the whole squad (red "!").
   They chase the attacker faster and much farther than usual, and give up only after losing sight for ~10 s.
-- **Coins & the town**: orcs, chests and destroyed camps give coins. Each spawn is a town (always the same layout:
-  a paved square with the Barracks north, Blacksmith + Healer west, Bows & Spears east; kept away from orc camps)
-  with one stall per trade: Healer (Potion, Vitality) and Barracks (Recruit, Soldier Damage, Soldier Health, Command); the Blacksmith
-  and Bows & Spears sell nothing for now (weapon upgrades are class upgrades, T).
-  Walk up to a stall and press B (or tap its button) to open its shop. Items are data:
-  `resources/data/upgrade_catalog.tres` (`stalls` = which stalls sell it); stalls are `scenes/world/shop_station.gd`.
+- **Coins & upgrades**: orcs, chests and destroyed camps give coins, spent anywhere on the upgrades sheet (T / View /
+  the star button): the **Hero** tab has your class's upgrades plus Vitality and Potion; the **Army** tab has Recruit,
+  Soldier Damage, Soldier Health and Command. There are no shops or towns: each spawn is an open area kept clear of
+  orc camps, with a starter chest. Items are data: `resources/data/upgrade_catalog.tres` (`sheet` = the tab of a
+  non-class item, `classes` = a class upgrade).
 - **Difficulty curve**: each camp has a tier (distance from the start). Orcs are 0.75× strength near the start up to
   1.35× at the edges; squads grow from ~4 to ~24. The house shows how many orcs are still alive; bigger camps are
   bigger squares on the minimap. Fallen orcs don't respawn while their camp is under attack.
@@ -78,12 +75,11 @@ portrait on phones. There is no single player: host a game (alone is fine) or jo
   pick teams in King of the Hill, and everyone picks their **class** (each player's class shows in the list).
 - **Colors are automatic and relative to you**: you and your soldiers are blue, teammates and their soldiers green,
   enemies red (King of the Hill: each enemy team its own color — red, yellow, purple). Team names follow the same
-  rule ("Your team", "Red team") everywhere: lobby, score line, towns, announcements.
+  rule ("Your team", "Red team") everywhere: lobby, score line, announcements.
 - **Modes**: **Co-op vs Orcs** (everyone together, destroy every camp) and **King of the Hill** (teams hold the hill
   in the middle to earn points). Orcs stay in both and fight everyone. Destroying a camp gives its soldiers to
   whoever landed the last hit. (Deathmatch, Team Deathmatch and Capture the Flag were removed for now.)
-- **Towns in multiplayer**: co-op uses one shared town; King of the Hill gives every team one shared town. A colored compass ring and entrance label identify the owner; other players can
-  enter the town but cannot use its shops or Barracks.
+- **Spawns in multiplayer**: co-op shares one spawn area; King of the Hill gives every team its own, far apart.
 - Online matches don't pause (pause menu → Leave Game); players respawn after a few seconds.
 - The host's device runs the match; up to 8 players. Joining by IP always works; automatic discovery on iPhone may
   need Apple's multicast entitlement.
@@ -144,7 +140,7 @@ portrait on phones. There is no single player: host a game (alone is fine) or jo
 | Shield (Swordsman, Spearman, bought) | Right mouse (hold; turns toward the cursor) | LT (hold) | Shield button left of the weapon stick |
 | Knife (Bowman, bought) | Right mouse | LT | Shield button (shows a blade) |
 | Dash Attack (Swordsman, bought) | C (where you move, else toward the cursor) | L3 | Dash button left of the shield button |
-| Use a stall | F | LB | Stall button |
+| Interact (Training Field: switch hero, practice orc) | F | LB | — |
 | Pause | Esc / P | Start | II button / Android back |
 | Army orders (follow / charge / hold) | 1 / 2 / 3 (charge / hold at the cursor) | D-pad up / right / down | Buttons under the soldier count |
 | Ping · call for help | G or middle mouse · H | D-pad left | "!" button (online) |
@@ -174,7 +170,7 @@ bindings change). Bindings are Input Map actions (Project Settings → Input Map
 | Mode rules, scoring, respawns, spawn points | `scenes/main/game_mode.gd`, `scenes/world/capture_flag.gd`, `scenes/world/hill.gd` |
 | World generation (trees, chests, camp tiers/squad sizes) | `scenes/main/world_builder.gd` |
 | Enemy mix per camp | `resources/data/orc_roster.tres` (add a RosterEntry for a new enemy type) |
-| Shop items | `resources/data/upgrade_catalog.tres` + effects in `Player._apply_upgrade()` |
+| Upgrades sheet items | `resources/data/upgrade_catalog.tres` + effects in `Player._apply_upgrade()` |
 | Win / lose, HUD ↔ player wiring, pings, army orders | `scenes/main/main.gd` |
 | Treasure goblin / Orc Warlord timing | `scenes/main/world_events.gd` (+ `treasure_goblin.gd`, `warlord.gd` in `scenes/characters/`) |
 | Match stats & awards | `scripts/game/match_stats.gd` |
@@ -201,11 +197,6 @@ Desktop is always landscape. The phone orientation is set with `tools/set_orient
 │   ├── set_orientation.sh
 │   ├── glb_set_texture.py           # Point 3D models at a shared palette texture
 │   ├── blender_kit.py               # Toolkit for own Blender models in the Kenney palette style (+ overlap check)
-│   ├── blender_barracks.py          # Builds the Barracks compound model (uses blender_kit.py)
-│   ├── blender_blacksmith.py        # Builds the Blacksmith workshop model (uses blender_kit.py)
-│   ├── blender_armory.py            # Builds the Bows & Spears cabin model (uses blender_kit.py)
-│   ├── blender_healer.py            # Builds the Healer cottage model (uses blender_kit.py)
-│   ├── blender_town.py              # Builds the town at every spawn (square, decor, stall spots, collision)
 │   ├── blender_props.py             # The game's existing models (paths + in-game sizes) for building scripts
 │   ├── render_portrait.gd           # Render a round head portrait of a model (map / HUD icons)
 │   ├── install_export_templates.py  # Download only the export templates you need (Windows/Android/iOS…)

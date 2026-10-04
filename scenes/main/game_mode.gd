@@ -63,18 +63,6 @@ func world_spawn_points() -> Array[Vector3]:
 	return points
 
 
-## Access rule for each town returned by `world_spawn_points()`, in the same order.
-## Empty = shared by everyone; team_id = team base.
-func world_town_access() -> Array[Dictionary]:
-	var access: Array[Dictionary] = []
-	if match_mode == Net.Mode.COOP:
-		access.append({})
-	else:
-		for team in team_bases.size():
-			access.append({"team_id": team})
-	return access
-
-
 func world_clear_areas() -> Array[Vector3]:
 	var areas: Array[Vector3] = []
 	if match_mode == Net.Mode.KING_OF_THE_HILL:

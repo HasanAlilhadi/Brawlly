@@ -1,8 +1,8 @@
 # Shared toolkit for building own low-poly models in the Kenney mini-kit style (import it from a
-# tools/blender_<name>.py script; see tools/blender_barracks.py). Run model scripts with
+# tools/blender_<name>.py script). Run model scripts with
 #   blender -b --python tools/blender_<name>.py [-- --check] [-- --preview out.png --yaw 35]
 #
-# Rules it bakes in (learned the hard way on the barracks; keep following them):
+# Rules it bakes in (learned the hard way on earlier buildings; keep following them):
 # - Texture = the shared Kenney palette (one 32 px cell per surface: flat, or its vertical gradient for soft
 #   shading) so the model matches the kits exactly. Sample it LINEARLY (like the kits): "Closest" shows the
 #   gradient's pixel rows as stripes on tall faces.
@@ -233,7 +233,7 @@ def ball(name, center, radius, cell, matrix=Matrix(), subdivisions=1, gradient=F
 # Model new geometry only for things the game has no model of (then prefer loft / rod / ball: rounded, pointed).
 
 _props = []        # (res path, godot position, godot basis 3x3 incl. scale, root empty)
-_markers = []      # (node name, godot position, yaw): spots the game reads from the scene (e.g. where stalls go)
+_markers = []      # (node name, godot position, yaw): spots the game reads from the scene (e.g. where things get placed)
 _solids = []       # ("box", center, size, yaw) / ("cyl", center, radius, height): collision written into the scene
 _prop_meshes = []  # imported mesh objects (checked for overlaps with the building, never joined into it)
 _G_TO_B = Matrix(((1, 0, 0), (0, 0, -1), (0, 1, 0)))  # Godot axes -> Blender axes
@@ -242,7 +242,7 @@ _G_TO_B = Matrix(((1, 0, 0), (0, 0, -1), (0, 1, 0)))  # Godot axes -> Blender ax
 def prop(path, pos, yaw=0.0, pitch=0.0, roll=0.0, scale=1.0, export=True):
 	"""Places an existing model (res:// path of a GLB) at a Godot point (meters, like every other helper), turned by
 	yaw (about up), then pitch (about x), then roll (about z), scaled `scale` (a number or an (x, y, z) triple).
-	export=False: only for --check / --preview (e.g. the buildings a town is laid out around), not in the scene."""
+	export=False: only for --check / --preview (e.g. buildings a layout is planned around), not in the scene."""
 	sx, sy, sz = (scale, scale, scale) if isinstance(scale, (int, float)) else scale
 	rot = Matrix.Rotation(yaw, 3, "Y") @ Matrix.Rotation(pitch, 3, "X") @ Matrix.Rotation(roll, 3, "Z")
 	basis = rot @ Matrix.Diagonal((sx, sy, sz))
@@ -284,7 +284,7 @@ def solid_cyl(x, z, radius, height, y0=0.0):
 
 
 def _write_scene(glb_path, scale):
-	"""<building>.tscn: the building GLB plus every prop (in prop space: divided by the stall's model scale)."""
+	"""<building>.tscn: the building GLB plus every prop (in prop space: divided by the model scale)."""
 	def res(path):
 		return "res://" + os.path.relpath(os.path.abspath(path), PROJECT).replace(os.sep, "/")
 	paths = [res(glb_path)] + sorted({p[0] for p in _props})

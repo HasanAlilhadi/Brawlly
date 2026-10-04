@@ -21,7 +21,7 @@ const STEER_INTERVAL: float = 0.15
 ## is much closer (at most this fraction of the current distance). Stops AI flip-flopping.
 const TARGET_LOCK_TIME: float = 2.5
 const TARGET_SWITCH_RATIO: float = 0.5
-## Above raised walkable details such as the town compass mosaic (top: 0.037 m).
+## Just above the ground and flat walkable details.
 const COLOR_RING_HEIGHT: float = 0.06
 const ARM_RIGHT: int = 1
 const ARM_LEFT: int = 2

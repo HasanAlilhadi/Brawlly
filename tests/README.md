@@ -19,7 +19,7 @@ Run from the project folder (`G` = the Godot binary). Tests start the game norma
 # Bowman Bow Rain: placed ground area, server-authoritative falling arrows, duration and cleanup
 "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/bow_rain_test.gd
 
-# Solo: chest, tree, camp (gives no soldiers), trading post (buy only at the right stall), barracks (queue 10 s each, pen, take at the gate, 8 soldiers leave the pen, army cap 10 → 15), death
+# Solo: chest, tree, camp (gives no soldiers), no camp near the spawn, Vitality / potions bought anywhere, recruits (queue 10 s each, then join behind you, army cap 10 → 15 with Command), death
 "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/solo_test.gd
 
 # AI: orcs keep their targets, the Warlord walks around a house and never gets stuck, tents for small camps,
@@ -42,7 +42,7 @@ Run from the project folder (`G` = the Godot binary). Tests start the game norma
 # (key 4, HUD Kill + click), CHARGE after the kill, a KILL that misses charges there
 "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/army_test.gd
 
-# Desktop controls (Spearman): WASD, mouse thrust (aim wedge) / E → throw, K, F at a trading post stall, camera zoom per weapon, R rotates the camera 90°, touch controls hidden until a real touch
+# Desktop controls (Spearman): WASD, mouse thrust (aim wedge) / E → throw, K, F does nothing in a match, T opens / closes the upgrades sheet (Hero + Army cards), camera zoom per weapon, R rotates the camera 90°, touch controls hidden until a real touch
 "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/desktop_input_test.gd --class=spearman
 
 # Shield (Swordsman, or --class=spearman): blocks from the front only while up, slower, no attacks, breaks, back on respawn
@@ -55,7 +55,7 @@ Run from the project folder (`G` = the Godot binary). Tests start the game norma
 "$G" --path . res://tests/test_runner.tscn -- --test=res://tests/screenshot_test.gd --out=/tmp/shots
 "$G" --path . res://tests/test_runner.tscn -- --test=res://tests/screenshot_test.gd --out=/tmp/shots --mobile
 
-# Multiplayer (run both at once): world determinism + camp sync + a client buys / takes a barracks soldier
+# Multiplayer (run both at once): world determinism + camp sync + a client recruits a soldier that joins it
 "$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/mp_sync_host.gd &
 "$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/mp_sync_client.gd
 
@@ -67,7 +67,7 @@ Run from the project folder (`G` = the Godot binary). Tests start the game norma
 "$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/mp_revive_host.gd &
 "$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/mp_revive_client.gd
 
-# Multiplayer King of the Hill: team towns, hill score, game over (+ back to lobby)
+# Multiplayer King of the Hill: one spawn area per team (no camps near), hill score, game over (+ back to lobby)
 "$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/mp_modes_host.gd &
 "$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/mp_modes_client.gd
 

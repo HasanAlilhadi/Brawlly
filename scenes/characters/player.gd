@@ -25,9 +25,8 @@ signal revived(player: Player, helpers: Array)
 ## Every peer: the downed state changed (visuals, HUD).
 signal downed_changed(downed: bool)
 signal army_order_changed(order: int)
-## Every peer: a trained soldier is ready: waiting in the barracks pen, or (recruited away from a barracks,
-## from the upgrades sheet) already at your side.
-signal soldier_ready(at_barracks: bool)
+## Every peer: a recruited soldier finished training and joined you (it appears right behind you).
+signal soldier_ready
 ## Every peer: the weapon in hand changed (id from WEAPONS).
 signal weapon_changed(weapon: String)
 ## Every peer: the shield went up / down, took a hit, or broke (`shield_health` 0).
@@ -54,8 +53,6 @@ const MELEE_ASSIST_RANGE: float = 2.4
 const CATALOG := preload("res://resources/data/upgrade_catalog.tres")
 const BLEED_TIME: float = 15.0
 const REVIVE_TIME: float = 3.0
-## Seconds between soldiers filing out of a barracks pen.
-const EXIT_INTERVAL: float = 0.2
 const REVIVE_RANGE: float = 1.8
 ## Health fraction after a revive.
 const REVIVE_HEALTH: float = 0.4
@@ -234,18 +231,18 @@ var coins: int = 0:
 	set(value):
 		coins = value
 		coins_changed.emit(coins)
-## Soldiers bought at the barracks that are still training (replicated). They train one after another,
-## GameConfig.SOLDIER_TRAIN_TIME seconds each, then wait in the pen until the player takes them (collect_soldiers).
+## Recruited soldiers still training (replicated). They train one after another,
+## GameConfig.SOLDIER_TRAIN_TIME seconds each, then appear behind the player and follow (`_finish_training`).
 var soldiers_training: int = 0:
 	set(value):
 		value = maxi(value, 0)
-		# Every peer keeps a copy of the countdowns for the barracks sign / shop (server: the real ones).
+		# Every peer keeps a copy of the countdowns for the upgrades sheet (server: the real ones).
 		while _training_left.size() < value:
 			_training_left.append(GameConfig.SOLDIER_TRAIN_TIME)
 		while _training_left.size() > value:
 			_training_left.remove_at(0)
 		soldiers_training = value
-## Max army size: following + in the pen + in training (raised by the "command" upgrade).
+## Max army size: following + in training (raised by the "command" upgrade).
 var follower_cap: int = GameConfig.BASE_FOLLOWER_CAP
 ## Upgrade id -> times bought. Always replaced (not mutated) so replication notices changes.
 var upgrade_levels: Dictionary = {}:
@@ -275,8 +272,6 @@ var bleed_seconds: int = 0:
 			_downed_label.text = "HELP!  %d" % value
 ## Seconds left for each soldier in training, oldest first (only the first one counts down).
 var _training_left: Array[float] = []
-## Server: the barracks each soldier in training was bought at (its pen), same order.
-var _training_stalls: Array[ShopStation] = []
 var army_order: int = Order.FOLLOW:
 	set(value):
 		if value != army_order:
@@ -1933,12 +1928,10 @@ func collect(kind: Pickup.Kind, amount: int) -> bool:
 
 # --- Army ---------------------------------------------------------------------
 
-## This player's soldiers currently in the world.
-## Soldiers following this player (not the ones still waiting in a barracks pen).
+## This player's soldiers currently in the world (all of them follow).
 func followers() -> Array[Node]:
 	return get_tree().get_nodes_in_group(&"allies").filter(
-			func(ally: Node) -> bool: return ally.get("owner_peer") == peer_id and not ally.get("is_dead") \
-					and not ally.get("penned"))
+			func(ally: Node) -> bool: return ally.get("owner_peer") == peer_id and not ally.get("is_dead"))
 
 
 ## Server: where this hero walked lately (newest last), so soldiers cut off by a wall or a building can
@@ -1958,15 +1951,9 @@ func _record_trail() -> void:
 			trail.remove_at(0)
 
 
-## Trained soldiers waiting in a barracks pen for this player.
-func penned_soldiers() -> Array[Node]:
-	return get_tree().get_nodes_in_group(&"penned").filter(
-			func(ally: Node) -> bool: return ally.get("owner_peer") == peer_id and not ally.get("is_dead"))
-
-
-## Everything that counts toward follower_cap: following + waiting in the pen + in training.
+## Everything that counts toward follower_cap: following + in training.
 func army_size() -> int:
-	return followers().size() + penned_soldiers().size() + soldiers_training
+	return followers().size() + soldiers_training
 
 
 ## Seconds until the next soldier in training is ready (0 = none training).
@@ -1974,7 +1961,7 @@ func next_soldier_in() -> float:
 	return _training_left[0] if not _training_left.is_empty() else 0.0
 
 
-# --- Barracks (server) ----------------------------------------------------------------
+# --- Server tick (soldier training, trail, orders, ability) ------------------------
 
 func _physics_process(delta: float) -> void:
 	super(delta)
@@ -1994,59 +1981,19 @@ func _physics_process(delta: float) -> void:
 		_update_ability_xp_lockout(delta)
 
 
-## The oldest soldier in training is ready: it appears in the pen of the barracks it was bought at, or (bought
-## from the upgrades sheet away from a barracks) right behind you and follows at once.
+## The oldest soldier in training is ready: it appears right behind you and follows at once.
 func _finish_training() -> void:
-	var stall: ShopStation = _training_stalls.pop_front() if not _training_stalls.is_empty() else null
 	soldiers_training -= 1
-	if is_instance_valid(stall):
-		NetSpawn.unit(&"ally", stall.pen_spot(), {"team": team_id, "owner": peer_id, "pen": stall.get_path(),
-				"weapon": class_def.ally_weapon})
-		_net_soldier_ready.rpc(stall.pen_spot(), true)
-		return
 	var at := GameConfig.clamp_to_world(global_position - facing() * 1.3)
 	NetSpawn.unit(&"ally", at, {"team": team_id, "owner": peer_id, "weapon": class_def.ally_weapon})
-	_net_soldier_ready.rpc(at, false)
+	_net_soldier_ready.rpc(at)
 
 
 @rpc("authority", "call_local", "reliable")
-func _net_soldier_ready(at: Vector3, at_barracks: bool) -> void:
-	if not at_barracks:
-		HitFx.flash(at + Vector3(0, 0.6, 0), HitFx.REVIVE_SPARKLE, Color(unit_color, 0.9), 1.4, 0.5)
-		HitFx.flash(at + Vector3(0, 0.05, 0), HitFx.COMBO_RING, Color(unit_color, 0.8), 1.6, 0.4)
-	soldier_ready.emit(at_barracks)
-
-
-## Server: every soldier waiting in a pen joins this player (they must stand at a barracks: its front
-## or its pen gate).
-func collect_soldiers() -> int:
-	if is_dead or is_downed:
-		return 0
-	var reach := ShopStation.INTERACT_RANGE + ShopStation.SERVER_SLACK
-	if ShopStation.nearest(self, reach, ShopStation.BARRACKS) == null and ShopStation.nearest_gate(self, reach) == null:
-		return 0
-	var soldiers := penned_soldiers()
-	# They file out one after another, closest to the gate first, spread over three lanes.
-	soldiers.sort_custom(func(a: Ally, b: Ally) -> bool:
-		return a.global_position.distance_to(a.pen.gate_inside()) < b.global_position.distance_to(b.pen.gate_inside()) \
-				if is_instance_valid(a.pen) and is_instance_valid(b.pen) else false)
-	for i in soldiers.size():
-		(soldiers[i] as Ally).release(i * EXIT_INTERVAL, [0.0, -0.7, 0.7][i % 3])
-	return soldiers.size()
-
-
-## Takes the soldiers waiting in the pen (server; clients ask it).
-func request_collect_soldiers() -> void:
-	if multiplayer.is_server():
-		collect_soldiers()
-	else:
-		net_collect_soldiers.rpc_id(1)
-
-
-@rpc("any_peer", "call_remote", "reliable")
-func net_collect_soldiers() -> void:
-	if _from_owner():
-		collect_soldiers()
+func _net_soldier_ready(at: Vector3) -> void:
+	HitFx.flash(at + Vector3(0, 0.6, 0), HitFx.REVIVE_SPARKLE, Color(unit_color, 0.9), 1.4, 0.5)
+	HitFx.flash(at + Vector3(0, 0.05, 0), HitFx.COMBO_RING, Color(unit_color, 0.8), 1.6, 0.4)
+	soldier_ready.emit()
 
 
 # --- Class upgrades -------------------------------------------------------------
@@ -2361,11 +2308,12 @@ func is_upgrade_locked(def: UpgradeDef) -> bool:
 	return false
 
 
-## The upgrades sheet's Army section (Recruit, Soldier Damage, Soldier Health), in catalog order.
-func sheet_items() -> Array[UpgradeDef]:
+## The upgrades sheet's items on `tab` (UpgradeDef.sheet: &"hero" = Vitality, Potion; &"army" = Recruit,
+## Soldier Damage, Soldier Health, Command), in catalog order. Class upgrades: `class_upgrades()`.
+func sheet_items(tab: StringName) -> Array[UpgradeDef]:
 	var result: Array[UpgradeDef] = []
 	for def in CATALOG.upgrades:
-		if def.sheet:
+		if def.sheet == tab:
 			result.append(def)
 	return result
 
@@ -2395,11 +2343,10 @@ func is_upgrade_useful(def: UpgradeDef) -> bool:
 	return true
 
 
-## Stall items only at a trading post stall that sells `def`; class upgrades and the sheet's Army items anywhere
-## (checked on the server too).
+## Everything is bought anywhere from the upgrades sheet (checked on the server too).
 func can_buy(def: UpgradeDef) -> bool:
 	return not is_dead and not is_downed and not is_upgrade_maxed(def) and is_upgrade_useful(def) \
-			and coins >= upgrade_cost(def) and (def.is_class_upgrade() or def.sheet or ShopStation.can_buy_here(self, def))
+			and coins >= upgrade_cost(def)
 
 
 ## Buys on the server; on clients sends the request to the server.
@@ -2442,8 +2389,6 @@ func _apply_upgrade(def: UpgradeDef) -> void:
 			follower_cap += int(def.amount)
 		&"recruit":
 			for i in int(def.amount):
-				_training_stalls.append(ShopStation.nearest(self, ShopStation.INTERACT_RANGE + ShopStation.SERVER_SLACK,
-						ShopStation.BARRACKS))
 				soldiers_training += 1
 		&"potion":
 			heal(def.amount)
@@ -2684,8 +2629,7 @@ func kill_target_near(point: Vector3, radius: float = KILL_PICK_RADIUS) -> Node3
 	for group in KILL_GROUPS:
 		for node in get_tree().get_nodes_in_group(group):
 			var candidate := node as Node3D
-			if candidate == null or GameConfig.is_gone(candidate) or not GameConfig.is_hostile(self, candidate) \
-					or candidate.is_in_group(&"penned"):
+			if candidate == null or GameConfig.is_gone(candidate) or not GameConfig.is_hostile(self, candidate):
 				continue
 			var reach: float = Unit.target_radius(candidate) if candidate is Camp else 0.0
 			var d := Vector2(candidate.global_position.x - point.x, candidate.global_position.z - point.z).length() - reach

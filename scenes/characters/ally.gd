@@ -1,14 +1,8 @@
 class_name Ally
 extends Unit
-## Soldier trained at a barracks (see Player.soldiers_training). It first waits inside the barracks pen
-## (`penned`: group "penned", can't be targeted or hurt, wanders inside the fence) until its player takes
-## it (`release()`: they file out one by one, each in its own lane through the gate); then it follows its
-## player (`owner_peer`) in a compact formation, fighting nearby hostiles: orcs, and in versus modes other
-## players and their soldiers. Near a barracks it routes around the house + pen (`ShopStation.detour`)
-## instead of walking into the fence. Inside a barracks compound soldiers pass through each other (no
-## soldier–soldier collision or separation push, so a crowded courtyard never jams); walls and buildings
-## still block them. Outside, soldiers collide with each other again.
-## Once dead, it is gone for good.
+## Soldier recruited from the upgrades sheet (see Player.soldiers_training): once trained it appears behind
+## its player (`owner_peer`) and follows in a compact formation, fighting nearby hostiles: orcs, and in versus
+## modes other players and their soldiers. Once dead, it is gone for good.
 ## Soldiers carry their player's class weapon (`weapon`, see WEAPON_STATS): sword and shield, a long
 ## spear (melee only: a straight stab, `_spear_stab`), or a bow — archers shoot from `archer_range()` (half
 ## their hero's bow range) with a clear line of fire, step back from orcs that get close and stand in a row
@@ -24,8 +18,6 @@ extends Unit
 
 const TARGET_GROUPS: Array[StringName] = [&"active_enemies", &"player_units"]
 const CAMP_GROUPS: Array[StringName] = [&"camps"]
-## Soldiers waiting in the barracks courtyard are drawn this much smaller (every peer; visual only).
-const PENNED_SCALE: float = 0.7
 const SPEAR_SCENE := preload("res://assets/items/dungeon/spear.glb")
 const BOW_SCENE := preload("res://assets/items/forest/bow.glb")
 ## Archers shoot from this share of their hero's bow range (Player.aim_range, Fire Range included).
@@ -77,32 +69,6 @@ var weapon: String = "sword"
 
 var leader: Player
 var target: Node3D
-## The barracks whose pen it waits in (set at spawn on every peer).
-var pen: ShopStation
-## Replicated: waiting in the pen (not following / fighting yet).
-var penned: bool = false:
-	set(value):
-		penned = value
-		if penned:
-			add_to_group(&"penned")
-			remove_from_group(&"player_units")
-		else:
-			remove_from_group(&"penned")
-			if is_node_ready() and not is_dead:
-				add_to_group(&"player_units")
-		_apply_pen_scale(true)
-
-## Server: after being released, walk through these (inside the gate, then outside) before following.
-var _exit_path: Array[Vector3] = []
-## Server: seconds to wait before filing out (released soldiers leave one after another).
-var _exit_delay: float = 0.0
-## Server: barracks close enough to be in the way (refreshed every think).
-var _nearby_barracks: Array[ShopStation] = []
-## Server: inside a barracks compound right now (soldier–soldier collision off).
-var _in_compound: bool = false
-var _base_separation_strength: float
-var _wander_point: Vector3 = Vector3.INF
-var _resting: bool = false
 
 var _think_timer: float = 0.0
 ## Server: the leader's order_serial this soldier has obeyed.
@@ -125,13 +91,10 @@ var _stab_tween: Tween
 func _ready() -> void:
 	_apply_weapon_stats()
 	super()
-	_apply_pen_scale(false)
 	chase_avoid_mask = GameConfig.LAYER_ENEMIES  # go around orcs in the way to the one we're after
 	add_to_group(&"allies")
-	if not penned:
-		add_to_group(&"player_units")
+	add_to_group(&"player_units")
 	_think_timer = randf() * 0.3
-	_base_separation_strength = separation_strength
 	_base_max_health = max_health
 	_base_damage = melee_damage
 	_find_leader()
@@ -266,37 +229,6 @@ func _update_slot() -> void:
 	_slot_offset = Vector3(cos(angle), 0.0, sin(angle)) * slot_radius
 
 
-## Every peer: shrink while penned, back to full size when released (`animate`: grow / shrink smoothly).
-func _apply_pen_scale(animate: bool) -> void:
-	if not is_node_ready():
-		return
-	var size := _model_scale * (PENNED_SCALE if penned else 1.0)
-	if animate:
-		create_tween().tween_property(model, "scale", size, 0.4).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	else:
-		model.scale = size
-
-
-## Server: the player took it from the pen.
-## `delay`: wait this long before walking out; `lane` (-1..1): where to pass through the gate's width.
-func release(delay: float = 0.0, lane: float = 0.0) -> void:
-	if not penned:
-		return
-	penned = false
-	_exit_path.clear()
-	_exit_delay = delay
-	if is_instance_valid(pen):
-		_nearby_barracks = [pen]
-		_exit_path.append(pen.gate_inside(lane))
-		_exit_path.append(pen.gate_point(lane))
-	target = null
-
-
-func take_damage(amount: float, attacker: Node3D = null, is_melee: bool = true, crit: bool = false) -> void:
-	if not penned:
-		super(amount, attacker, is_melee, crit)
-
-
 func _get_move_input(delta: float) -> Vector3:
 	var move := _desired_move(delta)
 	move.y = 0.0
@@ -308,12 +240,7 @@ func _get_move_input(delta: float) -> Vector3:
 
 ## The move this frame (any length up to 1); `_get_move_input` turns it into a run or a walk.
 func _desired_move(delta: float) -> Vector3:
-	_update_compound_collision()
 	look_override = Vector3.ZERO  # archers face their target while shooting / stepping back (`_shoot_at`)
-	if penned:
-		return _pen_move(delta)
-	if not _exit_path.is_empty():
-		return _exit_move(delta)
 	_regroup = maxf(_regroup - delta, 0.0)
 	_think_timer -= delta
 	# A new order is obeyed this frame, not at the next think.
@@ -322,17 +249,11 @@ func _desired_move(delta: float) -> Vector3:
 		_think()
 
 	if not GameConfig.is_gone(target):
-		var via := _route(target.global_position)
-		if via != target.global_position:
-			return _walk_to(via, delta)
 		return _shoot_at(delta) if is_archer() else engage(target, delta)
 	var order := _order()
 	if order == Player.Order.FOLLOW and GameConfig.is_gone(leader):
 		return Vector3.ZERO
 	var slot := _slot_point()
-	var via := _route(slot)
-	if via != slot:
-		return _walk_to(via, delta)
 	if _via != Vector3.INF:
 		# Cut off from the slot (a wall, a house): the hero's own way around.
 		if _via.distance_to(Vector3(global_position.x, 0.0, global_position.z)) < 0.5:
@@ -440,86 +361,15 @@ func _release_arrow() -> void:
 	NetSpawn.projectile(&"arrow", from + direction * 0.4, direction, melee_damage, self)
 
 
-## Soldier–soldier collision only outside barracks compounds: inside (walls included, so the gate
-## opening counts), drop the allies bit from our mask and the separation push. Our own layer stays, so
-## orcs and hits still find us; walls / buildings are on other layers and keep blocking.
-func _update_compound_collision() -> void:
-	var inside := false
-	if is_instance_valid(pen) and pen.in_pen(global_position, -ShopStation.WALL_T):
-		inside = true
-	else:
-		for barracks in _nearby_barracks:
-			if is_instance_valid(barracks) and barracks.in_pen(global_position, -ShopStation.WALL_T):
-				inside = true
-				break
-	if inside == _in_compound:
-		return
-	_in_compound = inside
-	if inside:
-		collision_mask &= ~GameConfig.LAYER_ALLIES
-		separation_strength = 0.0
-		_separation = Vector3.ZERO
-	else:
-		collision_mask |= GameConfig.LAYER_ALLIES
-		separation_strength = _base_separation_strength
-
-
-## Filing out of the pen: wait for our turn, walk to our lane inside the gate, then out through it.
-func _exit_move(delta: float) -> Vector3:
-	if _exit_delay > 0.0:
-		_exit_delay -= delta
-		return Vector3.ZERO
-	var to_gate := _exit_path[0] - global_position
-	to_gate.y = 0.0
-	if to_gate.length() < 0.5:
-		_exit_path.pop_front()
-		return Vector3.ZERO
-	return steer(to_gate.normalized(), delta)
-
-
-## The point to walk toward on the way to `goal`: `goal`, or a corner around a barracks in the way.
-func _route(goal: Vector3) -> Vector3:
-	for barracks in _nearby_barracks:
-		if is_instance_valid(barracks):
-			var via := barracks.detour(global_position, goal, radius + 0.6)
-			if via != goal:
-				return via
-	return goal
-
-
 func _walk_to(point: Vector3, delta: float) -> Vector3:
 	var to := point - global_position
 	to.y = 0.0
 	return steer(to.normalized(), delta) if to.length() > 0.05 else Vector3.ZERO
 
 
-## In the pen: mostly stand around, now and then stroll to another spot inside the fence (the pen is
-## a plain square, so the way there is straight).
-func _pen_move(delta: float) -> Vector3:
-	if not is_instance_valid(pen):
-		return Vector3.ZERO
-	_think_timer -= delta
-	if _wander_point == Vector3.INF or not pen.in_pen(_wander_point, 0.2):
-		_wander_point = pen.pen_spot()
-	elif _think_timer <= 0.0:
-		_think_timer = randf_range(4.0, 9.0)
-		if randf() < 0.35:
-			_wander_point = pen.pen_spot()
-	var to_spot := _wander_point - global_position
-	to_spot.y = 0.0
-	# Resting soldiers only walk back when shoved well away (else a crowd keeps pushing each other
-	# off their spots and walking back: jitter).
-	if to_spot.length() < (1.2 if _resting else 0.5):
-		_resting = true
-		return Vector3.ZERO
-	_resting = false
-	return to_spot.normalized() * 0.5  # strolls (walk speed)
-
-
 func _think() -> void:
 	if not is_instance_valid(leader):
 		_find_leader()
-	_nearby_barracks = ShopStation.barracks_near(get_tree(), global_position)
 	if is_instance_valid(leader) and leader.order_serial != _order_serial:
 		_obey()
 	shoot_range = archer_range()
@@ -704,5 +554,4 @@ func _camp_to_attack() -> Node3D:
 
 func _on_died() -> void:
 	remove_from_group(&"allies")
-	remove_from_group(&"penned")
 	remove_from_group(&"player_units")

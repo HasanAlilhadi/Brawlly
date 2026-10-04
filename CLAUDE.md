@@ -28,22 +28,18 @@ See `README.md` for the full folder layout and project defaults.
   texture = the shared Kenney palette, one cell per surface, sampled **linearly** ("Closest" stripes tall faces);
   **no overlapping coplanar faces** (z-fighting: flicker / see-through — one block per stair step, walls stop at
   towers, caps sit above what they cap, decor never overlaps); single-sided, outward faces; `--check` must print
-  `OVERLAPS 0` and `FLIPPED 0`; then look at it **up close in the game** (`tests/screenshot_test.gd`, e.g. the
-  `barracks_close` shot), not only in the Blender preview. Model in Godot meters, 1 unit = one tile after the
-  prop scale, origin bottom center, front = +Z; the GLB links the shared palette. Example: `tools/blender_barracks.py`
-  → `assets/environment/buildings/barracks.glb` (the Barracks stall: a walled training compound, layout constants
-  shared with `ShopStation`); `tools/blender_blacksmith.py` → `blacksmith.glb` (a small forge workshop);
-  `tools/blender_armory.py` → `armory.glb` (the Bows & Spears log cabin); `tools/blender_healer.py` → `healer.glb`
-  (the Healer cottage); `tools/blender_town.py` → `town.glb` / `town.tscn` (the town they stand in: `marker()` spots,
-  `solid_box()` / `solid_cyl()` collision, the buildings loaded with `prop(export=False)` so `--check` sees them). **Reuse existing models**: anything the
-  game already has (the player's sword / bow / spear / arrows, shields, barrels, targets, weapon racks, banners,
-  flags — listed with their in-game sizes in `tools/blender_props.py`) is placed with `kit.prop()`, never modeled
-  again; `run()` then also writes `<name>.tscn` (building GLB + those models), which is what the stall loads.
-  Model only what doesn't exist yet, and then rounded / pointed with `loft` / `rod` / `ball` (convex pieces), not
-  plain boxes. The game
-  camera looks down steeply: keep what matters (workshop, tools) out from under big roofs — open yards, small
-  canopies. A stall that is a building gives its `STALLS` row a `block` rect (collision + keeps trees / decor
-  off it, `footprint_radius()`), `block_height` and `sign_height`.
+  `OVERLAPS 0` and `FLIPPED 0`; then look at it **up close in the game** (`tests/screenshot_test.gd`: add a close-up
+  shot), not only in the Blender preview. Model in Godot meters, 1 unit = one tile after the prop scale, origin
+  bottom center, front = +Z; the GLB links the shared palette; the output goes to `assets/environment/<theme>/`.
+  Layouts of several pieces use `marker()` spots (Node3Ds the game places things on), `solid_box()` / `solid_cyl()`
+  collision and `prop(export=False)` for neighbours `--check` should see. (The town, trading-post stalls and their
+  model scripts were removed on 2026-10-04 — in git history before then, as working examples of the kit.)
+  **Reuse existing models**: anything the game already has (the player's sword / bow / spear / arrows, shields,
+  barrels, targets, weapon racks, banners, flags — listed with their in-game sizes in `tools/blender_props.py`) is
+  placed with `kit.prop()`, never modeled again; `run()` then also writes `<name>.tscn` (the GLB + those models),
+  which is what the game loads. Model only what doesn't exist yet, and then rounded / pointed with `loft` / `rod` /
+  `ball` (convex pieces), not plain boxes. The game camera looks down steeply: keep what matters out from under big
+  roofs — open yards, small canopies.
 - Never reference `pre-assets/` from a scene or script (it is not imported, so `res://pre-assets/...` will not load).
 
 ## Conventions
@@ -75,7 +71,8 @@ by touch index so the joystick and buttons work together with multi-touch.
   `toggle_fullscreen`, `rotate_camera`, `army_*`, `ping*`, `dash` C / L3, `upgrades` T / View) — add new bindings there, not as hard-coded keys, and list them on the
   Controls page (`scenes/ui/controls_menu.gd`, main menu → Controls). Mouse clicks for gameplay are taken in
   `_unhandled_input` (so clicks on HUD buttons don't attack); ignore events with `device == DEVICE_ID_EMULATION`.
-- `interact` is F on keyboard in both matches and Training Field. The Training Field's Orc Practice station
+- `interact` is F on keyboard (LB on gamepad); only the Training Field uses it (switch hero at a pedestal, Orc Practice)
+  — matches have nothing to interact with. The Orc Practice station
   spawns exactly one server-owned orc per press, up to eight living orcs; there is no automatic spawn timer.
 - UI must work in both orientations: anchor to edges, use `MaxWidth` on full-width panels, check both with
   `tests/screenshot_test.gd` (with and without `--mobile`). Touch controls still handle input in `_input` by touch index.
@@ -176,15 +173,17 @@ by touch index so the joystick and buttons work together with multi-touch.
   decals use `assets/vfx/light_masks/` (revive range ring). Touch controls are skinned from `assets/ui/touch/` (set in `hud.gd`).
 - **Combo hits**: `Enemy.take_damage` — a player hit within `combo_window` (1 s) of a teammate's hit on the same orc deals
   `combo_damage_multiplier` (1.5×) and pops "COMBO!" for everyone (`HitFx.report_combo` → `main._net_combo`). Soldiers don't count.
-- **Class upgrades** (`UpgradeDef.classes` set; in `upgrade_catalog.tres`): bought anywhere from the upgrades bottom
-  sheet (`UpgradeSheet`, scenes/ui/upgrade_sheet.gd, in the HUD: T / gamepad View / the star button next to pause;
-  `Hud.toggle_upgrades()`; slides in / out, `_slide()` / `_place()`; its handle `UpgradesTab` sits on the bottom
-  edge, center: "T  Upgrades", a pulsing coin while something is affordable, tucks away while the sheet is open),
-  never at stalls. The sheet has two tabs: Hero (the
-  class upgrades) and Army (`UpgradeDef.sheet` items, `Player.sheet_items()`: Recruit, shown as a wide card with the
-  army size and the training countdown, and Soldier Damage / Soldier Health, 3 levels each × +25% `ally_damage` / `ally_health`). A recruit bought away from
-  a barracks trains `SOLDIER_TRAIN_TIME` and then spawns behind the player, following (`_finish_training` with no
-  stall; `soldier_ready(at_barracks)`); bought at the barracks it still goes to the pen. Their effects are recomputed from the replicated `upgrade_levels` on every
+- **Upgrades sheet**: everything is bought anywhere from the upgrades bottom sheet (`UpgradeSheet`,
+  scenes/ui/upgrade_sheet.gd, in the HUD: T / gamepad View / the star button next to pause; `Hud.toggle_upgrades()`;
+  slides in / out, `_slide()` / `_place()`; its handle `UpgradesTab` sits on the bottom edge, center: "T  Upgrades",
+  a pulsing coin while something other than a potion is affordable, tucks away while the sheet is open). There are
+  no shops, stalls or towns. Two tabs: **Hero** = the class upgrades (`Player.class_upgrades()`), then the
+  `UpgradeDef.sheet == &"hero"` items (Vitality, Potion — a consumable, buyable again and again while hurt);
+  **Army** = the `sheet == &"army"` items (`Player.sheet_items(tab)`): Recruit (a wide card with the army size and
+  the training countdown), Soldier Damage / Soldier Health (3 levels each × +25% `ally_damage` / `ally_health`) and
+  Command. A recruit trains `SOLDIER_TRAIN_TIME`, then spawns behind the player and follows (`_finish_training`,
+  `soldier_ready`). New sheet item = a catalog row with `sheet` + its effect in `Player._apply_upgrade`.
+- **Class upgrades** (`UpgradeDef.classes` set; in `upgrade_catalog.tres`, Hero tab): their effects are recomputed from the replicated `upgrade_levels` on every
   peer (`Player._apply_class_upgrades()`: damage, Fire Rate = shorter cooldowns + `anim_speed`, `aim_range`, `arrow_pierce`,
   `knockback_power`, `sword_wave`, `dash_damage`, `knife_damage`, the carried `weapons`); `_apply_upgrade` only refills a
   newly bought shield. Swordsman: sword_damage, sword_rate, sword_knockback / sword_wave (pick one: `UpgradeDef.excludes`),
@@ -196,34 +195,21 @@ by touch index so the joystick and buttons work together with multi-touch.
   (`Player.TRAINING_UNLOCKS`) and makes class upgrades free. Tests: `grant_upgrade(id)`; `class_upgrades_test.gd`
   (`--class=`), `class_upgrades_mp_test.gd`. New class upgrade = a catalog row with `classes` + its effect in
   `_apply_class_upgrades`.
-- Economy: `Player.coins`, `Player.upgrade_levels`, `buy_upgrade(def)`; shop items are `UpgradeDef` resources in
-  `resources/data/upgrade_catalog.tres` (effects by `id` in `Player._apply_upgrade`). There is no global shop: items
-  are sold at **trading post stalls** (`ShopStation`) in the **town** at every spawn point: one fixed layout, never
-  turned (`tools/blender_town.py` → `assets/environment/buildings/town.tscn`: paved square + mosaic at the spawn, decor
-  with its collision, markers `Stall_<id>` / `StarterChest` / `Tree_<n>`: the town's trees are the normal choppable
-  trees). `WorldBuilder._add_towns()` instances it and puts a stall
-  on each marker; `WorldBuilder.TOWN_RADIUS` stays free of trees / camps / scatter, no camp within
-  `stall_safe_distance` of a stall. Move a building = change `STALLS` in the town script and rebuild; King of the Hill
-  puts one town per team (`GameMode.setup`). `UpgradeDef.stalls` lists the stalls that sell an item;
-  `Player.can_buy()` requires standing at one (`ShopStation.can_buy_here`, also checked on the server). main.gd
-  tracks the stall in reach (`_update_stall`: highlight, HUD prompt, `interact` opens `ShopMenu.open(stall)`). Every stall is used from any side, within `ShopStation.STALL_REACH` of its building (`_distance()` from `_footprint()`: the STALLS "block", the barracks' compound); `nearest()` = the closest in reach. No ground rings: a stall in reach glows (`set_highlight` → `assets/shaders/highlight_glow.gdshader` as `material_overlay`) and its sign turns gold; a pin bobs over the barracks gate while your soldiers wait. New building = a STALLS row with its "block". Soldiers read `Player.ally_damage` / `ally_health`.
-- **Soldiers come only from recruiting** (barracks or the upgrades sheet's Army tab; camps and the Warlord's warband
+- Economy: `Player.coins`, `Player.upgrade_levels`, `buy_upgrade(def)` / `request_buy(def)`; items are `UpgradeDef`
+  resources in `resources/data/upgrade_catalog.tres` (effects by `id` in `Player._apply_upgrade` /
+  `_apply_class_upgrades`), all sold on the upgrades sheet; `Player.can_buy()` (also checked on the server) only
+  needs coins, a living hero and a useful, not maxed item.
+- **Spawn areas**: `WorldBuilder` keeps `SPAWN_SAFE_RADIUS` (14 m) around every spawn point free of trees / camps /
+  chests / scatter, no camp within `spawn_camp_distance` (24 m), and puts one Uncommon starter chest at
+  `spawn + STARTER_CHEST_OFFSET` (the same for every spawn). King of the Hill has one spawn area per team
+  (`GameMode.world_spawn_points()` = `team_bases`).
+- **Soldiers come only from recruiting** (the upgrades sheet's Army tab; camps and the Warlord's warband
   are routed — they `die()` and drop loot).
   Recruit (50, constant) → `Player.soldiers_training` (replicated count; a queue — one after another,
-  `GameConfig.SOLDIER_TRAIN_TIME` each) → server spawns an `Ally` with `penned` (replicated; group `penned`, out of
-  `player_units`, can't be hurt, drawn at `Ally.PENNED_SCALE`) in that barracks' courtyard (`ShopStation.pen_spot()`).
-  The barracks is a walled compound (hall in the front wall = the shop door, courtyard = the pen, watchtower, archery
-  range, gate in the +X wall); its layout constants in `ShopStation` (`COMPOUND`, `HALL`, `PEN`, `GATE_Z`, …) must
-  match `tools/blender_barracks.py`, which builds the model from the same numbers. Take them at the
-  gate (main.gd `_gate`: HUD prompt "Take N soldiers" + interact, `ShopStation.nearest_gate`) or the shop's Take row →
-  `Player.request_collect_soldiers()` → `Ally.release(delay, lane)` (they file out `Player.EXIT_INTERVAL` apart,
-  closest first, in 3 lanes through the wide gate). The walls (`GameConfig.LAYER_FENCE`) block everyone; soldiers
-  near a barracks path around it with `ShopStation.detour()` (from inside the pen: via the gate; outside: shortest
-  way around the compound corners) — `Ally._route()` wraps every move toward a slot or target.
-  Inside a compound soldiers don't collide with each other (`Ally._update_compound_collision`: allies bit off
-  their mask + no separation push; own layer kept so orcs / hits still find them); walls still block them.
-  `Player.followers()` excludes penned; `army_size()` = followers + penned + training ≤ `follower_cap`
-  (`GameConfig.BASE_FOLLOWER_CAP` 10, Command +1 per level, 100 constant, max 15).
+  `GameConfig.SOLDIER_TRAIN_TIME` each) → the server spawns an `Ally` right behind the player, which follows at once.
+  `army_size()` = followers + training ≤ `follower_cap`
+  (`GameConfig.BASE_FOLLOWER_CAP` 10, Command +1 per level, 100 constant, max 15). Soldiers read
+  `Player.ally_damage` / `ally_health`.
 - Squads come from `EnemyRoster` (`resources/data/orc_roster.tres`: filler + RosterEntry share/min_squad/max_count/
   inner_ring). New enemy type = new scene + roster entry. Camps scale orc stats and coins by `Camp.tier` (0..1).
 - Targeting uses group `active_enemies` (orcs of awake camps only) — keep it that way for performance with many camps.
@@ -264,7 +250,7 @@ by touch index so the joystick and buttons work together with multi-touch.
 - **Stats & awards**: report events with `MatchStats.add(peer, &"stat")` (server; kills / deaths / soldiers lost
   come from `Unit.die()`, damage from `HitFx.report_hit`). New award = a row in `MatchStats.AWARDS`.
 - **Minimap** (`scenes/ui/minimap.gd`): shows only friends (players / soldiers not `GameConfig.is_hostile` to you),
-  camps as tent badges, trading posts, the hill (group `hill`, holder color). Tracked
+  camps as tent badges, the hill (group `hill`, holder color). Tracked
   nodes can set meta `marker_icon` (Texture2D, drawn in a round badge) + `marker_portrait` (a face). Faces are rendered
   with `tools/render_portrait.gd` into `assets/ui/icons/portraits/` (Warlord).
 - **Pings**: `main._ping()` → server `_on_ping()` (rate-limited) → teammates' `PingMarker`. Things that should get a
@@ -302,7 +288,7 @@ by touch index so the joystick and buttons work together with multi-touch.
   server records `Player.trail` (a point every 0.8 m); a soldier whose straight way to its slot is blocked
   (`_clear_walk`) walks to the newest trail point it can reach (`_trail_point`), so it follows the hero around
   walls and buildings that local steering alone can't get out of. Speed: exactly two, run (`move_speed`) and walk (`walk_share` × it, walk clip, the last `walk_distance` m to
-  the slot and pen strolls) — `_get_move_input` snaps every move to one of them; no catch-up / charge boost.
+  the slot) — `_get_move_input` snaps every move to one of them; no catch-up / charge boost.
 - Far-away camps pause their orcs (`Camp.activation_range`; downed players still count as near, only dead ones don't) — keep this for mobile performance. Orcs that are
   provoked or walking home (`Enemy.is_busy()`) stay awake. Damage calls `Unit._on_damaged(attacker)`; orcs forward it
   to `Camp.alert(attacker)`, which provokes the whole squad (tuning in `enemy.gd` → "Provoked" exports).
@@ -333,7 +319,7 @@ by touch index so the joystick and buttons work together with multi-touch.
   `GameConfig.is_hostile(a, b)`; groups: `players`, `allies`, `player_units` (players+allies), `enemies`,
   `active_enemies`, `camps`, `units`. `owner_peer` = controlling player (kill/camp credit).
 - **Input**: `main.gd` reads HUD/keyboard and calls `Player.set_input/attack_melee/shoot` on the server, or the
-  `Player.net_*` RPCs from clients (validated by sender). Shop purchases: `Player.request_buy()`.
+  `Player.net_*` RPCs from clients (validated by sender). Purchases: `Player.request_buy()`.
 - **Match flow**: menu → lobby (`Net.host()` / `join()`; tests: `open_offline_lobby()`) → `Net.start_game()` loads main on
   all peers → server waits for every peer's world → spawns players. `Net.return_to_lobby()` after a match.
 - **Testing multiplayer**: `-s script` runs skip autoloads (no `Net`), so use a runner scene that starts normally and

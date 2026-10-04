@@ -3,7 +3,7 @@ extends Node3D
 ## - Every peer builds the same world from the shared seed in Net.settings.
 ## - The server waits until every peer has built it, then spawns one Player per peer and starts the camps.
 ## - Local input (HUD touch controls / keyboard) goes to the local Player on the server.
-## - Soldiers are bought and trained at the barracks (Player.soldiers_training, ShopStation pen).
+## - Everything is bought from the upgrades sheet (T); recruits train, then join their hero (Player.soldiers_training).
 ## - World events (treasure goblin, Orc Warlord, invasion waves), match stats + awards, pings and army orders.
 
 const PLAYER_SCENE := preload("res://scenes/characters/player.tscn")
@@ -53,7 +53,6 @@ const MOUSE_CLICK_HOLD: float = 0.2
 @onready var camera: FollowCamera3D = $Camera
 @onready var hud: Hud = $HUD
 @onready var pause_menu: PauseMenu = $PauseMenu
-@onready var shop_menu: ShopMenu = $ShopMenu
 
 var game_mode: GameMode
 var local_player: Player
@@ -70,9 +69,6 @@ var _game_over: bool = false
 var _melee_send_timer: float = 0.0
 var _shoot_send_timer: float = 0.0
 var _knife_send_timer: float = 0.0
-var _stall: ShopStation  # the trading post stall the local player stands at
-var _gate: ShopStation  # the barracks pen gate the local player stands at (with soldiers waiting there)
-var _current_town: Node3D
 ## Mouse: the HUD Kill button was clicked; the next left click in the world picks the target.
 var _kill_picking: bool = false
 ## Over the enemy our soldiers are told to kill (local player's KILL order).
@@ -129,7 +125,6 @@ func _ready() -> void:
 		var builder := WorldBuilder.new()
 		builder.camp_count = settings.camp_count
 		builder.spawn_points = game_mode.world_spawn_points()
-		builder.town_access = game_mode.world_town_access()
 		builder.clear_areas = game_mode.world_clear_areas()
 		_camps = builder.build(world)
 		game_mode.build_objectives(world)
@@ -142,7 +137,6 @@ func _ready() -> void:
 	hud.restart_requested.connect(_restart)
 	hud.main_menu_requested.connect(func() -> void: Net.leave())
 	hud.pause_requested.connect(pause_menu.open)
-	hud.shop_requested.connect(_open_stall)
 	hud.bow_stick.aim_released.connect(_on_bow_released)
 	hud.bow_stick.tapped.connect(func() -> void: _fire(Vector3.ZERO))
 	hud.melee_button.tapped.connect(_melee_once)
@@ -155,9 +149,7 @@ func _ready() -> void:
 	pause_menu.online = Net.is_online()
 	if training_mode:
 		pause_menu.set_hint("F: choose hero   •   X: special ability   •   Attack the targets to test damage")
-	shop_menu.online = Net.is_online()
 	pause_menu.paused.connect(_on_paused)
-	shop_menu.opened.connect(_on_paused)
 	game_mode.scores_changed.connect(func() -> void: hud.set_mode_label(game_mode.score_text()))
 	game_mode.announced.connect(func(message: String) -> void: hud.show_toast(Net.localize(message)))
 	game_mode.match_over.connect(_end)
@@ -230,9 +222,6 @@ func _spawn_unit(data: Dictionary) -> Node:
 		&"ally":
 			var ally := ALLY_SCENE.instantiate() as Ally
 			ally.weapon = data.get("weapon", "sword")
-			if data.has("pen"):
-				ally.pen = get_node_or_null(data.pen) as ShopStation
-				ally.penned = true
 			unit = ally
 		&"goblin":
 			unit = GOBLIN_SCENE.instantiate() as TreasureGoblin
@@ -327,7 +316,6 @@ func _bind_local_player(player: Player) -> void:
 	camera.snap()
 	hud.setup(player, _camps)
 	hud.set_training_mode(training_mode)
-	shop_menu.setup(player)
 	_last_coins = player.coins
 	player.coins_changed.connect(_on_local_coins_changed)
 	_last_health = player.health
@@ -451,7 +439,7 @@ func _physics_process(delta: float) -> void:
 		local_player.net_knife.rpc_id(1, knife_aim)
 
 
-## Mouse buttons only count when they didn't land on the HUD (pause / shop buttons, minimap).
+## Mouse buttons only count when they didn't land on the HUD (pause / upgrades buttons, minimap).
 func _unhandled_input(event: InputEvent) -> void:
 	if _game_over or local_player == null:
 		return
@@ -504,9 +492,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed(&"rotate_camera") and not event.is_echo():
 		camera.rotate_step(1)
-	elif event.is_action_pressed(&"interact") and not event.is_echo() and (_stall or _gate):
-		_open_stall()
-		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed(&"ping") and not event.is_echo():
 		_ping(_ahead_point(6.0) if event is InputEventJoypadButton else _pointer_point())
 	elif event.is_action_pressed(&"ping_help") and not event.is_echo():
@@ -708,8 +693,6 @@ func _process(delta: float) -> void:
 	_vibrate_cooldown -= delta
 	_update_bow_rain_target()
 	_update_respawn_display(delta)
-	_update_stall()
-	_update_town()
 	_update_camera_zoom()
 	_update_kill_mark()
 	if training_mode and training_field:
@@ -766,73 +749,6 @@ func _update_camera_zoom() -> void:
 		if local_player.current_weapon() == "bow":
 			range_scale = 1.0 + RANGE_CAMERA_ZOOM * (local_player.aim_range_scale() - 1.0)
 	camera.zoom = (CAMERA_ZOOM + extra) * range_scale
-
-
-## The trading post stall the local player stands at: highlight it, show the HUD prompt, and close its
-## shop when they walk away.
-func _update_stall() -> void:
-	var stall: ShopStation = null
-	var gate: ShopStation = null
-	var waiting: Array[Node] = []
-	if is_instance_valid(local_player) and local_player.is_inside_tree() and not local_player.is_dead \
-			and not local_player.is_downed and not _game_over:
-		# Keep locked enemy shops detectable so interaction can explain why access is denied.
-		stall = ShopStation.nearest(local_player, ShopStation.INTERACT_RANGE, &"", false)
-		waiting = local_player.penned_soldiers()
-		if not waiting.is_empty():
-			gate = ShopStation.nearest_gate(local_player)
-	# Barracks pens with our soldiers show a ring at the gate (bright while we stand on it).
-	for node in get_tree().get_nodes_in_group(&"shop_stations"):
-		var barracks := node as ShopStation
-		if barracks.stall_id == ShopStation.BARRACKS:
-			barracks.set_gate_state(waiting.any(func(a: Node) -> bool: return a.get("pen") == barracks), barracks == gate)
-	_gate = gate
-	if stall != _stall:
-		if is_instance_valid(_stall):
-			_stall.set_highlight(false)
-		if stall and stall.can_access(local_player):
-			stall.set_highlight(true)
-		_stall = stall
-	if shop_menu.visible and shop_menu.stall != stall:
-		shop_menu.close()
-	if _gate and not shop_menu.visible:
-		hud.set_stall(_gate, waiting.size())
-	else:
-		hud.set_stall(null if shop_menu.visible else stall)
-
-
-## Interact / the HUD prompt: take the soldiers at a pen gate, else open the stall's shop.
-func _open_stall() -> void:
-	if _game_over:
-		return
-	if _gate:
-		local_player.request_collect_soldiers()
-	elif _stall:
-		if _stall.can_access(local_player):
-			shop_menu.open(_stall)
-		else:
-			hud.show_toast(_stall.access_denied_text())
-
-
-## Shows ownership once when the local player enters a town, from any direction.
-func _update_town() -> void:
-	if not is_instance_valid(local_player) or not local_player.is_inside_tree() or local_player.is_dead:
-		_current_town = null
-		return
-	var inside: Node3D
-	for node in get_tree().get_nodes_in_group(&"towns"):
-		var town := node as Node3D
-		if not is_instance_valid(town) or not town.is_inside_tree():
-			continue
-		var offset := local_player.global_position - town.global_position
-		offset.y = 0.0
-		if offset.length() <= WorldBuilder.TOWN_RADIUS:
-			inside = town
-			break
-	if inside != _current_town:
-		_current_town = inside
-		if inside:
-			hud.show_toast(String(inside.get_meta(&"display_title", "Town")), 2.0)
 
 
 ## A point `distance` from `center` not inside a tree/building (tries a few directions).
@@ -920,7 +836,7 @@ func _kill_pick() -> Node3D:
 		for node in get_tree().get_nodes_in_group(group):
 			var candidate := node as Node3D
 			if candidate == null or GameConfig.is_gone(candidate) or not GameConfig.is_hostile(local_player, candidate) \
-					or candidate.is_in_group(&"penned") or not candidate.is_visible_in_tree():
+					or not candidate.is_visible_in_tree():
 				continue
 			var center := candidate.global_position + Vector3(0, 0.6, 0)
 			if camera.is_position_behind(center):
@@ -1131,7 +1047,6 @@ func _end(title: String, subtitle: String) -> void:
 	_game_over = true
 	match_stats.publish_awards(game_mode.player_names())
 	pause_menu.can_pause = false
-	shop_menu.close()
 	var restart_label := "Play again"
 	if Net.is_online():
 		restart_label = "Back to lobby" if Net.is_host() else ""

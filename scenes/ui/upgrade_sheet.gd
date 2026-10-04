@@ -2,11 +2,13 @@ class_name UpgradeSheet
 extends PanelContainer
 ## Bottom sheet with two tabs, opened / closed with T, the gamepad View button or the HUD upgrades button
 ## (Hud.toggle_upgrades). It slides up from the bottom edge (and back down); the match keeps running.
-## - Hero: your class's upgrades (UpgradeDef.classes). One card each: medal, name, what it does, level, the
-##   control that uses it, and a buy button (cost / Owned / Max / the other choice taken).
-## - Army: the sheet items (UpgradeDef.sheet): a wide Recruit card (army size, the soldier in training with its
-##   countdown, 50 coins, joins you 10 s later) and Soldier Damage / Soldier Health (3 levels each).
-## Buying anywhere goes through Player.request_buy. Esc closes it before the pause menu opens. Sizes from HudStyle.
+## - Hero: your class's upgrades (UpgradeDef.classes), then the hero items (UpgradeDef.sheet &"hero": Vitality,
+##   Potion). One card each: medal, name, what it does, level, the control that uses it, and a buy button
+##   (cost / Owned / Max / the other choice taken). Potion is a consumable: buyable again and again.
+## - Army: the army items (UpgradeDef.sheet &"army"): a wide Recruit card (army size, the soldier in training with
+##   its countdown, 50 coins, joins you 10 s later), Soldier Damage / Soldier Health (3 levels each) and Command.
+## Everything in the game is bought here, anywhere, through Player.request_buy. Esc closes it before the pause
+## menu opens. Sizes from HudStyle.
 
 signal toggled_open(open: bool)
 
@@ -113,13 +115,18 @@ func set_player(player: Player) -> void:
 	_player = player
 	player.coins_changed.connect(func(_count: int) -> void: _refresh())
 	player.upgrades_changed.connect(_refresh)
+	player.health_changed.connect(func(_current: float, _maximum: float) -> void:
+		if visible:
+			_refresh())
 	_hero_tab.text = player.class_def.display_name
 	for card in _cards:
 		(card.root as Node).queue_free()
 	_cards.clear()
 	for def in player.class_upgrades():
 		_add_card(def, _hero_grid)
-	for def in player.sheet_items():
+	for def in player.sheet_items(&"hero"):
+		_add_card(def, _hero_grid)
+	for def in player.sheet_items(&"army"):
 		if def.id == RECRUIT:
 			_add_recruit_card(def)
 		else:
@@ -267,8 +274,7 @@ func _add_card(def: UpgradeDef, grid: GridContainer) -> void:
 func _add_recruit_card(def: UpgradeDef) -> void:
 	var frame := _card_frame(def, _army_grid, "Recruit Soldier")
 	var box: VBoxContainer = frame.box
-	box.add_child(_description("Trains for %d s, then joins you right here. At the barracks it waits in the pen."
-			% int(GameConfig.SOLDIER_TRAIN_TIME)))
+	box.add_child(_description("Trains for %d s, then joins you right here." % int(GameConfig.SOLDIER_TRAIN_TIME)))
 	var status := Label.new()
 	status.name = "RecruitStatus"
 	status.add_theme_font_size_override("font_size", HudStyle.FONT_SMALL)
@@ -301,8 +307,10 @@ func _refresh() -> void:
 		var level := _player.upgrade_level(def.id)
 		var level_label: Label = card.level
 		var button: Button = card.button
-		if def.is_consumable():
+		if def.id == RECRUIT:
 			level_label.text = "Army %d / %d" % [_player.army_size(), _player.follower_cap]
+		elif def.is_consumable():
+			level_label.text = "Health %d / %d" % [ceili(_player.health), ceili(_player.max_health)]
 		elif def.max_level > 1:
 			level_label.text = "Level %d / %d" % [level, def.max_level]
 		else:
@@ -319,6 +327,9 @@ func _refresh() -> void:
 		elif def.id == RECRUIT and not _player.is_upgrade_useful(def):
 			button.text = "Army full"
 			button.disabled = true
+		elif def.is_consumable() and not _player.is_upgrade_useful(def):
+			button.text = "Full health"
+			button.disabled = true
 		else:
 			var cost := _player.upgrade_cost(def)
 			button.text = "Free" if cost == 0 else str(cost)
@@ -327,7 +338,7 @@ func _refresh() -> void:
 	_refresh_recruit()
 
 
-## The recruit card's live part: who is training, how long until the next one, who waits at the barracks.
+## The recruit card's live part: who is training and how long until the next one.
 func _refresh_recruit() -> void:
 	if _player == null or not is_instance_valid(_player):
 		return
@@ -337,7 +348,6 @@ func _refresh_recruit() -> void:
 		var bar: ProgressBar = card.bar
 		var status: Label = card.status
 		var training := _player.soldiers_training
-		var waiting := _player.penned_soldiers().size()
 		var parts := PackedStringArray()
 		if training > 0:
 			var left := _player.next_soldier_in()
@@ -348,8 +358,6 @@ func _refresh_recruit() -> void:
 		else:
 			bar.value = 0.0
 			parts.append("%d following" % _player.followers().size())
-		if waiting > 0:
-			parts.append("%d waiting at the barracks" % waiting)
 		status.text = "  ·  ".join(parts)
 		bar.modulate.a = 1.0 if training > 0 else 0.35
 		(card.level as Label).text = "Army %d / %d" % [_player.army_size(), _player.follower_cap]

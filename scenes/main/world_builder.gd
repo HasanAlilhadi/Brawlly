@@ -1,19 +1,17 @@
 class_name WorldBuilder
 extends RefCounted
-## Procedurally builds the world: ground, border fence, a town at each spawn (always the same layout, holding the
-## shop stalls), orc camps, forests, chests and decoration.
+## Procedurally builds the world: ground, border fence, an open spawn area at each spawn point (with a starter
+## chest), orc camps, forests, chests and decoration.
 ## Camps farther from the start get bigger squads (4 → 24 orcs) and bigger houses. Decoration uses chunked MultiMeshes
 ## (one draw call per chunk, culled off-screen) to stay cheap on mobile.
 
 const CAMP_SCENE := preload("res://scenes/world/camp.tscn")
 const TREE_SCENE := preload("res://scenes/world/choppable_tree.tscn")
 const CHEST_SCENE := preload("res://scenes/world/chest.tscn")
-const STALL_SCENE := preload("res://scenes/world/shop_station.tscn")
-## The town (tools/blender_town.py): decoration + collision, markers "Stall_<id>" where the stalls stand,
-## "Tree_<n>" for choppable trees and "StarterChest". Never rotated, so every town looks the same.
-const TOWN_SCENE := preload("res://assets/environment/buildings/town.tscn")
-## Radius around a town's center (the spawn point) kept free of trees, camps, chests and scattered decor.
-const TOWN_RADIUS: float = 14.0
+## Radius around each spawn point kept free of trees, camps, chests and scattered decor.
+const SPAWN_SAFE_RADIUS: float = 14.0
+## Where each spawn's starter chest stands, relative to the spawn point (the same for every spawn).
+const STARTER_CHEST_OFFSET := Vector3(2.3, 0.0, -2.9)
 
 const FENCE_MODEL := "res://assets/environment/forest/fence.glb"
 const GRASS_MODEL := "res://assets/environment/forest/patch_grass.glb"
@@ -23,18 +21,15 @@ const STONES_MODEL := "res://assets/environment/forest/stones.glb"
 
 const GROUND_COLOR := Color(0.44, 0.69, 0.35)
 const CHUNK_SIZE: float = 40.0
-const TOWN_MARKER_COLOR: Color = Color(1.0, 0.78, 0.28)
 const WAVE_GATE_RADIUS: float = 5.0
 
 var camp_count: int = 20
 var tree_count: int = 520
 var chest_count: int = 35
-## No camp closer than this to a stall, so shopping is safe from orcs.
-var stall_safe_distance: float = 17.0
+## No camp closer than this to a spawn point, so players never start next to orcs.
+var spawn_camp_distance: float = 24.0
 ## Player / team spawn points (set by main from the game mode). Camps get harder away from them.
 var spawn_points: Array[Vector3] = [Vector3.ZERO]
-## Access rule for each town in `spawn_points` (same index). See GameMode.world_town_access().
-var town_access: Array[Dictionary] = []
 ## Extra areas kept clear with `clear_radius` (e.g. the King of the Hill zone).
 var clear_areas: Array[Vector3] = []
 var clear_radius: float = 9.0
@@ -48,11 +43,6 @@ var _half: float = GameConfig.world_half
 var _occupied: PackedVector3Array = PackedVector3Array()  # (x, z, radius)
 var _noise := FastNoiseLite.new()
 var _chest_count: int = 0
-var _stalls: Array[Vector3] = []
-## Ground the stall buildings cover (x, z, radius): no grass / plants / stones scattered there.
-var _stall_areas: Array[Vector3] = []
-## Where each town's starter chest goes (its "StarterChest" marker).
-var _starter_chests: Array[Vector3] = []
 
 
 func build(world: Node3D) -> Array[Camp]:
@@ -60,7 +50,7 @@ func build(world: Node3D) -> Array[Camp]:
 	_noise.seed = randi()
 	_noise.frequency = 0.035
 	for point in spawn_points:
-		_occupy(point, TOWN_RADIUS)
+		_occupy(point, SPAWN_SAFE_RADIUS)
 	for area in clear_areas:
 		_occupy(area, clear_radius)
 	# Keep the four invasion gates free of camps, chests and trees so waves can visibly march inward.
@@ -68,7 +58,6 @@ func build(world: Node3D) -> Array[Camp]:
 		_occupy(gate, WAVE_GATE_RADIUS)
 	_add_ground()
 	_add_border()
-	_add_towns()
 	var camps := _add_camps()
 	_add_chests()
 	_add_trees()
@@ -139,8 +128,8 @@ func _add_camps() -> Array[Camp]:
 	while camps.size() < camp_count and tries < 5000:
 		tries += 1
 		var pos := _random_point(8.0)
-		if _distance_to_spawn(pos) < min_camp_distance_from_spawn or not _is_free(pos, 5.0) \
-				or _near_stall(pos, stall_safe_distance):
+		if _distance_to_spawn(pos) < maxf(min_camp_distance_from_spawn, spawn_camp_distance) \
+				or not _is_free(pos, 5.0):
 			continue
 		var too_close := false
 		for other in positions:
@@ -166,95 +155,10 @@ func _add_camps() -> Array[Camp]:
 	return camps
 
 
-## A town at every spawn point; its markers say where each stall (and the starter chest) goes.
-func _add_towns() -> void:
-	for p in spawn_points.size():
-		var center := spawn_points[p]
-		var access: Dictionary = town_access[p] if p < town_access.size() else {}
-		var town := TOWN_SCENE.instantiate() as Node3D
-		town.name = "Town_%d" % p
-		town.position = center
-		town.add_to_group(&"towns")
-		town.set_meta(&"team_id", int(access.get("team_id", -1)))
-		_world.add_child(town)
-		_add_town_identity(town, access)
-		_stall_areas.append(Vector3(center.x, center.z, TOWN_RADIUS))
-		for spot in town.get_children():
-			if spot.name == &"StarterChest":
-				_starter_chests.append((spot as Node3D).global_position)
-			if String(spot.name).begins_with("Tree_"):  # the same choppable trees as the forest
-				var tree := TREE_SCENE.instantiate() as Node3D
-				tree.name = "TownTree_%d_%s" % [p, String(spot.name).trim_prefix("Tree_")]
-				tree.position = (spot as Node3D).global_position
-				tree.scale = Vector3.ONE * randf_range(1.0, 1.3)
-				_world.add_child(tree)
-			if not String(spot.name).begins_with("Stall_"):
-				continue
-			var id := StringName(String(spot.name).trim_prefix("Stall_"))
-			var stall := STALL_SCENE.instantiate() as ShopStation
-			stall.name = "Stall_%d_%s" % [p, id]
-			stall.stall_id = id
-			stall.access_team_id = int(access.get("team_id", -1))
-			stall.position = (spot as Node3D).global_position
-			stall.rotation.y = (spot as Node3D).rotation.y
-			_world.add_child(stall)
-			_stalls.append(stall.position)
-			if stall.stall_id == ShopStation.BARRACKS:
-				_occupy(stall.block_center(), stall.block_radius())
-
-
-## A permanent owner/team label at the entrance and a matching ring around the compass mosaic.
-## The wording is local to each peer ("Your Town" here, the owner's name for everyone else).
-func _add_town_identity(town: Node3D, access: Dictionary) -> void:
-	var team_id := int(access.get("team_id", -1))
-	var color := TOWN_MARKER_COLOR
-	var title := "Shared Town"
-	if team_id >= 0:
-		color = Net.team_color(team_id)
-		title = "Your Team's Town" if Net.team_of(Net.my_id()) == team_id \
-				else "%s Team Town" % Net.team_label(team_id)
-	town.set_meta(&"display_title", title)
-
-	var ring_mesh := TorusMesh.new()
-	ring_mesh.inner_radius = 2.42
-	ring_mesh.outer_radius = 2.56
-	ring_mesh.rings = 48
-	ring_mesh.ring_segments = 6
-	var material := StandardMaterial3D.new()
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.albedo_color = color
-	ring_mesh.material = material
-	var ring := MeshInstance3D.new()
-	ring.name = "TownColorRing"
-	ring.mesh = ring_mesh
-	ring.position.y = 0.065
-	ring.scale.y = 0.12
-	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	town.add_child(ring)
-
-	var label := Label3D.new()
-	label.name = "TownLabel"
-	label.text = title
-	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	label.no_depth_test = true
-	label.font_size = 52
-	label.outline_size = 14
-	label.pixel_size = 0.007
-	label.modulate = color.lightened(0.2)
-	label.position = Vector3(0, 2.8, 7.4)
-	town.add_child(label)
-
-
-func _on_stall(pos: Vector3) -> bool:
-	for area in _stall_areas:
-		if Vector2(pos.x - area.x, pos.z - area.y).length() < area.z:
-			return true
-	return false
-
-
-func _near_stall(pos: Vector3, distance: float) -> bool:
-	for stall in _stalls:
-		if pos.distance_to(stall) < distance:
+## Inside the open area around a spawn point (no grass / plants / stones scattered there).
+func _in_spawn_area(pos: Vector3) -> bool:
+	for point in spawn_points:
+		if Vector2(pos.x - point.x, pos.z - point.z).length() < SPAWN_SAFE_RADIUS:
 			return true
 	return false
 
@@ -280,10 +184,11 @@ func _squad_size_at(pos: Vector3) -> int:
 
 
 func _add_chests() -> void:
-	# Every player/team receives the same Uncommon starter chest; random starter rarity would be unfair in PvP.
-	for point in _starter_chests:
-		_place_chest(point, Chest.Rarity.UNCOMMON)
-	var placed := _starter_chests.size()
+	# Every player/team receives the same Uncommon starter chest next to its spawn; random starter rarity would
+	# be unfair in PvP.
+	for point in spawn_points:
+		_place_chest(point + STARTER_CHEST_OFFSET, Chest.Rarity.UNCOMMON)
+	var placed := spawn_points.size()
 	var tries := 0
 	while placed < chest_count and tries < 4000:
 		tries += 1
@@ -338,7 +243,7 @@ func _scatter(model_path: String, count: int, min_scale: float, max_scale: float
 	for i in count:
 		var pos := _random_point(1.0)
 		var basis := Basis(Vector3.UP, randf() * TAU).scaled(Vector3.ONE * randf_range(min_scale, max_scale))
-		if not _on_stall(pos):
+		if not _in_spawn_area(pos):
 			transforms.append(Transform3D(basis, pos))
 	_add_multimesh(model_path, transforms, false)
 

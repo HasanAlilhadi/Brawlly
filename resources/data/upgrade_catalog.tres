@@ -30,20 +30,19 @@ base_cost = 40
 cost_growth = 1.45
 max_level = 8
 amount = 30.0
-stalls = Array[StringName]([&"healer"])
+sheet = &"hero"
 
 [sub_resource type="Resource" id="Upgrade_recruit"]
 script = ExtResource("2_def")
 id = &"recruit"
 title = "Recruit"
-description = "Trains for 10 s, then joins you (bought at the barracks: waits in its pen)"
+description = "Trains for 10 s, then joins you"
 icon = ExtResource("icon_soldier")
 base_cost = 50
 cost_growth = 1.0
 max_level = 0
 amount = 1.0
-stalls = Array[StringName]([&"barracks"])
-sheet = true
+sheet = &"army"
 
 [sub_resource type="Resource" id="Upgrade_command"]
 script = ExtResource("2_def")
@@ -54,7 +53,7 @@ icon = ExtResource("icon_banner")
 base_cost = 100
 cost_growth = 1.0
 amount = 1.0
-stalls = Array[StringName]([&"barracks"])
+sheet = &"army"
 
 [sub_resource type="Resource" id="Upgrade_soldier_damage"]
 script = ExtResource("2_def")
@@ -65,8 +64,7 @@ icon = ExtResource("glyph_broadsword")
 base_cost = 60
 max_level = 3
 amount = 0.25
-stalls = Array[StringName]([&"barracks"])
-sheet = true
+sheet = &"army"
 
 [sub_resource type="Resource" id="Upgrade_soldier_health"]
 script = ExtResource("2_def")
@@ -77,8 +75,7 @@ icon = ExtResource("glyph_heart")
 base_cost = 60
 max_level = 3
 amount = 0.25
-stalls = Array[StringName]([&"barracks"])
-sheet = true
+sheet = &"army"
 
 [sub_resource type="Resource" id="Upgrade_potion"]
 script = ExtResource("2_def")
@@ -90,7 +87,7 @@ base_cost = 20
 cost_growth = 1.1
 max_level = 0
 amount = 60.0
-stalls = Array[StringName]([&"healer"])
+sheet = &"hero"
 
 [sub_resource type="Resource" id="Upgrade_sword_damage"]
 script = ExtResource("2_def")
@@ -259,4 +256,4 @@ key_hint = "RMB"
 
 [resource]
 script = ExtResource("1_catalog")
-upgrades = Array[ExtResource("2_def")]([SubResource("Upgrade_vitality"), SubResource("Upgrade_recruit"), SubResource("Upgrade_command"), SubResource("Upgrade_soldier_damage"), SubResource("Upgrade_soldier_health"), SubResource("Upgrade_potion"), SubResource("Upgrade_sword_damage"), SubResource("Upgrade_sword_rate"), SubResource("Upgrade_sword_knockback"), SubResource("Upgrade_sword_wave"), SubResource("Upgrade_sword_dash"), SubResource("Upgrade_spear_damage"), SubResource("Upgrade_spear_rate"), SubResource("Upgrade_spear_throw"), SubResource("Upgrade_bow_damage"), SubResource("Upgrade_bow_rate"), SubResource("Upgrade_bow_range"), SubResource("Upgrade_bow_pierce"), SubResource("Upgrade_shield"), SubResource("Upgrade_knife")])
+upgrades = Array[ExtResource("2_def")]([SubResource("Upgrade_vitality"), SubResource("Upgrade_potion"), SubResource("Upgrade_recruit"), SubResource("Upgrade_soldier_damage"), SubResource("Upgrade_soldier_health"), SubResource("Upgrade_command"), SubResource("Upgrade_sword_damage"), SubResource("Upgrade_sword_rate"), SubResource("Upgrade_sword_knockback"), SubResource("Upgrade_sword_wave"), SubResource("Upgrade_sword_dash"), SubResource("Upgrade_spear_damage"), SubResource("Upgrade_spear_rate"), SubResource("Upgrade_spear_throw"), SubResource("Upgrade_bow_damage"), SubResource("Upgrade_bow_rate"), SubResource("Upgrade_bow_range"), SubResource("Upgrade_bow_pierce"), SubResource("Upgrade_shield"), SubResource("Upgrade_knife")])

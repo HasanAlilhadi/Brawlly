@@ -4,7 +4,6 @@
 [ext_resource type="Script" uid="uid://dwlwwww3pdq54" path="res://scripts/components/follow_camera_3d.gd" id="3_camera"]
 [ext_resource type="PackedScene" path="res://scenes/ui/hud.tscn" id="4_hud"]
 [ext_resource type="PackedScene" path="res://scenes/ui/pause_menu.tscn" id="5_pause"]
-[ext_resource type="PackedScene" path="res://scenes/ui/shop_menu.tscn" id="6_shop"]
 
 [sub_resource type="Environment" id="Environment_world"]
 background_mode = 1
@@ -37,5 +36,3 @@ script = ExtResource("3_camera")
 [node name="HUD" parent="." unique_id=198343335 instance=ExtResource("4_hud")]
 
 [node name="PauseMenu" parent="." unique_id=1976428034 instance=ExtResource("5_pause")]
-
-[node name="ShopMenu" parent="." unique_id=1132029216 instance=ExtResource("6_shop")]

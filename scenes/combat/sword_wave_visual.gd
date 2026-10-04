@@ -1,7 +1,7 @@
 extends MeshInstance3D
 ## Look of the sword wave (Wave upgrade): a flat glowing crescent bulging forward (-Z, the projectile's flight
 ## direction), lying a little tilted so the steep game camera sees it. Grows slightly and fades over the flight.
-## Not additive: a glow would vanish on the light town paving.
+## Not additive: a glow would vanish on light ground.
 
 const SEGMENTS := 16
 const RADIUS: float = 0.95

@@ -77,32 +77,33 @@ func _tick(delta: float) -> bool:
 		5:
 			_drive(camp.global_position + Vector3(0, 0, 4), 0.5)
 			if pt > 3:
-				var shop: ShopMenu = main.get_node("ShopMenu")
-				player.coins += 100
-				var vitality: UpgradeDef
-				for def in shop.catalog.upgrades:
-					if def.id == &"vitality": vitality = def
-				var stalls := get_tree().get_nodes_in_group(&"shop_stations")
+				hud.joystick.output = Vector2.ZERO
+				# No town, no stalls: the spawn area stays clear of camps; everything is bought anywhere.
+				for group: StringName in [&"towns", &"shop_stations", &"penned"]:
+					if get_tree().get_node_count_in_group(group) > 0: printerr("FAILED group %s still used" % group)
 				var nearest_camp := INF
-				for stall: ShopStation in stalls:
-					for c: Camp in get_tree().get_nodes_in_group(&"camps"):
-						nearest_camp = minf(nearest_camp, stall.global_position.distance_to(c.global_position))
-				printerr("stalls=%d nearest camp to a stall=%.1f m" % [stalls.size(), nearest_camp])
-				if stalls.size() != ShopStation.ORDER.size() or nearest_camp < 17.0: printerr("FAILED trading post")
-				if player.buy_upgrade(vitality): printerr("FAILED bought Vitality away from the Healer")
-				for stall: ShopStation in stalls:
-					if stall.stall_id == &"armory": player.global_position = stall.front()
-				if player.buy_upgrade(vitality): printerr("FAILED Bows & Spears sold Vitality")
-				for stall: ShopStation in stalls:
-					if stall.stall_id == &"healer": player.global_position = stall.front()
+				for c: Camp in get_tree().get_nodes_in_group(&"camps"):
+					nearest_camp = minf(nearest_camp, Vector3.ZERO.distance_to(c.global_position))
+				if nearest_camp < 24.0: printerr("FAILED a camp %.1f m from the spawn" % nearest_camp)
+				player.coins += 100
+				var vitality := _def(&"vitality")
+				var max_before := player.max_health
 				player.request_buy(vitality)
-				_next("bought vitality: max health %.0f, coins %d, levels %s" % [player.max_health, player.coins, player.upgrade_levels])
+				if player.max_health <= max_before: printerr("FAILED Vitality from the sheet")
+				# Potion: a consumable, bought again and again while hurt (not at full health).
+				var potion := _def(&"potion")
+				player.health = player.max_health
+				if player.can_buy(potion): printerr("FAILED potion buyable at full health")
+				player.coins += 100
+				var potions := 0
+				for i in 3:
+					player.health = player.max_health * 0.3
+					potions += int(player.buy_upgrade(potion))
+				if potions != 3 or player.health <= player.max_health * 0.3:
+					printerr("FAILED potions: bought %d, health %.0f" % [potions, player.health])
+				_next("nearest camp to the spawn %.1f m; bought vitality + %d potions: max health %.0f, coins %d" % [nearest_camp, potions, player.max_health, player.coins])
 		6:
-			# Barracks: soldiers cost 50 each and train one after another (10 s each), wait in the pen,
-			# and join when taken (at the pen gate or the shop).
-			var barracks := _stall(ShopStation.BARRACKS)
-			hud.joystick.output = Vector2.ZERO
-			player.global_position = barracks.front()
+			# Recruit: 50 each, trains one after another (10 s each), then joins right behind the player.
 			player.coins = 150
 			var recruit := _def(&"recruit")
 			var bought := int(player.buy_upgrade(recruit)) + int(player.buy_upgrade(recruit))
@@ -110,59 +111,25 @@ func _tick(delta: float) -> bool:
 				printerr("FAILED recruit: bought %d, coins %d, training %d" % [bought, player.coins, player.soldiers_training])
 			_next("recruited 2 (training %d, next in %.1fs)" % [player.soldiers_training, player.next_soldier_in()])
 		7:
-			var barracks := _stall(ShopStation.BARRACKS)
-			if pt > 10.6 and pt < 10.65 and (player.penned_soldiers().size() != 1 or player.soldiers_training != 1):
-				printerr("FAILED queue at 10 s: penned %d training %d" % [player.penned_soldiers().size(), player.soldiers_training])
+			if pt > 10.6 and pt < 10.65 and (player.followers().size() != 1 or player.soldiers_training != 1):
+				printerr("FAILED queue at 10 s: following %d training %d" % [player.followers().size(), player.soldiers_training])
 			if pt > 20.6:
-				var penned := player.penned_soldiers()
-				var inside := penned.all(func(a: Node3D) -> bool: return barracks.in_pen(a.global_position, 0.0))
-				if penned.size() != 2 or player.soldiers_training != 0 or player.followers().size() != 0 or not inside:
-					printerr("FAILED pen at 20 s: penned %d training %d followers %d inside %s" % [penned.size(), player.soldiers_training, player.followers().size(), inside])
-				player.global_position = barracks.front() + Vector3(0, 0, 9)
-				if player.collect_soldiers() != 0: printerr("FAILED took soldiers away from the barracks")
-				player.global_position = barracks.gate_point()
-				if ShopStation.nearest_gate(player) != barracks: printerr("FAILED not at the gate")
-				var taken := player.collect_soldiers()
-				_next("took %d soldiers at the gate: following %d, penned %d" % [taken, player.followers().size(), player.penned_soldiers().size()])
-		8:
-			if pt > 5.0:
-				var barracks := _stall(ShopStation.BARRACKS)
 				var d := _army_center().distance_to(player.global_position)
-				if d > 4.0: printerr("FAILED soldiers didn't leave the pen (%.1f m from the player)" % d)
-				# Fill the army (cap 10) and skip the training so 8 soldiers crowd the pen.
-				player.global_position = barracks.front()
+				if player.followers().size() != 2 or player.soldiers_training != 0 or d > 4.0:
+					printerr("FAILED joined at 20 s: following %d training %d, %.1f m from the player" % [player.followers().size(), player.soldiers_training, d])
+				# Fill the army (cap 10) and skip the training.
 				player.coins = 100000
 				var recruit := _def(&"recruit")
 				while player.buy_upgrade(recruit): pass
 				if player.army_size() != 10: printerr("FAILED cap 10: army %d" % player.army_size())
 				for i in player._training_left.size(): player._training_left[i] = 0.0
 				_next("army capped at %d (training %d)" % [player.army_size(), player.soldiers_training])
-		9:
-			if pt > 3.0:
-				var barracks := _stall(ShopStation.BARRACKS)
-				if player.penned_soldiers().size() != 8: printerr("FAILED pen holds %d" % player.penned_soldiers().size())
-				# Inside the compound soldiers pass through each other (walls still block them).
-				var bumping := player.penned_soldiers().filter(func(a: Ally) -> bool:
-						return a.collision_mask & GameConfig.LAYER_ALLIES != 0 or a.collision_mask & GameConfig.LAYER_FENCE == 0).size()
-				if bumping > 0: printerr("FAILED %d soldiers in the courtyard still collide with each other / ignore walls" % bumping)
-				player.global_position = barracks.gate_point()
-				var taken := player.collect_soldiers()
-				# Wait on the far side of the pen: they must file out through the gate and walk around it
-				# (the fence blocks soldiers too).
-				var out := barracks.gate_point() - barracks.pen_center()
-				out.y = 0.0
-				player.global_position = barracks.pen_center() - out.normalized() * 7.0
-				_next("took %d at the gate" % taken)
-		10:
-			if pt > 7.0:
-				var barracks := _stall(ShopStation.BARRACKS)
-				var stuck := player.followers().filter(func(a: Node3D) -> bool: return barracks.in_pen(a.global_position, -0.3)).size()
+		8:
+			if pt > 4.0:
 				var far := player.followers().filter(func(a: Node3D) -> bool: return a.global_position.distance_to(player.global_position) > 5.0).size()
-				if stuck > 0 or far > 0: printerr("FAILED soldiers stuck: %d still in the pen, %d far from the player" % [stuck, far])
-				var ghosts := player.followers().filter(func(a: Ally) -> bool: return a.collision_mask & GameConfig.LAYER_ALLIES == 0).size()
-				if ghosts > 0: printerr("FAILED %d soldiers outside don't collide with each other again" % ghosts)
+				if player.followers().size() != 10 or player.soldiers_training != 0 or far > 0:
+					printerr("FAILED army: following %d, training %d, far %d" % [player.followers().size(), player.soldiers_training, far])
 				# Command: +1 per level, 100 coins each (constant), up to 15.
-				player.global_position = barracks.front()
 				var command := _def(&"command")
 				var prices := PackedInt32Array()
 				while player.can_buy(command):
@@ -170,26 +137,20 @@ func _tick(delta: float) -> bool:
 					player.buy_upgrade(command)
 				if player.follower_cap != 15 or prices != PackedInt32Array([100, 100, 100, 100, 100]):
 					printerr("FAILED cap: %d, command prices %s" % [player.follower_cap, prices])
-				_next("all %d soldiers out (stuck %d, far %d); Command -> cap %d (prices %s)" % [player.followers().size(), stuck, far, player.follower_cap, prices])
-		11:
+				_next("all %d soldiers follow (far %d); Command -> cap %d (prices %s)" % [player.followers().size(), far, player.follower_cap, prices])
+		9:
 			player.max_health = 100; player.health = 1
 			player.take_damage(5)
 			_next("player killed")
-		12:
+		10:
 			if pt > 2.0:
 				printerr("end panel visible=", hud.end_panel.visible, " title=", hud.end_title.text, " restart=", hud.restart_button.text)
 				return true
 	return t > 150
 
 
-func _stall(id: StringName) -> ShopStation:
-	for stall: ShopStation in get_tree().get_nodes_in_group(&"shop_stations"):
-		if stall.stall_id == id: return stall
-	return null
-
-
 func _def(id: StringName) -> UpgradeDef:
-	for def in (main.get_node("ShopMenu") as ShopMenu).catalog.upgrades:
+	for def in Player.CATALOG.upgrades:
 		if def.id == id: return def
 	return null
 

@@ -15,7 +15,7 @@ const TWO_COLUMNS_WIDTH: float = 1150.0
 const KEYBOARD: Array = [
 	["cursor_move", "Move", "", [["keyboard/w", "keyboard/a", "keyboard/s", "keyboard/d"], ["keyboard/arrows"]]],
 	["user_group", "Training interactions", "Beside a hero or orc practice station", [["F"]]],
-	["star_coin", "Upgrades", "Your class's upgrades, bought anywhere with coins", [["T"]]],
+	["star_coin", "Upgrades", "Hero and army upgrades, potions and soldiers, bought anywhere with coins", [["T"]]],
 	["spear", "Spear: thrust ⇄ throw", "Spearman with the Can Throw upgrade", [["keyboard/e"]]],
 	["cursor_move", "Dash Attack", "Swordsman with the upgrade: dash where you move (else to the cursor), slashing through", [["C"]]],
 	["star_coin", "Special ability", "Charged by 10 XP from fallen enemies · Swordsman: Whirlwind", [["keyboard/x"]]],
@@ -31,13 +31,13 @@ const KEYBOARD: Array = [
 	["target", "Soldiers: kill", "They hunt the enemy under the cursor (none there: charge) · or click Kill, then the enemy", [["keyboard/4"]]],
 	["location", "Ping", "Attack! · Loot! · Here! for your team", [["G"], ["mouse/scroll"]]],
 	["heart", "Call for help", "", [["keyboard/h"]]],
-	["shop", "Use a stall", "Shop at a trading post stall you stand at", [["F"]]],
+	["exclamation", "Interact", "Training Field: play as another hero, spawn a practice orc", [["F"]]],
 	["pause", "Pause", "", [["keyboard/escape"], ["keyboard/p"]]],
 	["expand", "Fullscreen", "", [["keyboard/f11"], ["keyboard/alt", "keyboard/enter"]]],
 ]
 const GAMEPAD: Array = [
 	["cursor_move", "Move", "", [["xbox/stick_l"]]],
-	["star_coin", "Upgrades", "Your class's upgrades", [["xbox/view"]]],
+	["star_coin", "Upgrades", "Hero and army upgrades, bought anywhere", [["xbox/view"]]],
 	["spear", "Spear: thrust ⇄ throw", "Spearman with Can Throw", [["Y"]]],
 	["cursor_move", "Dash Attack", "Swordsman with the upgrade", [["L3"]]],
 	["star_coin", "Special ability", "Charged by 10 XP from fallen enemies", [["xbox/stick_r_press"]]],
@@ -49,7 +49,7 @@ const GAMEPAD: Array = [
 	["shield", "Soldiers: hold", "In front of you", [["xbox/dpad_down"]]],
 	["target", "Soldiers: kill", "The enemy in front of you (none: charge)", [["xbox/b"]]],
 	["location", "Ping", "", [["xbox/dpad_left"]]],
-	["shop", "Use a stall", "At a trading post stall", [["xbox/lb"]]],
+	["exclamation", "Interact", "Training Field: switch hero, spawn a practice orc", [["xbox/lb"]]],
 	["pause", "Pause", "", [["xbox/menu"]]],
 ]
 const TOUCH: Array = [
@@ -63,16 +63,14 @@ const TOUCH: Array = [
 	["star_coin", "Special ability", "The button above the shield button, lit once charged by 10 XP", [["touch/tap"]]],
 	["user_group", "Soldier orders", "The buttons under your soldier count", [["Follow"], ["Charge"], ["Hold"], ["Kill"]]],
 	["location", "Ping", "Online games", [["!"]]],
-	["shop", "Use a stall", "Tap the stall button at the bottom", [["touch/tap"]]],
 	["pause", "Pause", "", [["II"]]],
 ]
 const TIPS: Array = [
-	["star_coin", "Class upgrades", "T opens your class's upgrades: damage, fire rate, and unlocks like the shield, throw, dash or knife", []],
-	["shop", "Trading post", "Stalls around your spawn: Healer (potions, Vitality), Barracks (soldiers)", []],
+	["star_coin", "Upgrades", "T opens the upgrades: your class's damage, fire rate and unlocks (shield, throw, dash, knife), Vitality and potions", []],
 	["health", "Revive", "Stand next to a downed teammate for 3 seconds", []],
 	["tent", "Destroy the camps", "A camp's surviving orcs fall with it and drop their loot", []],
 	["flag", "Orders come first", "Soldiers drop any fight to follow, charge or hold the moment you say so", []],
-	["user_group", "Barracks", "Buy soldiers (50 coins, 10 s each), then take them at the pen gate · army 10, Command raises it to 15", []],
+	["user_group", "Soldiers", "Army tab: recruit soldiers (50 coins, they join you 10 s later) · army 10, Command raises it to 15", []],
 	["star_coin", "Treasure goblin", "Every hit spills coins — catch it before it escapes", []],
 	["boss", "Orc Warlord", "Bring it down and its warband is routed", []],
 	["skull", "Revive or finish", "Orcs leave downed archers alone, enemy players don't", []],

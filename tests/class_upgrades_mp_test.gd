@@ -111,9 +111,9 @@ func _client() -> void:
 	while not is_equal_approx(host.aim_range, 14.0) and Time.get_ticks_msec() < end:
 		await get_tree().process_frame
 	_check(is_equal_approx(host.aim_range, 14.0), "the host Bowman's Fire Range shows on the client too (%.1f m)" % host.aim_range)
-	# Army tab: a soldier recruited away from the barracks joins the client 10 s later.
+	# Army tab: a recruited soldier joins the client 10 s later.
 	var joined := [false]
-	me.soldier_ready.connect(func(at_barracks: bool) -> void: joined[0] = not at_barracks)
+	me.soldier_ready.connect(func() -> void: joined[0] = true)
 	me.request_buy(_def(&"recruit"))
 	end = Time.get_ticks_msec() + 13000
 	while me.followers().is_empty() and Time.get_ticks_msec() < end:

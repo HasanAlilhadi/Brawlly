@@ -1,5 +1,6 @@
 extends Node
-## Plays King of the Hill with the client, checking team base access and the hill score on the server.
+## Plays King of the Hill with the client, checking the team spawn areas (one per team, free of camps) and the hill
+## score on the server.
 var t := 0.0
 var step := 0
 var st := 0.0
@@ -16,14 +17,6 @@ func _p(peer_is_host: bool) -> Player:
 func _gm() -> GameMode:
 	var main := get_tree().current_scene
 	return main.game_mode if main and main.name == "Main" else null
-func _shop_near(point: Vector3) -> ShopStation:
-	var best: ShopStation
-	var distance := INF
-	for node in get_tree().get_nodes_in_group(&"shop_stations"):
-		var shop := node as ShopStation
-		if shop.stall_id == &"blacksmith" and shop.global_position.distance_to(point) < distance:
-			best = shop; distance = shop.global_position.distance_to(point)
-	return best
 func _process(delta: float) -> void:
 	t += delta; st += delta
 	match step:
@@ -37,12 +30,21 @@ func _process(delta: float) -> void:
 			if _p(true) and _p(false) and st > 2.5:
 				var h := _p(true); var c := _p(false)
 				_log("== %s: host team %d, client team %d" % [Net.MODE_NAMES[modes[round_i]], h.team_id, c.team_id])
-				var host_shop := _shop_near(_gm().spawn_point_for(h.peer_id))
-				var client_shop := _shop_near(_gm().spawn_point_for(c.peer_id))
-				if host_shop == null or client_shop == null or host_shop == client_shop \
-						or not host_shop.can_access(h) or host_shop.can_access(c) \
-						or not client_shop.can_access(c) or client_shop.can_access(h):
-					printerr("FAILED town access in %s" % Net.MODE_NAMES[modes[round_i]])
+				# One spawn area per team, far apart, with no camp near either.
+				var bases: Array[Vector3] = _gm().world_spawn_points()
+				var near_camp := INF
+				for camp: Node3D in get_tree().get_nodes_in_group(&"camps"):
+					for base in bases:
+						near_camp = minf(near_camp, camp.global_position.distance_to(base))
+				var host_base := _gm().spawn_point_for(h.peer_id)
+				var client_base := _gm().spawn_point_for(c.peer_id)
+				if bases.size() != 2 or host_base.distance_to(client_base) < 30.0 or near_camp < 24.0 \
+						or get_tree().get_node_count_in_group(&"shop_stations") > 0:
+					printerr("FAILED team spawn areas in %s (bases %d, %.1f m apart, nearest camp %.1f m)" % [
+							Net.MODE_NAMES[modes[round_i]], bases.size(), host_base.distance_to(client_base), near_camp])
+				else:
+					_log("team spawn areas: %d bases %.1f m apart, nearest camp %.1f m" % [bases.size(),
+							host_base.distance_to(client_base), near_camp])
 				h.max_health = 1e6; h.health = 1e6
 				step = 2; st = 0
 		2:

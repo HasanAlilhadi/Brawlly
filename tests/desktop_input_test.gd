@@ -1,7 +1,8 @@
 extends Node
 ## Desktop controls, as a Spearman: WASD moves, left mouse thrusts toward the cursor (hits exactly the aim wedge), E switches
-## to throwing, right mouse aims + throws on release, K throws at the nearest enemy (Space does nothing), F does nothing away
-## from a stall and opens / closes the Blacksmith's shop at it, and touch controls stay hidden.
+## to throwing, right mouse aims + throws on release, K throws at the nearest enemy (Space does nothing), F does nothing in a
+## match (no stalls), T opens / closes the upgrades sheet (Hero: class upgrades + Vitality + Potion; Army: Recruit, Soldier
+## Damage / Health, Command), and touch controls stay hidden.
 ##   "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/desktop_input_test.gd --class=spearman
 
 var t := 0.0
@@ -13,7 +14,6 @@ var player: Player
 var hud: Hud
 var start_pos: Vector3
 var shots_before := ""
-var at_stall := false
 var failures := 0
 var test_trees: Array[ChoppableTree] = []
 
@@ -80,33 +80,6 @@ func _spawn_test_trees() -> void:
 
 
 ## Screen point 3 m to the right of the player.
-## Every stall (all building types) is in reach from each of its four sides, 1 m from its building, and out
-## of reach 3 m away (like the barracks: no front-only spot).
-func _check_stall_sides() -> void:
-	var saved := player.global_position
-	var kinds := {}
-	for stall: ShopStation in get_tree().get_nodes_in_group(&"shop_stations"):
-		if kinds.has(stall.stall_id):
-			continue
-		kinds[stall.stall_id] = true
-		var rect: Rect2 = stall._footprint()
-		var near := PackedStringArray()
-		var far := PackedStringArray()
-		for side in 4:
-			for gap: float in [1.0, 3.0]:
-				var c := rect.get_center()
-				var local: Vector2 = [Vector2(c.x, rect.end.y + gap), Vector2(c.x, rect.position.y - gap),
-						Vector2(rect.position.x - gap, c.y), Vector2(rect.end.x + gap, c.y)][side]
-				player.global_position = stall.to_global(Vector3(local.x, 0, local.y))
-				var in_reach := stall._distance(player) < ShopStation.INTERACT_RANGE
-				if gap < 2.0 and not in_reach:
-					near.append(["front", "back", "left", "right"][side])
-				elif gap > 2.0 and in_reach:
-					far.append(["front", "back", "left", "right"][side])
-		_check(near.is_empty() and far.is_empty(), "%s: in reach from every side (missing %s, too far %s)" % [stall.title(), near, far])
-	player.global_position = saved
-
-
 func _right_of_player() -> Vector2:
 	var camera := get_viewport().get_camera_3d()
 	return camera.unproject_position(player.global_position + Vector3(3, 0, 0))
@@ -194,32 +167,28 @@ func _process(delta: float) -> void:
 				_key(KEY_F, false)
 				_next()
 		6:
-			if pt > 0.2 and not at_stall:
-				_check(not main.shop_menu.visible and not hud._stall_prompt.visible, "F does nothing away from a stall")
-				_check_stall_sides()
-				for stall: ShopStation in get_tree().get_nodes_in_group(&"shop_stations"):
-					if stall.stall_id == &"blacksmith":
-						player.global_position = stall.front()
-						break
-				at_stall = true
-				pt = 0.0
-			elif at_stall and pt > 0.3:
-				_check(hud._stall_prompt.visible, "the stall prompt shows at the Blacksmith")
-				_key(KEY_F, true)
-				_key(KEY_F, false)
+			if pt > 0.2:
+				var sheet: UpgradeSheet = hud.upgrade_sheet
+				_check(not sheet.is_open and get_tree().get_node_count_in_group(&"shop_stations") == 0,
+						"F does nothing in a match (no stalls)")
+				_key(KEY_T, true)
+				_key(KEY_T, false)
 				_next()
 		7:
-			if pt > 0.2:
-				_check(main.shop_menu.visible and main.shop_menu._title.text == "Blacksmith", "F opens the Blacksmith's shop")
-				var rows: Array = main.shop_menu._rows.filter(func(r: Dictionary) -> bool: return (r.panel as Control).visible)
-				_check(rows.is_empty() and main.shop_menu._empty_hint.visible,
-						"nothing for sale there (damage is a class upgrade now): it points to the upgrades menu")
-				_key(KEY_F, true)
-				_key(KEY_F, false)
+			if pt > 0.5:
+				var sheet: UpgradeSheet = hud.upgrade_sheet
+				var hero := sheet._hero_grid.get_children().map(func(c: Node) -> String: return String(c.name).trim_prefix("Card_"))
+				var army := sheet._army_grid.get_children().map(func(c: Node) -> String: return String(c.name).trim_prefix("Card_"))
+				_check(sheet.is_open and sheet.visible, "T opens the upgrades sheet")
+				_check(hero.slice(hero.size() - 2) == ["vitality", "potion"] and hero.has("spear_damage"),
+						"Hero tab: class upgrades, then Vitality and Potion (%s)" % [hero])
+				_check(army == ["recruit", "soldier_damage", "soldier_health", "command"], "Army tab: %s" % [army])
+				_key(KEY_T, true)
+				_key(KEY_T, false)
 				_next()
 		8:
-			if pt > 0.2:
-				_check(not main.shop_menu.visible, "F closes the shop")
+			if pt > 0.5:
+				_check(not hud.upgrade_sheet.is_open, "T closes it")
 				var touch := InputEventScreenTouch.new()
 				touch.pressed = true
 				touch.position = Vector2(50, 50)
@@ -228,7 +197,6 @@ func _process(delta: float) -> void:
 		9:
 			if pt > 0.1:
 				_check(hud.joystick.visible, "a real touch shows the touch controls")
-				_check(hud._stall_prompt.visible, "the stall prompt stays for touch (tap it)")
 				_key(KEY_W, true)
 				_key(KEY_W, false)
 				_next()

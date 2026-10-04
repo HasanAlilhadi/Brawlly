@@ -31,9 +31,6 @@ properties/5/replication_mode = 2
 properties/6/path = NodePath(".:is_dead")
 properties/6/spawn = true
 properties/6/replication_mode = 2
-properties/7/path = NodePath(".:penned")
-properties/7/spawn = true
-properties/7/replication_mode = 2
 
 [node name="Ally" type="CharacterBody3D"]
 collision_layer = 8

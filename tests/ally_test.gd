@@ -1,5 +1,5 @@
 extends Node
-## Soldiers (allies) on an open field (town scenery collision off), against orcs held still unless noted:
+## Soldiers (allies) on an open field (scenery collision off), against orcs held still unless noted:
 ## - spear soldiers stab (melee only: no projectile, the spear points straight ahead mid-stab);
 ## - archers shoot from half their hero's bow range, step back from an orc next to them, walk around a wall
 ##   that blocks their line of fire, and line up behind the hero;
