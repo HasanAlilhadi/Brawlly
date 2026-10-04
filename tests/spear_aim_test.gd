@@ -1,5 +1,6 @@
 extends Node
-## Change aim during the thrust: pose, trail and damage must follow the visible lane.
+## Change aim during the thrust: the stab keeps the lane it started in (pose, trail, decal, damage, facing);
+## the new aim only counts for the next stab.
 ## Run with test_runner.tscn -- --test=res://tests/spear_aim_test.gd --class=spearman
 
 const TARGET := preload("res://scenes/training/training_target.tscn")
@@ -38,23 +39,23 @@ func _ready() -> void:
 	await get_tree().create_timer(player.attack_hit_delay / player.anim_speed * 0.2).timeout
 	var spear := player._weapon_items.spear as Node3D
 	var shaft := spear.global_basis.y.normalized()
-	_check(shaft.dot(Vector3.FORWARD) > 0.9, "spear pose follows the new decal direction during wind-up")
+	_check(shaft.dot(Vector3.RIGHT) > 0.9, "spear pose stays on the stab's starting lane")
 	var trail: MeshInstance3D
 	for child in player.get_children():
 		if child is MeshInstance3D and child.mesh is ImmediateMesh:
 			trail = child
-	_check(trail != null and trail.global_basis.z.dot(Vector3.FORWARD) > 0.99,
-			"thrust streak follows the new direction instead of its starting direction")
-	_check(is_equal_approx(player._melee_indicator.rotation.y, PI), "decal uses the same live direction")
-	var query := player._melee_query(Vector3.FORWARD)
+	_check(trail != null and trail.global_basis.z.dot(Vector3.RIGHT) > 0.99,
+			"thrust streak stays on its starting direction")
+	_check(is_equal_approx(player._melee_indicator.rotation.y, PI * 0.5), "decal stays on the stab's lane")
+	var query := player._melee_query(Vector3.RIGHT)
 	var points := (query.shape as ConvexPolygonShape3D).points
 	var back := INF
 	for point in points:
 		back = minf(back, point.z)
 	_check(is_equal_approx(back, 0.25), "damage prism begins at the visible decal edge")
 	await get_tree().create_timer(0.2).timeout
-	_check(targets[0].total_damage() == 0.0, "old attack direction deals no damage")
-	_check(targets[1].total_damage() > 0.0, "target inside the new decal takes damage")
+	_check(targets[0].total_damage() > 0.0, "the target on the stab's lane takes damage")
+	_check(targets[1].total_damage() == 0.0, "the newly aimed direction deals no damage during this stab")
 	_check(targets[2].total_damage() == 0.0, "target outside the decal takes no damage")
 	printerr("DONE failures=", failures)
 	get_tree().quit(1 if failures else 0)

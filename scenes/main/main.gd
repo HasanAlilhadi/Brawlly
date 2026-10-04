@@ -410,6 +410,8 @@ func _physics_process(delta: float) -> void:
 	# Knife (Bowman with the upgrade): right mouse toward the cursor, LT / the touch button toward the aim or ahead.
 	var knife_held := local_player.has_knife() and (_mouse_knife or pad_block or hud.shield_button.is_held)
 	var knife_aim := _cursor_direction() if _mouse_knife else aim
+	# Its fan shows under the hero while held, like the sword's wedge (no aim yet: where the hero faces).
+	local_player.set_knife_aim((knife_aim if knife_aim != Vector3.ZERO else local_player.facing()) if knife_held else Vector3.ZERO)
 	var use_held := (_attack_key_held() or Input.is_action_pressed(&"shoot")) and not _bow_rain_targeting
 	var melee_held := melee and not block and melee_aim == Vector3.ZERO and (hud.melee_button.is_held or use_held)
 	var shoot_held := not melee and use_held and not knife_held  # the knife in hand: no arrows

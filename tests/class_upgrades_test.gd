@@ -268,6 +268,19 @@ func _swordsman() -> void:
 func _spearman() -> void:
 	await _shield()
 	_check(player.weapons == PackedStringArray(["spear"]), "stab only before Can Throw (%s)" % player.weapons)
+	# A stab keeps the lane it started in: turning during it moves neither the hero nor the hit.
+	player.global_position = LANE_START
+	player._melee_timer = 0.0
+	player.attack_melee_toward(Vector3.BACK)
+	await _wait(0.05)
+	player.look_override = Vector3.RIGHT
+	player.set_melee_aim(Vector3.RIGHT)
+	await _wait(0.15)
+	_check(player._melee_hit_direction().is_equal_approx(Vector3.BACK) and player.facing().dot(Vector3.BACK) > 0.99,
+			"turning mid-stab keeps the stab's lane (%s, facing %s)" % [player._melee_hit_direction(), player.facing()])
+	player.set_melee_aim(Vector3.ZERO)
+	player.look_override = Vector3.ZERO
+	await _wait(0.6)
 	player.switch_weapon()
 	_check(player.current_weapon() == "spear", "E does nothing without Can Throw")
 	_check(await _buy(&"spear_throw"), "bought Can Throw")
@@ -317,6 +330,8 @@ func _bowman() -> void:
 	var far := _orc(LANE_START + Vector3(1.8, 0, 0))  # in the sword's reach, past the knife's
 	var aside := _orc(LANE_START + Vector3(cos(deg_to_rad(45.0)), 0, sin(deg_to_rad(45.0))) * 0.9)  # outside its narrow fan
 	await _wait(0.1)
+	player.set_knife_aim(Vector3.RIGHT)
+	_check(player._knife_indicator.visible, "holding the knife shows its fan under the hero")
 	player.knife_attack(Vector3.RIGHT)
 	player._shoot_timer = 0.0
 	player.shoot(Vector3.RIGHT * 5.0)
@@ -325,6 +340,8 @@ func _bowman() -> void:
 	_check(is_equal_approx(close.max_health - close.health, player.knife_damage), "the knife stabs an orc up close (%.0f)" % (close.max_health - close.health))
 	_check(far.health == far.max_health, "the knife doesn't reach as far as the sword")
 	_check(aside.health == aside.max_health, "the knife's fan is narrow (an orc 45° aside is missed)")
+	player.set_knife_aim(Vector3.ZERO)
+	_check(not player._knife_indicator.visible, "letting go hides the knife's fan")
 	far.queue_free()
 	aside.queue_free()
 	var knife_item := player.get("_knife_item") as Node3D

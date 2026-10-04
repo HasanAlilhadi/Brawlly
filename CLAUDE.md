@@ -151,7 +151,7 @@ by touch index so the joystick and buttons work together with multi-touch.
   anything hittable needs collision up to `GameConfig.HIT_HEIGHT` (1 m); aimed shots fly exactly where aimed (no snapping); a quick shot / tap with no aim auto-targets the nearest enemy. Melee hits exactly the aim marker (`Player.melee_outline()` → `_melee_query` prism + `_melee_indicator`: a `melee_arc()` fan or a `melee_lane()` lane, out to `melee_reach()`), aimed where the swing started (`Unit._melee_dir`); other units keep the sphere in `Unit._melee_query`. The player carries `Player.weapons` (from the class) and holds one
   (`weapon_index`, replicated); `switch_weapon()` (server; E / Y / HUD button via `request_switch_weapon`). Melee / shoot
   functions refuse the weapon not in hand; attack keys and left mouse use the one in hand. The sword slash
-  (`_sword_slash`) and the spear stab (`_spear_thrust`, `THRUST_*` keys: the spear slides straight out along the lane, aimed from its BoneAttachment3D — `get_bone_global_pose()` outside the skeleton update misses the holding-pose modifier; nothing moves sideways, the hero never steps forward) are procedural; other units use clips. The Bowman's bow is placed upright in the body's frame after
+  (`_sword_slash`) and the spear stab (`_spear_thrust`, `THRUST_*` keys: the spear slides straight out along the lane, aimed from its BoneAttachment3D — `get_bone_global_pose()` outside the skeleton update misses the holding-pose modifier; nothing moves sideways, the hero never steps forward; the lane is fixed when the stab starts: `_thrust_dir`, the body holds still via `Unit._facing_locked()`, re-aiming counts for the next stab — `tests/spear_aim_test.gd`) are procedural; other units use clips. The Bowman's bow is placed upright in the body's frame after
   every skeleton update (`Player._place_bow`, `BOW_*` constants) with an arrow nocked (`NOCK_POSITION`): a shot
   leaves from that arrow toward the aim line `aim_range` ahead, and the next arrow is nocked after the cooldown.
   New weapon = a `WEAPONS` row + its model in `_weapon_items` + an icon in `Hud._weapon_icons` + a class that carries it.
@@ -191,7 +191,7 @@ by touch index so the joystick and buttons work together with multi-touch.
   trail, passes through enemies), shield. Spearman: spear_damage, spear_rate, spear_throw (adds "javelin" to `weapons`),
   shield (Bull Run: planned). Bowman: bow_damage, bow_rate, bow_range (+ arrow `lifetime_scale`), bow_pierce (projectile
   `pierce`), knife (right mouse / LT / the touch shield button: `knife_attack()`, the dungeon sword scaled down as the
-  knife; `KNIFE_REACH` / `KNIFE_ARC` shorter and narrower than the sword; no arrows while stabbing). No hero owns a shield / throw / knife / dash until bought; the Training Field grants those
+  knife; `KNIFE_REACH` / `KNIFE_ARC` shorter and narrower than the sword, `knife_outline()`; its orange fan shows while held, `set_knife_aim()`; no arrows while stabbing). No hero owns a shield / throw / knife / dash until bought; the Training Field grants those
   (`Player.TRAINING_UNLOCKS`) and makes class upgrades free. Tests: `grant_upgrade(id)`; `class_upgrades_test.gd`
   (`--class=`), `class_upgrades_mp_test.gd`. New class upgrade = a catalog row with `classes` + its effect in
   `_apply_class_upgrades`.

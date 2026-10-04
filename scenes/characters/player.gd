@@ -384,6 +384,7 @@ var _aim_line: MeshInstance3D
 var _aim_reticle: MeshInstance3D
 var _melee_aim: Vector3 = Vector3.ZERO
 var _melee_indicator: Node3D
+var _knife_indicator: Node3D  # the knife's fan, under the Bowman while the knife is held (`set_knife_aim`)
 var _melee_wedge: ConvexPolygonShape3D
 var _melee_wedge_weapon: String = ""
 var _name_label: Label3D
@@ -402,6 +403,8 @@ var _slash_raise_axis: Vector3 = Vector3.RIGHT
 var _slash_torso: int = -1
 var _slash_carry: Quaternion = Quaternion.IDENTITY  # carry grip in the skeleton's space
 var _thrust_phase: float = -1.0  # stab phase (see `_thrust_pose`); < 0 = not stabbing
+var _thrust_dir: Vector3 = Vector3.ZERO  # the stab's lane, fixed when it starts (see `_spear_thrust`)
+var _thrust_until: int = 0  # ticks (ms) when the current stab ends
 var _nocked_arrow: Node3D  # the arrow on the string (bow only)
 var _nock_body: Vector3 = Vector3.INF  # where it sits in the model's space (last drawn frame)
 var _shield_recoil: float = 0.0  # 1 right after a blocked hit, back to 0 (see `_place_shield`)
@@ -833,6 +836,12 @@ func _spear_thrust(duration: float) -> void:
 	_right_hold.influence = 1.0
 	_right_hold.pose_offset = Quaternion.IDENTITY
 	_slash_skeleton.transform = _slash_skeleton_rest
+	# The lane is fixed where the stab starts: turning or re-aiming during it doesn't drag the spear, its
+	# streak or the hit sideways (`_melee_hit_direction`, `_facing_locked`).
+	_thrust_until = 0
+	_thrust_dir = _melee_hit_direction()
+	_thrust_until = Time.get_ticks_msec() + int(duration * 1000.0)
+	face_now(_thrust_dir)
 	# The spear is placed from the arm's real (final) pose each frame, so it points straight ahead whatever
 	# the holding pose / walk cycle does to the arm.
 	if not _slash_skeleton.skeleton_updated.is_connected(_place_stab_spear):
@@ -1220,7 +1229,9 @@ func set_melee_aim(direction: Vector3) -> void:
 		return
 	_melee_aim = direction.normalized()
 	look_override = _melee_aim
-	_melee_indicator.rotation.y = atan2(_melee_aim.x, _melee_aim.z)
+	# A stab under way keeps its lane: the marker stays on it until the stab ends.
+	var shown := _thrust_dir if _thrusting() else _melee_aim
+	_melee_indicator.rotation.y = atan2(shown.x, shown.z)
 	_melee_indicator.visible = is_local()
 	_aim_indicator.visible = false
 
@@ -1813,7 +1824,18 @@ func _roll_melee_damage() -> Array:
 ## The hero may aim elsewhere while the attack animation winds up. Test exactly the wedge currently shown
 ## to the player; a released/tapped attack falls back to the direction the body still faces.
 func _melee_hit_direction() -> Vector3:
+	if _thrusting():
+		return _thrust_dir
 	return _melee_aim if _melee_aim != Vector3.ZERO else facing()
+
+
+## A spear stab is under way: its lane stays where it started.
+func _thrusting() -> bool:
+	return _thrust_dir != Vector3.ZERO and Time.get_ticks_msec() < _thrust_until and current_weapon() == "spear"
+
+
+func _facing_locked() -> bool:
+	return _thrusting()
 
 
 ## Melee hits a prism, so big colliders count by their surface instead of their center.
@@ -1837,6 +1859,11 @@ func _melee_query(direction: Vector3) -> PhysicsShapeQueryParameters3D:
 
 ## Orange marker of the hit area in front of the hero while aiming the melee weapon (fan / spear lane).
 func _build_melee_indicator() -> void:
+	_melee_indicator = _fan_indicator(melee_outline(0.25))
+	_knife_indicator = _fan_indicator(knife_outline(0.25))
+
+
+func _fan_indicator(outline: PackedVector2Array) -> Node3D:
 	var material := StandardMaterial3D.new()
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -1844,7 +1871,6 @@ func _build_melee_indicator() -> void:
 	material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	var wedge := ImmediateMesh.new()
 	wedge.surface_begin(Mesh.PRIMITIVE_TRIANGLES, material)
-	var outline := melee_outline(0.25)
 	for i in range(1, outline.size() - 1):  # a fan over the convex outline
 		for corner in [outline[0], outline[i], outline[i + 1]]:
 			wedge.surface_add_vertex(Vector3(corner.x, 0.05, corner.y))
@@ -1852,10 +1878,11 @@ func _build_melee_indicator() -> void:
 	var part := MeshInstance3D.new()
 	part.mesh = wedge
 	part.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	_melee_indicator = Node3D.new()
-	_melee_indicator.visible = false
-	_melee_indicator.add_child(part)
-	add_child(_melee_indicator)
+	var indicator := Node3D.new()
+	indicator.visible = false
+	indicator.add_child(part)
+	add_child(indicator)
+	return indicator
 
 
 func _build_name_label() -> void:
@@ -2219,17 +2246,33 @@ func net_knife(direction: Vector3) -> void:
 		knife_attack(direction)
 
 
+## The knife's hit fan seen from above (x, z in the hero's space, +Z forward), starting at `back`.
+func knife_outline(back: float) -> PackedVector2Array:
+	var points := PackedVector2Array([Vector2(0.0, back)])
+	var half := deg_to_rad(KNIFE_ARC * 0.5)
+	for i in 7:
+		var a := -half + 2.0 * half * i / 6.0
+		points.append(Vector2(sin(a), cos(a)) * KNIFE_REACH)
+	return points
+
+
+## Local: the knife's fan under the hero toward `direction` while the knife is held; ZERO hides it.
+func set_knife_aim(direction: Vector3) -> void:
+	direction.y = 0.0
+	var shown := direction.length_squared() > 0.0001 and can_knife() and is_local()
+	_knife_indicator.visible = shown
+	if shown:
+		_knife_indicator.rotation.y = atan2(direction.x, direction.z)
+
+
 ## Server: everything hostile in the knife's fan.
 func _knife_hit(direction: Vector3) -> void:
 	if is_dead or is_downed:
 		return
 	var points := PackedVector3Array()
-	var half := deg_to_rad(KNIFE_ARC * 0.5)
 	for y in [0.05, GameConfig.HIT_HEIGHT + 0.3]:
-		points.append(Vector3(0.0, y, -0.3))
-		for i in 7:
-			var a := -half + 2.0 * half * i / 6.0
-			points.append(Vector3(sin(a) * KNIFE_REACH, y, cos(a) * KNIFE_REACH))
+		for corner in knife_outline(-0.3):
+			points.append(Vector3(corner.x, y, corner.y))
 	var shape := ConvexPolygonShape3D.new()
 	shape.points = points
 	var query := PhysicsShapeQueryParameters3D.new()
@@ -2528,6 +2571,7 @@ func _apply_downed() -> void:
 	if is_downed:
 		_aim_indicator.visible = false
 		_melee_indicator.visible = false
+		_knife_indicator.visible = false
 		play_anim("downed")
 	_hold_arms(true)
 	var teammate := not is_local() and Net.team_of(Net.my_id()) == team_id

@@ -271,7 +271,9 @@ func _predict(delta: float) -> void:
 		global_position = net_position  # teleport / respawn
 	elif error.length() > (0.7 if moving else 0.05):
 		global_position += error * minf(1.0, delta * (2.0 if moving else 6.0))
-	if look_override != Vector3.ZERO:
+	if _facing_locked():
+		pass
+	elif look_override != Vector3.ZERO:
 		face(look_override, delta * 1.5)
 	elif moving:
 		face(move, delta)
@@ -310,7 +312,9 @@ func _physics_process(delta: float) -> void:
 	_knockback = _knockback.move_toward(Vector3.ZERO, delta * 22.0)
 	move_and_slide()
 	global_position = GameConfig.clamp_to_world(Vector3(global_position.x, 0.0, global_position.z))
-	if look_override != Vector3.ZERO:
+	if _facing_locked():
+		pass
+	elif look_override != Vector3.ZERO:
 		face(look_override, delta * 1.5)
 	elif strength > 0.05:
 		face(move, delta)
@@ -386,6 +390,11 @@ func face(direction: Vector3, delta: float) -> void:
 func face_now(direction: Vector3) -> void:
 	if direction.length_squared() > 0.0001:
 		model.rotation.y = atan2(direction.x, direction.z)
+
+
+## Virtual: true while an attack holds the body still (it neither turns to the aim nor to the movement).
+func _facing_locked() -> bool:
+	return false
 
 
 func facing() -> Vector3:
