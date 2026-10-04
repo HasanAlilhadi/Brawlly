@@ -2,9 +2,11 @@ extends Node
 ## Networking, lobby and player profile (autoload "Net"). The game is multiplayer only.
 ## - An offline peer (`open_offline_lobby()`, you are the server, id 1) is only for automated tests and
 ##   running the match scene directly from the editor; no menu offers it.
-## - Hosting opens an ENet server on the local network; joining connects by IP (or a discovered game).
-## - The host owns the match settings and team assignment; clients get them via `_sync_lobby`.
-## - Hosts announce themselves with a UDP broadcast so nearby players can find the game.
+## - Hosting opens an ENet server on the local network (`host(options)`: server name, max players, password,
+##   listed or private); joining connects by IP:port (or a discovered game) with an optional password.
+## - The host owns the match settings, team assignment and ready flags; clients get them via `_sync_lobby`.
+## - Listed hosts announce themselves with a UDP broadcast so nearby players find them in the server browser.
+## - When a game drops you (host left, kicked), `leave_reason` holds why; the main menu shows it.
 
 signal lobby_changed
 signal servers_changed
@@ -13,10 +15,15 @@ signal left_game(reason: String)
 ## The host started the match: every lobby shows a countdown of `seconds`.
 signal countdown_started(seconds: int)
 
-const GAME_ID := "mygame-lan-v1"
+const GAME_ID := "brawlly-lan-v2"
 const PORT: int = 24565
 const DISCOVERY_PORT: int = 24566
 const MAX_PLAYERS: int = 8
+const MIN_PLAYERS: int = 2
+## How many direct-connect addresses the profile remembers.
+const RECENT_ADDRESSES: int = 5
+## Refusal reason (`connection_failed`); the server browser asks for the password again on this one.
+const WRONG_PASSWORD := "Wrong password."
 ## Seconds of "3… 2… 1…" in the lobby before the match loads.
 const START_COUNTDOWN: int = 3
 const PROFILE_PATH := "user://profile.cfg"
@@ -47,12 +54,19 @@ const TEAMMATE_COLOR := Color("46c04c")
 const ENEMY_COLORS: Array[Color] = [Color("e8483c"), Color("f2c230"), Color("a45de0")]
 const ENEMY_TEAM_NAMES: PackedStringArray = ["Red", "Yellow", "Purple"]
 
-var profile: Dictionary = {"name": "Player", "class": &"swordsman"}
-## peer id -> {"name": String, "team": int, "class": StringName (ClassDef.id)}
+var profile: Dictionary = {"name": "Player", "class": &"swordsman", "recent": [], "host": {}}
+## peer id -> {"name": String, "team": int, "class": StringName (ClassDef.id), "ready": bool}
 var players: Dictionary = {}
 var settings: Dictionary = default_settings()
-## Discovered games: ip -> {"name", "players", "max", "mode", "port", "in_game", "seen"}
+## The game's server options, synced to every player (the password itself stays on the host):
+## {"name": String, "max_players": int, "locked": bool, "listed": bool}
+var server_info: Dictionary = {}
+## Discovered games: "ip:port" -> {"ip", "port", "name", "host", "players", "max", "mode", "in_game", "locked", "seen"}
 var servers: Dictionary = {}
+## The address this client joined ("ip:port"); the lobby shows it as the invite address.
+var joined_address: String = ""
+## Why the last game dropped this device ("The host left the game."); read and cleared by the main menu.
+var leave_reason: String = ""
 var game_in_progress: bool = false
 ## Game port (PORT, or `-- --port=N` on the command line: tests next to a running game).
 var port: int = PORT
@@ -63,6 +77,8 @@ var _online: bool = false
 var _broadcaster: PacketPeerUDP
 var _listener: PacketPeerUDP
 var _broadcast_timer: float = 0.0
+var _password: String = ""  # host: required to join; client: sent when registering
+var _registered: bool = false  # client: the host accepted us (refusals before that stay in the server browser)
 
 
 func _ready() -> void:
@@ -217,12 +233,16 @@ func _load_profile() -> void:
 	if config.load(PROFILE_PATH) == OK:
 		profile.name = _clean_name(config.get_value("profile", "name", "Player"))
 		profile["class"] = ClassDef.find(StringName(config.get_value("profile", "class", ""))).id
+		profile["recent"] = config.get_value("profile", "recent", [])
+		profile["host"] = config.get_value("profile", "host", {})
 
 
 func _save_profile() -> void:
 	var config := ConfigFile.new()
 	config.set_value("profile", "name", profile.name)
 	config.set_value("profile", "class", String(profile["class"]))
+	config.set_value("profile", "recent", profile.get("recent", []))
+	config.set_value("profile", "host", profile.get("host", {}))
 	config.save(PROFILE_PATH)
 
 
@@ -241,7 +261,9 @@ func open_offline_lobby() -> void:
 	lobby_changed.emit()
 
 
-func host() -> Error:
+## Opens a game on this device. `options`: "name" (server name, default "<your name>'s game"),
+## "max_players" (2..8), "password" ("" = open), "listed" (false = not in other players' server browser).
+func host(options: Dictionary = {}) -> Error:
 	_reset()
 	var peer := ENetMultiplayerPeer.new()
 	var err := peer.create_server(port, MAX_PLAYERS)
@@ -249,21 +271,81 @@ func host() -> Error:
 		return err
 	multiplayer.multiplayer_peer = peer
 	_online = true
+	_password = str(options.get("password", "")).strip_edges()
+	var server_name := str(options.get("name", "")).strip_edges().substr(0, 32)
+	server_info = {
+		"name": server_name if server_name != "" else default_server_name(),
+		"max_players": clampi(int(options.get("max_players", MAX_PLAYERS)), MIN_PLAYERS, MAX_PLAYERS),
+		"locked": _password != "",
+		"listed": bool(options.get("listed", true)),
+	}
 	players = {1: _entry(profile.name, 0, profile["class"])}
-	_start_broadcast()
+	if server_info.listed:
+		_start_broadcast()
 	lobby_changed.emit()
 	return OK
 
 
-func join(address: String, join_port: int = -1) -> Error:
+func default_server_name() -> String:
+	return "%s's game" % profile.name
+
+
+## Connects to a game. `address` may carry its port ("192.168.1.20:24565"); `join_port` overrides it.
+func join(address: String, join_port: int = -1, password: String = "") -> Error:
+	var target := parse_address(address)
+	if target.is_empty():
+		return ERR_INVALID_PARAMETER
+	if join_port > 0:
+		target.port = join_port
 	_reset()
 	var peer := ENetMultiplayerPeer.new()
-	var err := peer.create_client(address.strip_edges(), join_port if join_port > 0 else port)
+	var err := peer.create_client(target.ip, target.port)
 	if err != OK:
 		return err
 	multiplayer.multiplayer_peer = peer
 	_online = true
+	_password = password
+	joined_address = "%s:%d" % [target.ip, target.port]
 	return OK
+
+
+## "ip" or "ip:port" -> {"ip", "port"} (the default game port when none is given); {} when it isn't one.
+func parse_address(address: String) -> Dictionary:
+	var text := address.strip_edges()
+	var target_port := port
+	if text.count(":") == 1:
+		var port_text := text.get_slice(":", 1)
+		if not port_text.is_valid_int() or int(port_text) < 1 or int(port_text) > 65535:
+			return {}
+		target_port = int(port_text)
+		text = text.get_slice(":", 0)
+	if text == "" or text.contains(" ") or text.contains(":"):
+		return {}
+	return {"ip": text, "port": target_port}
+
+
+## This game's invite address for others ("192.168.1.20:24565"): the host's LAN IP, or the address a client joined.
+func invite_address() -> String:
+	if not is_host():
+		return joined_address
+	var addresses := local_addresses()
+	return ("%s:%d" % [addresses[0], port]) if not addresses.is_empty() else ""
+
+
+## Remembers a direct-connect address (most recent first).
+func add_recent_address(address: String) -> void:
+	var recent: Array = profile.get("recent", []).duplicate()
+	recent.erase(address)
+	recent.push_front(address)
+	profile["recent"] = recent.slice(0, RECENT_ADDRESSES)
+	_save_profile()
+
+
+## The host screen's last options (never the password), so the next game starts with them.
+func remember_host_options(options: Dictionary) -> void:
+	profile["host"] = {"name": str(options.get("name", "")), "max_players": int(options.get("max_players", MAX_PLAYERS)),
+			"listed": bool(options.get("listed", true))}
+	_save_profile()
 
 
 ## Drops any connection without changing scene (e.g. cancelling a join attempt).
@@ -273,6 +355,7 @@ func close_connection() -> void:
 
 func leave(reason: String = "") -> void:
 	_reset()
+	leave_reason = reason
 	get_tree().paused = false
 	left_game.emit(reason)
 	Transition.change_scene(MENU_SCENE)
@@ -284,7 +367,10 @@ func _reset() -> void:
 		multiplayer.multiplayer_peer.close()
 	multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
 	_online = false
+	_password = ""
+	_registered = false
 	players = {}
+	server_info = {}
 	settings = default_settings()
 	game_in_progress = false
 	counting_down = false
@@ -306,6 +392,41 @@ func set_team(peer: int, team: int) -> void:
 		return
 	players[peer]["team"] = clampi(team, 0, settings.team_count - 1)
 	_broadcast_lobby()
+
+
+## Ready up (or not) in the lobby.
+func set_ready(value: bool) -> void:
+	if is_host():
+		_set_ready(1, value)
+	else:
+		_request_ready.rpc_id(1, value)
+
+
+func is_ready(peer: int) -> bool:
+	return bool(players.get(peer, {}).get("ready", false))
+
+
+## Joined players (not the host) who are ready / all of them: the host's Start button shows "2/3 ready".
+func ready_count() -> Vector2i:
+	var count := 0
+	for peer in players:
+		if peer != 1 and is_ready(peer):
+			count += 1
+	return Vector2i(count, players.size() - 1)
+
+
+func _set_ready(peer: int, value: bool) -> void:
+	if not is_host() or not players.has(peer) or game_in_progress:
+		return
+	players[peer]["ready"] = value
+	_broadcast_lobby()
+
+
+## Host: removes a player from the lobby.
+func kick(peer: int) -> void:
+	if not is_host() or peer == 1 or not players.has(peer):
+		return
+	_refuse(peer, "The host removed you from the game.")
 
 
 ## Asks the host to put this player on `team`.
@@ -338,6 +459,8 @@ func return_to_lobby() -> void:
 	if not is_host():
 		return
 	game_in_progress = false
+	for peer in players:
+		players[peer]["ready"] = false
 	_go_to_lobby.rpc(players, settings)
 
 
@@ -349,7 +472,7 @@ func _balance_teams() -> void:
 
 
 func _entry(player_name: String, team: int, class_id: StringName) -> Dictionary:
-	return {"name": _clean_name(player_name), "team": team, "class": ClassDef.find(class_id).id}
+	return {"name": _clean_name(player_name), "team": team, "class": ClassDef.find(class_id).id, "ready": false}
 
 
 func _update_player(peer: int, player_name: String, class_id: StringName) -> void:
@@ -362,19 +485,26 @@ func _update_player(peer: int, player_name: String, class_id: StringName) -> voi
 
 func _broadcast_lobby() -> void:
 	if _online:
-		_sync_lobby.rpc(players, settings)
+		_sync_lobby.rpc(players, settings, server_info)
 	lobby_changed.emit()
 
 
 # --- RPCs ------------------------------------------------------------------------
 
 @rpc("any_peer", "call_remote", "reliable")
-func _register(player_name: String, class_id: StringName) -> void:
+func _register(player_name: String, class_id: StringName, password: String) -> void:
 	if not is_host():
 		return
 	var peer := multiplayer.get_remote_sender_id()
-	if game_in_progress or players.size() >= MAX_PLAYERS:
-		_rejected.rpc_id(peer, "The game already started." if game_in_progress else "The game is full.")
+	var refusal := ""
+	if game_in_progress:
+		refusal = "That game already started."
+	elif players.size() >= int(server_info.get("max_players", MAX_PLAYERS)):
+		refusal = "That game is full."
+	elif password != _password:
+		refusal = WRONG_PASSWORD
+	if refusal != "":
+		_refuse(peer, refusal)
 		return
 	# New players join the smallest team.
 	var counts := {}
@@ -394,6 +524,23 @@ func _request_profile(player_name: String, class_id: StringName) -> void:
 		_update_player(multiplayer.get_remote_sender_id(), player_name, class_id)
 
 
+## Host: tells a player why, then drops them (after a moment, so the reason arrives first).
+func _refuse(peer: int, reason: String) -> void:
+	_rejected.rpc_id(peer, reason)
+	if players.erase(peer):
+		_broadcast_lobby()
+	get_tree().create_timer(0.5).timeout.connect(func() -> void:
+		var net := multiplayer.multiplayer_peer
+		if is_host() and net is ENetMultiplayerPeer and multiplayer.get_peers().has(peer):
+			(net as ENetMultiplayerPeer).disconnect_peer(peer))
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _request_ready(value: bool) -> void:
+	if is_host():
+		_set_ready(multiplayer.get_remote_sender_id(), value)
+
+
 @rpc("any_peer", "call_remote", "reliable")
 func _request_team(team: int) -> void:
 	if is_host() and not game_in_progress:
@@ -401,15 +548,22 @@ func _request_team(team: int) -> void:
 
 
 @rpc("authority", "call_remote", "reliable")
-func _sync_lobby(new_players: Dictionary, new_settings: Dictionary) -> void:
+func _sync_lobby(new_players: Dictionary, new_settings: Dictionary, new_server_info: Dictionary) -> void:
+	_registered = true
 	players = new_players
 	settings = new_settings
+	server_info = new_server_info
 	lobby_changed.emit()
 
 
+## Refused while joining: stay in the server browser with the reason. Removed later (kicked): back to the menu.
 @rpc("authority", "call_remote", "reliable")
 func _rejected(reason: String) -> void:
-	leave(reason)
+	if _registered:
+		leave(reason)
+	else:
+		_reset()
+		connection_failed.emit(reason)
 
 
 @rpc("authority", "call_local", "reliable")
@@ -455,16 +609,20 @@ func _on_peer_disconnected(peer: int) -> void:
 
 
 func _on_connected() -> void:
-	_register.rpc_id(1, profile.name, profile["class"])
+	_register.rpc_id(1, profile.name, profile["class"], _password)
 
 
 func _on_connection_failed() -> void:
 	_reset()
-	connection_failed.emit("Could not connect to the game.")
+	connection_failed.emit("Could not reach that game.")
 
 
 func _on_server_disconnected() -> void:
-	leave("The host left the game.")
+	if _registered:
+		leave("The host left the game.")
+	else:
+		_reset()
+		connection_failed.emit("The game closed the connection.")
 
 
 # --- LAN discovery -------------------------------------------------------------------
@@ -482,13 +640,17 @@ func _stop_broadcast() -> void:
 		_broadcaster = null
 
 
-## Start / stop listening for games on the local network (join screen).
-func start_discovery() -> void:
+## Start / stop listening for games on the local network (server browser). Starting again = refresh.
+## Returns false when the discovery port is unavailable (then only direct connect works).
+func start_discovery() -> bool:
 	stop_discovery()
 	servers.clear()
+	servers_changed.emit()
 	_listener = PacketPeerUDP.new()
 	if _listener.bind(DISCOVERY_PORT) != OK:
 		_listener = null
+		return false
+	return true
 
 
 func stop_discovery() -> void:
@@ -502,8 +664,10 @@ func _process(delta: float) -> void:
 		_broadcast_timer -= delta
 		if _broadcast_timer <= 0.0:
 			_broadcast_timer = 1.0
-			var info := {"game": GAME_ID, "name": profile.name, "players": players.size(),
-					"max": MAX_PLAYERS, "mode": mode(), "port": port, "in_game": game_in_progress}
+			var info := {"game": GAME_ID, "name": server_info.get("name", default_server_name()),
+					"host": profile.name, "players": players.size(),
+					"max": server_info.get("max_players", MAX_PLAYERS), "mode": mode(), "port": port,
+					"in_game": game_in_progress, "locked": server_info.get("locked", false)}
 			_broadcaster.put_packet(JSON.stringify(info).to_utf8_buffer())
 	if _listener:
 		var changed := false
@@ -512,12 +676,14 @@ func _process(delta: float) -> void:
 			var ip := _listener.get_packet_ip()
 			var info: Variant = JSON.parse_string(packet)
 			if info is Dictionary and info.get("game") == GAME_ID:
+				info["ip"] = ip
+				info["port"] = int(info.get("port", PORT))
 				info["seen"] = Time.get_ticks_msec()
-				servers[ip] = info
+				servers["%s:%d" % [ip, info.port]] = info
 				changed = true
-		for ip in servers.keys():
-			if Time.get_ticks_msec() - int(servers[ip].seen) > 4000:
-				servers.erase(ip)
+		for key in servers.keys():
+			if Time.get_ticks_msec() - int(servers[key].seen) > 4000:
+				servers.erase(key)
 				changed = true
 		if changed:
 			servers_changed.emit()

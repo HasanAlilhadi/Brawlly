@@ -5,7 +5,8 @@ extends Node
 
 const STEPS := [
 	["main_menu", "res://scenes/ui/main_menu.tscn", 2.0],
-	["multiplayer_menu", "res://scenes/ui/multiplayer_menu.tscn", 2.0],
+	["server_browser", "res://scenes/ui/server_browser.tscn", 2.0],
+	["host_menu", "res://scenes/ui/host_menu.tscn", 2.0],
 	["controls", "res://scenes/ui/controls_menu.tscn", 2.0],
 	["lobby", "lobby", 2.0],
 	["match", "res://scenes/main/main.tscn", 5.0],

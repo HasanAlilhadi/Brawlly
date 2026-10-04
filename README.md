@@ -50,9 +50,19 @@ portrait on phones. There is no single player: host a game (alone is fine) or jo
 
 ### Multiplayer (local Wi-Fi)
 
-- **Main menu → Multiplayer**: set your **name**, then
-  **Host Game** or **Join** — pick a game found on your Wi-Fi, or type the host's IP (shown in the host's lobby).
-- **Lobby**: when the host presses Start, everyone sees a **3-2-1 countdown**, then the screen fades into the match
+- **Main menu**: your name ("Playing as", remembered), then **Find Game** or **Host Game**.
+- **Find Game** (server browser): every game hosted on your network in a table (server, host, mode, players,
+  status, a lock for password-protected ones) with search, **Hide full** / **Hide in progress** and **Refresh**.
+  Double-click a game (or select it and press Join); locked games ask for the password. **Direct Connect** joins
+  by address (`192.168.1.20` or `192.168.1.20:24565`, recent addresses remembered). Refusals say why (full,
+  already playing, wrong password).
+- **Host Game**: server name, max players (2–8), an optional password, and **Listed** (shows in everyone's Find
+  Game) or **Private** (join by address only) → **Create Lobby**. Shows your address; internet play needs UDP
+  port 24565 forwarded.
+- **Lobby**: players on the left (one slot per seat, host crown, class, Ready; the host can **Kick**), your hero and
+  the match settings on the right, the invite address with **Copy** at the top. Players press **Ready up**; the
+  host's **Start** shows how many are ready. Kicked / host left → back to the main menu with a notice saying why.
+  When the host presses Start, everyone sees a **3-2-1 countdown**, then the screen fades into the match
   (it fades in once your hero has spawned). The host sets **mode**, **orc camps** (0–60), **difficulty** (Easy/Normal/Hard/Brutal),
   **starting coins**, and for versus modes **teams** (2–4), **score to win** and **time limit**. Players pick teams
   in team modes, and everyone picks their **class** (each player's class shows in the list).
@@ -96,7 +106,8 @@ portrait on phones. There is no single player: host a game (alone is fine) or jo
 ### Menus & UI
 
 - Starts at the **main menu** (`scenes/ui/main_menu.tscn`, 3D camp backdrop from `menu_backdrop.tscn`):
-  Training Field · Multiplayer (`multiplayer_menu.tscn`) · Controls · Quit. Lobby: `lobby.tscn`.
+  Find Game (`server_browser.tscn`) · Host Game (`host_menu.tscn`) · Training Field · Controls · Quit.
+  Lobby: `lobby.tscn`. These pages share `MenuKit` (`scenes/ui/menu_kit.gd`: page frame, modal dialogs, buttons).
 - **Training Field** is a local onboarding area with every hero on display, unlimited special abilities and
   indestructible damage targets. Press **F** beside a hero to switch, or at the Orc Practice station to spawn
   one orc (up to eight alive at once). Orcs never spawn on their own.

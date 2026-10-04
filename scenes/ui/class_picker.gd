@@ -1,7 +1,7 @@
 class_name ClassPicker
 extends VBoxContainer
 ## Row of class tabs (one per ClassDef, with its icon) and the picked class's description below.
-## Used in the multiplayer menu and the lobby; `picked` fires when the player clicks another class.
+## Used in the lobby; `picked` fires when the player clicks another class.
 
 signal picked(class_id: StringName)
 

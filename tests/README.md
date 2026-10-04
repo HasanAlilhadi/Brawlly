@@ -4,7 +4,7 @@ Run from the project folder (`G` = the Godot binary). Tests start the game norma
 `test_runner.tscn` and print results with a `HOST` / `CLIENT` / `[time]` prefix. Excluded from exports.
 
 ```bash
-# Menus: presses the real buttons (Multiplayer → Host → Leave, Multiplayer → Host → Start; no Play button)
+# Menus: presses the real buttons (Host Game → Create Lobby → Leave, Find Game → Back, Host Game → Create Lobby → Start; no Play button)
 # Every test plays a Swordsman unless --class=<swordsman|spearman|bowman> (test_runner.gd)
 # Host/client pairs: add --port=<N> to both (e.g. 24575) when a game is already running on this PC (it holds 24565),
 # and no --fixed-fps (it races ahead of real time and the connection times out)
@@ -61,6 +61,10 @@ Run from the project folder (`G` = the Godot binary). Tests start the game norma
 # Multiplayer versus modes: Team Deathmatch, Capture the Flag, King of the Hill (+ back to lobby)
 "$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/mp_modes_host.gd &
 "$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/mp_modes_client.gd
+
+# Server browser + lobby: client finds the locked game, wrong password refused, right one joins, Ready, host kicks → notice
+"$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/lobby_test.gd --role=host --port=24685 &
+"$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/lobby_test.gd --role=client --port=24685
 ```
 
 The multiplayer clients stay in the main menu after their host quits — stop them once the host prints `done`.

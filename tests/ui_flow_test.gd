@@ -1,6 +1,6 @@
 extends Node
-## Presses the real menu buttons: Multiplayer → Host Game → Leave, then (no single player: no Play button)
-## Multiplayer → Host Game → Start.
+## Presses the real menu buttons: Host Game → Create Lobby → Leave, then Find Game → Back (no single player:
+## no Play button), then Host Game → Create Lobby → Start.
 var t := 0.0
 var step := 0
 var wait_until := 0.0
@@ -20,12 +20,14 @@ func _process(delta: float) -> void:
 		return
 	var scene := get_tree().current_scene.name
 	match step:
-		0: if scene == "MainMenu" and t > 1.0: _press("MultiplayerButton"); step = 1; wait_until = t + 1.0
-		1: printerr("  now in: ", scene); _press("HostButton"); step = 2; wait_until = t + 1.5
-		2: printerr("  now in: ", scene, " online=", Net.is_online(), " players=", Net.players.size()); _press("LeaveButton"); step = 3; wait_until = t + 1.0
-		3: printerr("  now in: ", scene, " online=", Net.is_online(), " Play button: ", get_tree().current_scene.find_child("PlayButton", true, false)); _press("MultiplayerButton"); step = 4; wait_until = t + 1.0
-		4: printerr("  now in: ", scene); _press("HostButton"); step = 5; wait_until = t + 1.5
-		5: printerr("  now in: ", scene); _press("StartButton"); step = 6; wait_until = t + 8.0
-		6:
+		0: if scene == "MainMenu" and t > 1.0: _press("HostButton"); step = 1; wait_until = t + 1.0
+		1: printerr("  now in: ", scene); _press("CreateButton"); step = 2; wait_until = t + 1.5
+		2: printerr("  now in: ", scene, " online=", Net.is_online(), " players=", Net.players.size(), " server=", Net.server_info.get("name")); _press("LeaveButton"); step = 3; wait_until = t + 1.0
+		3: printerr("  now in: ", scene, " online=", Net.is_online(), " Play button: ", get_tree().current_scene.find_child("PlayButton", true, false)); _press("FindButton"); step = 4; wait_until = t + 1.0
+		4: printerr("  now in: ", scene); _press("BackButton"); step = 5; wait_until = t + 1.0
+		5: printerr("  now in: ", scene); _press("HostButton"); step = 6; wait_until = t + 1.0
+		6: printerr("  now in: ", scene); _press("CreateButton"); step = 7; wait_until = t + 1.5
+		7: printerr("  now in: ", scene); _press("StartButton"); step = 8; wait_until = t + 8.0
+		8:
 			printerr("  now in: ", scene, " players spawned=", get_tree().get_nodes_in_group(&"players").size())
 			get_tree().quit()

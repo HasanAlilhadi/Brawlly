@@ -121,7 +121,14 @@ by touch index so the joystick and buttons work together with multi-touch.
   when adding more). Input prompts: `UiKit.prompt("keyboard/w" | "mouse/left" | "xbox/rt" | "touch/tap")` from
   `assets/ui/prompts/` (Kenney Input Prompts, Double size; copy more from pre-assets when needed). Cursors: gauntlet in
   menus (Project Settings), gold sword in matches (main.gd).
-- Flow: `main_menu.tscn` (run scene) → Multiplayer → lobby → `main.tscn`; `PauseMenu` in `main.tscn`, disabled on game over.
+- Flow: `main_menu.tscn` (run scene) → Find Game (`server_browser.tscn`) or Host Game (`host_menu.tscn`) → lobby →
+  `main.tscn`; `PauseMenu` in `main.tscn`, disabled on game over. Menu pages are built in code with `MenuKit`
+  (`scenes/ui/menu_kit.gd`: `frame()` page = title + tools + body + bottom buttons, `dialog()` modals) and lay out
+  for phones with `MenuKit.is_compact()`. `Net.host(options)` takes the server options (name, max_players,
+  password, listed → `Net.server_info`, synced); `Net.join(address, port, password)`; refusals before the lobby
+  come back as `connection_failed(reason)` (`Net.WRONG_PASSWORD` re-asks), later ones (kicked, host left) set
+  `Net.leave_reason`, which the main menu shows. Lobby ready flags: `Net.set_ready()` / `players[peer].ready`;
+  `Net.kick(peer)` (host). Bump `Net.GAME_ID` when the join handshake changes (older builds then don't list).
   **Multiplayer only**: no single player in any menu. `Net.open_offline_lobby()` (offline peer) exists only for tests and
   running `main.tscn` directly from the editor.
 - **Classes** (`ClassDef` resources in `resources/data/classes/`, listed in `class_catalog.tres`): Swordsman (`human.glb`,
