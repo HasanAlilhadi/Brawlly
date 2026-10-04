@@ -9,7 +9,7 @@ var first_move_frame := -1
 var frame := 0
 
 func _ready() -> void:
-	Net.set_profile("Clienty")
+	Net.profile.name = "Clienty"
 	await get_tree().create_timer(1.0).timeout
 	Net.join("127.0.0.1")
 

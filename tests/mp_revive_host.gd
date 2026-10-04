@@ -11,7 +11,7 @@ var host_arrows := 0
 
 
 func _ready() -> void:
-	Net.set_profile("Hosty")
+	Net.profile.name = "Hosty"
 	Net.host()
 
 

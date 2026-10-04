@@ -58,7 +58,7 @@ Run from the project folder (`G` = the Godot binary). Tests start the game norma
 "$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/mp_revive_host.gd &
 "$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/mp_revive_client.gd
 
-# Multiplayer versus modes: Team Deathmatch, Capture the Flag, King of the Hill (+ back to lobby)
+# Multiplayer King of the Hill: team towns, hill score, game over (+ back to lobby)
 "$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/mp_modes_host.gd &
 "$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/mp_modes_client.gd
 

@@ -175,7 +175,6 @@ func _add_towns() -> void:
 		town.name = "Town_%d" % p
 		town.position = center
 		town.add_to_group(&"towns")
-		town.set_meta(&"owner_peer", int(access.get("owner_peer", 0)))
 		town.set_meta(&"team_id", int(access.get("team_id", -1)))
 		_world.add_child(town)
 		_add_town_identity(town, access)
@@ -195,7 +194,6 @@ func _add_towns() -> void:
 			var stall := STALL_SCENE.instantiate() as ShopStation
 			stall.name = "Stall_%d_%s" % [p, id]
 			stall.stall_id = id
-			stall.access_owner_peer = int(access.get("owner_peer", 0))
 			stall.access_team_id = int(access.get("team_id", -1))
 			stall.position = (spot as Node3D).global_position
 			stall.rotation.y = (spot as Node3D).rotation.y
@@ -208,14 +206,10 @@ func _add_towns() -> void:
 ## A permanent owner/team label at the entrance and a matching ring around the compass mosaic.
 ## The wording is local to each peer ("Your Town" here, the owner's name for everyone else).
 func _add_town_identity(town: Node3D, access: Dictionary) -> void:
-	var owner_peer := int(access.get("owner_peer", 0))
 	var team_id := int(access.get("team_id", -1))
 	var color := TOWN_MARKER_COLOR
 	var title := "Shared Town"
-	if owner_peer > 0:
-		color = Net.color_of(owner_peer)
-		title = "Your Town" if owner_peer == Net.my_id() else "%s's Town" % Net.name_of(owner_peer)
-	elif team_id >= 0:
+	if team_id >= 0:
 		color = Net.team_color(team_id)
 		title = "Your Team's Town" if Net.team_of(Net.my_id()) == team_id \
 				else "%s Team Town" % Net.team_label(team_id)

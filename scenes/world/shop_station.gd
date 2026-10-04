@@ -73,8 +73,7 @@ const GATE_HALF: float = 1.0
 
 @export var stall_id: StringName = &"blacksmith"
 
-## Base access. Personal Deathmatch towns set owner_peer; team modes set team_id; co-op leaves both open.
-var access_owner_peer: int = 0
+## Base access. Team modes set team_id; co-op leaves it open.
 var access_team_id: int = -1
 
 var _sign: Label3D
@@ -418,28 +417,22 @@ func title() -> String:
 func title_for(player: Node3D) -> String:
 	if can_access(player):
 		return title()
-	if access_owner_peer > 0:
-		return "%s's %s" % [Net.name_of(access_owner_peer), title()]
 	if access_team_id >= 0:
 		return "%s %s" % [Net.team_label(access_team_id), title()]
 	return title()
 
 
-## True when `player` owns this personal base, belongs to this team base, or the town is shared.
+## True when `player` belongs to this team base, or the town is shared.
 func can_access(player: Node3D) -> bool:
 	if not player is Player:
 		return false
 	var customer := player as Player
-	if access_owner_peer > 0:
-		return customer.peer_id == access_owner_peer
 	if access_team_id >= 0:
 		return customer.team_id == access_team_id
 	return true
 
 
 func access_denied_text() -> String:
-	if access_owner_peer > 0:
-		return "Only %s can use this shop." % Net.name_of(access_owner_peer)
 	if access_team_id >= 0:
 		return "Only the %s team can use this shop." % Net.team_label(access_team_id)
 	return "You cannot use this shop."

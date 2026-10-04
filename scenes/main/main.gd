@@ -101,8 +101,8 @@ func _ready() -> void:
 	GameConfig.world_half = 23.0 if training_mode else clampf(40.0 + sqrt(float(settings.camp_count)) * 10.0, 60.0, 170.0)
 	GameConfig.orc_strength = Net.DIFFICULTY_STRENGTH[settings.difficulty]
 	GameConfig.orc_respawn_scale = Net.DIFFICULTY_RESPAWN[settings.difficulty]
-	# Downed + revive needs teammates: online co-op and team modes.
-	GameConfig.downed_enabled = Net.is_online() and settings.mode != Net.Mode.DEATHMATCH
+	# Downed + revive needs teammates: every online mode has them.
+	GameConfig.downed_enabled = Net.is_online()
 	_setup_spawners()
 	HitFx.world = world
 	HitFx.main = self

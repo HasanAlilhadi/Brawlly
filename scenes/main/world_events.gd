@@ -239,5 +239,5 @@ func _pick_quarry() -> Player:
 	var candidates := get_tree().get_nodes_in_group(&"players").filter(func(p: Node) -> bool:
 		if GameConfig.is_gone(p):
 			return false
-		return (p as Player).peer_id == best_key if match_mode == Net.Mode.DEATHMATCH else (p as Player).team_id == best_key)
+		return (p as Player).team_id == best_key)
 	return candidates.pick_random() if not candidates.is_empty() else _random_player()

@@ -121,6 +121,10 @@ by touch index so the joystick and buttons work together with multi-touch.
   when adding more). Input prompts: `UiKit.prompt("keyboard/w" | "mouse/left" | "xbox/rt" | "touch/tap")` from
   `assets/ui/prompts/` (Kenney Input Prompts, Double size; copy more from pre-assets when needed). Cursors: gauntlet in
   menus (Project Settings), gold sword in matches (main.gd).
+- **Modes** (`Net.Mode`): `COOP` and `KING_OF_THE_HILL` only (the only team mode, `Net.is_team_mode()`); rules in
+  `GameMode` (`scenes/main/game_mode.gd`). Deathmatch, Team Deathmatch and Capture the Flag were removed (in git
+  history before 2026-10-04) and may come back; a new mode = a `Net.Mode` value + MODE_NAMES / MODE_HINTS /
+  SCORE_LIMIT_LABELS + `lobby.gd` SCORE_LIMITS + its branches in `GameMode`.
 - Flow: `main_menu.tscn` (run scene) → Find Game (`server_browser.tscn`) or Host Game (`host_menu.tscn`) → lobby →
   `main.tscn`; `PauseMenu` in `main.tscn`, disabled on game over. Menu pages are built in code with `MenuKit`
   (`scenes/ui/menu_kit.gd`: `frame()` page = title + tools + body + bottom buttons, `dialog()` modals) and lay out
@@ -179,8 +183,8 @@ by touch index so the joystick and buttons work together with multi-touch.
   with its collision, markers `Stall_<id>` / `StarterChest` / `Tree_<n>`: the town's trees are the normal choppable
   trees). `WorldBuilder._add_towns()` instances it and puts a stall
   on each marker; `WorldBuilder.TOWN_RADIUS` stays free of trees / camps / scatter, no camp within
-  `stall_safe_distance` of a stall. Move a building = change `STALLS` in the town script and rebuild; deathmatch spreads
-  its per-player towns so they never overlap (`GameMode.setup`). `UpgradeDef.stalls` lists the stalls that sell an item;
+  `stall_safe_distance` of a stall. Move a building = change `STALLS` in the town script and rebuild; King of the Hill
+  puts one town per team (`GameMode.setup`). `UpgradeDef.stalls` lists the stalls that sell an item;
   `Player.can_buy()` requires standing at one (`ShopStation.can_buy_here`, also checked on the server). main.gd
   tracks the stall in reach (`_update_stall`: highlight, HUD prompt, `interact` opens `ShopMenu.open(stall)`). Every stall is used from any side, within `ShopStation.STALL_REACH` of its building (`_distance()` from `_footprint()`: the STALLS "block", the barracks' compound); `nearest()` = the closest in reach. No ground rings: a stall in reach glows (`set_highlight` → `assets/shaders/highlight_glow.gdshader` as `material_overlay`) and its sign turns gold; a pin bobs over the barracks gate while your soldiers wait. New building = a STALLS row with its "block". Soldiers read `Player.ally_power`.
 - **Soldiers come only from the barracks** (camps and the Warlord's warband are routed — they `die()` and drop loot).
@@ -206,7 +210,7 @@ by touch index so the joystick and buttons work together with multi-touch.
 - Orc types are scenes using the same `enemy.gd` with different exports (thrower = `projectile_scene` set;
   giant = `melee_cleave`, `anim_speed` < 1, big `radius`). `Camp._squad_composition()` decides the mix.
   Melee hits one target unless `melee_cleave`. Thrown spears reuse `arrow_projectile.gd` with a different `hit_mask`.
-- **Downed** (`GameConfig.downed_enabled`: online and not deathmatch): `Player.die()` turns into `_go_down()`
+- **Downed** (`GameConfig.downed_enabled`: every online match): `Player.die()` turns into `_go_down()`
   (`is_downed`, crawl speed, out of `player_units`). `GameConfig.is_gone()` treats downed units as gone, so AI and
   aim assist skip them. Revive = teammate within `Player.REVIVE_RANGE` for `REVIVE_TIME`. Only hostile
   player-owned damage finishes a downed player. Signals `went_down` / `revived` → main.gd (announce, Help ping).
@@ -239,7 +243,7 @@ by touch index so the joystick and buttons work together with multi-touch.
 - **Stats & awards**: report events with `MatchStats.add(peer, &"stat")` (server; kills / deaths / soldiers lost
   come from `Unit.die()`, damage from `HitFx.report_hit`). New award = a row in `MatchStats.AWARDS`.
 - **Minimap** (`scenes/ui/minimap.gd`): shows only friends (players / soldiers not `GameConfig.is_hostile` to you),
-  camps as tent badges, trading posts, the hill (group `hill`, holder color) and CTF flags (group `flags`). Tracked
+  camps as tent badges, trading posts, the hill (group `hill`, holder color). Tracked
   nodes can set meta `marker_icon` (Texture2D, drawn in a round badge) + `marker_portrait` (a face). Faces are rendered
   with `tools/render_portrait.gd` into `assets/ui/icons/portraits/` (Warlord).
 - **Pings**: `main._ping()` → server `_on_ping()` (rate-limited) → teammates' `PingMarker`. Things that should get a
@@ -276,7 +280,7 @@ by touch index so the joystick and buttons work together with multi-touch.
   ON_CHANGE (reliable → stutter on Wi-Fi packet loss). Keep frequently-changing values quantized (regen heals whole points).
 - **Client prediction**: on clients the local Player moves immediately (`Unit._predict`, `enable_prediction()`,
   fed by `main.gd` via `predict_input`) and only corrects real drift from the server position.
-- **Static world** (trees, chests, camps, flags, hill) is built identically on every peer from `Net.settings.seed`
+- **Static world** (trees, chests, camps, hill) is built identically on every peer from `Net.settings.seed`
   with deterministic names; state changes go through RPCs on those nodes (`_net_*` methods, `call_local`).
 - **Colors are per device, relative to the local player** (nobody picks one): `Net.color_of(peer)` (you blue,
   teammates green, enemies red), `Net.team_color(team)` / `Net.team_label(team)` ("Your team" green; enemy teams red /

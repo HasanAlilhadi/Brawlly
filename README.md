@@ -64,15 +64,15 @@ portrait on phones. There is no single player: host a game (alone is fine) or jo
   host's **Start** shows how many are ready. Kicked / host left → back to the main menu with a notice saying why.
   When the host presses Start, everyone sees a **3-2-1 countdown**, then the screen fades into the match
   (it fades in once your hero has spawned). The host sets **mode**, **orc camps** (0–60), **difficulty** (Easy/Normal/Hard/Brutal),
-  **starting coins**, and for versus modes **teams** (2–4), **score to win** and **time limit**. Players pick teams
-  in team modes, and everyone picks their **class** (each player's class shows in the list).
+  **starting coins**, and for King of the Hill **teams** (2–4), **hill seconds to win** and **time limit**. Players
+  pick teams in King of the Hill, and everyone picks their **class** (each player's class shows in the list).
 - **Colors are automatic and relative to you**: you and your soldiers are blue, teammates and their soldiers green,
-  enemies red (team modes: each enemy team its own color — red, yellow, purple). Team names follow the same rule
-  ("Your team", "Red team") everywhere: lobby, score line, towns, flags, announcements.
-- **Modes**: Co-op vs Orcs · Deathmatch · Team Deathmatch · Capture the Flag · King of the Hill. Orcs stay in every
-  mode and fight everyone. Destroying a camp gives its soldiers to whoever landed the last hit.
-- **Towns in multiplayer**: co-op uses one shared town, Deathmatch gives every player a private town, and team modes
-  give every team one shared town. A colored compass ring and entrance label identify the owner; other players can
+  enemies red (King of the Hill: each enemy team its own color — red, yellow, purple). Team names follow the same
+  rule ("Your team", "Red team") everywhere: lobby, score line, towns, announcements.
+- **Modes**: **Co-op vs Orcs** (everyone together, destroy every camp) and **King of the Hill** (teams hold the hill
+  in the middle to earn points). Orcs stay in both and fight everyone. Destroying a camp gives its soldiers to
+  whoever landed the last hit. (Deathmatch, Team Deathmatch and Capture the Flag were removed for now.)
+- **Towns in multiplayer**: co-op uses one shared town; King of the Hill gives every team one shared town. A colored compass ring and entrance label identify the owner; other players can
   enter the town but cannot use its shops or Barracks.
 - Online matches don't pause (pause menu → Leave Game); players respawn after a few seconds.
 - The host's device runs the match; up to 8 players. Joining by IP always works; automatic discovery on iPhone may
@@ -80,10 +80,10 @@ portrait on phones. There is no single player: host a game (alone is fine) or jo
 
 ### Playing together
 
-- **Downed, not dead** (online co-op + team modes): at 0 health you crawl for 15 s ("HELP!" over you, a Help ping
+- **Downed, not dead** (every online match): at 0 health you crawl for 15 s ("HELP!" over you, a Help ping
   goes out automatically). A teammate standing next to you for 3 s revives you at 40% health (faster with two).
   Orcs ignore downed players; enemy players can finish you. Left alone you bleed out and respawn as usual
-  (nothing drops). Deathmatch keeps instant deaths.
+  (nothing drops).
 - **World events** (lobby → World events, on by default):
   - **Treasure goblin** (~1–1.5 min in, then every ~3 min): a golden goblin near a player that runs from anyone close,
     spills coins with every hit and drops a jackpot when caught; it escapes after ~55 s.

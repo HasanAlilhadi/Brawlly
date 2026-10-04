@@ -1,6 +1,6 @@
 class_name GameMode
 extends Node
-## Match rules for every mode: spawn points, objectives (flags / hill), scoring, respawns, time limit
+## Match rules for every mode (co-op, King of the Hill): spawn points, the hill, scoring, respawns, time limit
 ## and the end of the match. Created by main.gd with the same name on every peer; the server decides,
 ## other peers receive scores / announcements / game over via RPC.
 
@@ -13,11 +13,10 @@ const VERSUS_RESPAWN: float = 5.0
 
 var settings: Dictionary
 var match_mode: int = Net.Mode.COOP
-## Score per team (team modes) or per player peer (deathmatch).
+## Score per team (King of the Hill).
 var scores: Dictionary = {}
 var time_left: float = 0.0
 var team_bases: Array[Vector3] = []
-var flags: Array[CaptureFlag] = []
 var hill: Hill
 var is_over: bool = false
 
@@ -46,22 +45,13 @@ func setup(match_settings: Dictionary, players: Dictionary) -> void:
 	for i in peers.size():
 		var peer: int = peers[i]
 		var point := Vector3.ZERO
-		match match_mode:
-			Net.Mode.COOP:
-				point = Vector3(cos(TAU * i / peers.size()), 0, sin(TAU * i / peers.size())) * (2.5 if peers.size() > 1 else 0.0)
-			Net.Mode.DEATHMATCH:
-				# Every player gets a town: far enough apart that neighboring towns never overlap.
-				var count := maxi(peers.size(), 2)
-				var angle: float = TAU * i / count
-				var apart := WorldBuilder.TOWN_RADIUS * 2.2 / (2.0 * sin(PI / count))
-				var ring := minf(maxf(half * 0.6, apart), half - WorldBuilder.TOWN_RADIUS)
-				point = Vector3(cos(angle), 0.0, sin(angle)) * ring
-				scores[peer] = 0
-			_:
-				var team: int = players[peer].get("team", 0)
-				var slot: int = team_slots.get(team, 0)
-				team_slots[team] = slot + 1
-				point = team_bases[team] + Vector3(cos(slot * 1.3), 0.0, sin(slot * 1.3)) * 2.2
+		if match_mode == Net.Mode.COOP:
+			point = Vector3(cos(TAU * i / peers.size()), 0, sin(TAU * i / peers.size())) * (2.5 if peers.size() > 1 else 0.0)
+		else:
+			var team: int = players[peer].get("team", 0)
+			var slot: int = team_slots.get(team, 0)
+			team_slots[team] = slot + 1
+			point = team_bases[team] + Vector3(cos(slot * 1.3), 0.0, sin(slot * 1.3)) * 2.2
 		_spawn_points[peer] = point
 
 
@@ -69,32 +59,19 @@ func setup(match_settings: Dictionary, players: Dictionary) -> void:
 func world_spawn_points() -> Array[Vector3]:
 	if Net.is_team_mode(match_mode):
 		return team_bases
-	var points: Array[Vector3] = []
-	if match_mode == Net.Mode.COOP:
-		points.append(Vector3.ZERO)
-	else:
-		var peers := _spawn_points.keys()
-		peers.sort()
-		for peer in peers:
-			points.append(_spawn_points[peer])
+	var points: Array[Vector3] = [Vector3.ZERO]
 	return points
 
 
 ## Access rule for each town returned by `world_spawn_points()`, in the same order.
-## Empty = shared by everyone; owner_peer = personal base; team_id = team base.
+## Empty = shared by everyone; team_id = team base.
 func world_town_access() -> Array[Dictionary]:
 	var access: Array[Dictionary] = []
-	match match_mode:
-		Net.Mode.COOP:
-			access.append({})
-		Net.Mode.DEATHMATCH:
-			var peers := _spawn_points.keys()
-			peers.sort()
-			for peer in peers:
-				access.append({"owner_peer": peer})
-		_:
-			for team in team_bases.size():
-				access.append({"team_id": team})
+	if match_mode == Net.Mode.COOP:
+		access.append({})
+	else:
+		for team in team_bases.size():
+			access.append({"team_id": team})
 	return access
 
 
@@ -109,23 +86,13 @@ func spawn_point_for(peer: int) -> Vector3:
 	return _spawn_points.get(peer, Vector3.ZERO)
 
 
-## Flags / hill (every peer builds them; the server runs them).
+## The hill (every peer builds it; the server runs it).
 func build_objectives(world: Node3D) -> void:
-	match match_mode:
-		Net.Mode.CAPTURE_THE_FLAG:
-			for team in settings.team_count:
-				var flag := CaptureFlag.new()
-				flag.name = "Flag_%d" % team
-				flag.team_id = team
-				flag.home = team_bases[team]
-				flag.game_mode = self
-				world.add_child(flag)
-				flags.append(flag)
-		Net.Mode.KING_OF_THE_HILL:
-			hill = Hill.new()
-			hill.name = "Hill"
-			hill.game_mode = self
-			world.add_child(hill)
+	if match_mode == Net.Mode.KING_OF_THE_HILL:
+		hill = Hill.new()
+		hill.name = "Hill"
+		hill.game_mode = self
+		world.add_child(hill)
 
 
 func uses_time_limit() -> bool:
@@ -162,23 +129,14 @@ func on_player_died(player: Player) -> void:
 		return
 	var killer := player.last_attacker_peer
 	if killer != 0 and killer != player.peer_id and Net.team_of(killer) != player.team_id:
-		match match_mode:
-			Net.Mode.DEATHMATCH:
-				add_score(killer, 1)
-			Net.Mode.TEAM_DEATHMATCH:
-				add_score(Net.team_of(killer), 1)
 		announce("%s defeated %s" % [Net.name_of(killer), player.display_name])
-	for flag in flags:
-		flag.on_carrier_died(player)
 
 
-## Server: a player went down (they can still be revived) — a carried flag drops right away.
+## Server: a player went down (they can still be revived).
 func on_player_downed(player: Player) -> void:
 	if not multiplayer.is_server() or is_over:
 		return
 	announce("%s is down!" % player.display_name)
-	for flag in flags:
-		flag.on_carrier_died(player)
 
 
 func add_score(key: int, amount: int) -> void:
@@ -213,8 +171,6 @@ func _finish_by_score() -> void:
 			tie = true
 	if tie or best_key == -999:
 		finish("Draw!", "Nobody broke the tie.")
-	elif match_mode == Net.Mode.DEATHMATCH:
-		finish("%s wins!" % player_name(best_key), "%d kill%s" % [best, "" if best == 1 else "s"])
 	else:
 		finish("{team:%d} wins!" % best_key, score_text(true))
 
@@ -237,18 +193,11 @@ func player_name(peer: int) -> String:
 ## One-line summary for the HUD, e.g. "Your team 3   Red 2   4:12" (`tokens`: team names as
 ## Net.localize() tokens, for text the server sends to everyone).
 func score_text(tokens: bool = false) -> String:
+	if match_mode == Net.Mode.COOP:
+		return ""
 	var parts := PackedStringArray()
-	match match_mode:
-		Net.Mode.COOP:
-			return ""
-		Net.Mode.DEATHMATCH:
-			var ranked := scores.keys()
-			ranked.sort_custom(func(a: int, b: int) -> bool: return scores[a] > scores[b])
-			for peer in ranked.slice(0, 3):
-				parts.append("%s %d" % [player_name(peer), scores[peer]])
-		_:
-			for team in settings.team_count:
-				parts.append("%s %d" % ["{label:%d}" % team if tokens else Net.team_label(team), scores.get(team, 0)])
+	for team in settings.team_count:
+		parts.append("%s %d" % ["{label:%d}" % team if tokens else Net.team_label(team), scores.get(team, 0)])
 	var text := "   ".join(parts)
 	if uses_time_limit():
 		text += "   %d:%02d" % [int(time_left) / 60, int(time_left) % 60]

@@ -4,7 +4,7 @@ var saw_respawn := false
 var last_scene := ""
 var last_score := ""
 func _ready() -> void:
-	Net.set_profile("Clienty")
+	Net.profile.name = "Clienty"
 	await get_tree().create_timer(1.0).timeout
 	Net.join("127.0.0.1")
 func _log(m: String) -> void:

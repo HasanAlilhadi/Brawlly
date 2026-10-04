@@ -11,9 +11,6 @@ extends Node
 ## Score limit range / default per mode (index = Net.Mode).
 const SCORE_LIMITS := [
 	Vector3i(0, 0, 0),       # co-op: not used
-	Vector3i(1, 50, 10),     # deathmatch: kills
-	Vector3i(1, 50, 15),     # team deathmatch: team kills
-	Vector3i(1, 10, 3),      # capture the flag: captures
 	Vector3i(30, 300, 120),  # king of the hill: seconds held
 ]
 const PLAYERS_WIDTH: float = 700.0

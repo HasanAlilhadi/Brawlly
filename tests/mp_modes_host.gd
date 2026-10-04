@@ -1,12 +1,12 @@
 extends Node
-## Plays DM -> TDM -> CTF -> KotH with the client, checking base access and scores on the server.
+## Plays King of the Hill with the client, checking team base access and the hill score on the server.
 var t := 0.0
 var step := 0
 var st := 0.0
-var modes := [Net.Mode.DEATHMATCH, Net.Mode.TEAM_DEATHMATCH, Net.Mode.CAPTURE_THE_FLAG, Net.Mode.KING_OF_THE_HILL]
+var modes := [Net.Mode.KING_OF_THE_HILL]
 var round_i := 0
 func _ready() -> void:
-	Net.set_profile("Hosty"); Net.host()
+	Net.profile.name = "Hosty"; Net.host()
 func _log(m: String) -> void:
 	printerr("HOST [%.1f] %s" % [t, m])
 func _p(peer_is_host: bool) -> Player:
@@ -29,7 +29,7 @@ func _process(delta: float) -> void:
 	match step:
 		0: # lobby: configure next mode
 			if Net.players.size() >= 2 and st > 1.0:
-				Net.set_setting("mode", modes[round_i]); Net.set_setting("camp_count", 4); Net.set_setting("score_limit", 5 if modes[round_i] == Net.Mode.KING_OF_THE_HILL else 2)
+				Net.set_setting("mode", modes[round_i]); Net.set_setting("camp_count", 4); Net.set_setting("score_limit", 5)
 				var client_peer: int = Net.players.keys().filter(func(k): return k != 1)[0]
 				Net.set_team(client_peer, 1); Net.set_team(1, 0)
 				Net.start_game(); step = 1; st = 0
@@ -48,22 +48,9 @@ func _process(delta: float) -> void:
 		2:
 			var h := _p(true); var c := _p(false); var gm := _gm()
 			if gm == null: return
-			match modes[round_i]:
-				Net.Mode.DEATHMATCH, Net.Mode.TEAM_DEATHMATCH:
-					if not c.is_dead:
-						c.global_position = h.global_position + h.facing() * 0.9
-						h.attack_melee()
-				Net.Mode.CAPTURE_THE_FLAG:
-					# client carries host team's flag (team 0) to its own base (team 1)
-					var flag0: CaptureFlag = gm.flags[0]
-					var flag1: CaptureFlag = gm.flags[1]
-					if flag0.state != CaptureFlag.State.CARRIED:
-						c.global_position = flag0.global_position
-					else:
-						c.global_position = flag1.home
-				Net.Mode.KING_OF_THE_HILL:
-					h.global_position = Vector3(0.5, 0, 0.5)
-					c.global_position = gm.team_bases[1]
+			# host holds the hill alone; the client waits at its team base
+			h.global_position = Vector3(0.5, 0, 0.5)
+			c.global_position = gm.team_bases[1]
 			if gm.is_over or st > 25:
 				_log("scores=%s over=%s time_left=%.0f" % [gm.scores, gm.is_over, gm.time_left])
 				step = 3; st = 0

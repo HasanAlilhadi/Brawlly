@@ -1,7 +1,7 @@
 class_name Minimap
 extends Control
 ## Whole-world map. Shows only what the local player's side may know:
-## - objectives: the King of the Hill zone (holder's color, pulses while contested), CTF bases and flags
+## - objectives: the King of the Hill zone (holder's color, pulses while contested)
 ## - camps as tent badges (red = active, bigger = more orcs; grey + cross = destroyed) and trading posts
 ## - friends only: teammates as arrows pointing where they face (their player colors; you are white) and
 ##   friendly soldiers as dots. Hostile players and their soldiers are never drawn (versus modes).
@@ -12,7 +12,6 @@ extends Control
 const TENT_ICON := preload("res://assets/ui/icons/game/tent.svg")
 const SHOP_ICON := preload("res://assets/ui/icons/game/shop.svg")
 const CROWN_ICON := preload("res://assets/ui/icons/game/crown.svg")
-const FLAG_ICON := preload("res://assets/ui/icons/game/flag.svg")
 const OUTLINE := Color(0, 0, 0, 0.7)
 
 @export var background: Color = Color(0.16, 0.3, 0.14, 0.85)
@@ -62,7 +61,6 @@ func _draw() -> void:
 		draw_line(_to_map(Vector3(f, 0, -half)), _to_map(Vector3(f, 0, half)), grid_color, 1.0)
 		draw_line(_to_map(Vector3(-half, 0, f)), _to_map(Vector3(half, 0, f)), grid_color, 1.0)
 	_draw_hill(k)
-	_draw_flag_bases(k)
 	for camp in _camps:
 		if is_instance_valid(camp):
 			_draw_camp(camp, k)
@@ -80,7 +78,6 @@ func _draw() -> void:
 			continue
 		var color: Color = other.get("unit_color")
 		_draw_arrow(other as Node3D, 5.0 * k, color if color.a > 0.0 else ally_color)
-	_draw_flags(k)
 	for node in get_tree().get_nodes_in_group(&"tracked"):
 		var tracked := node as Node3D
 		if tracked and tracked.is_inside_tree():
@@ -119,29 +116,6 @@ func _draw_hill(k: float) -> void:
 	draw_arc(at, radius, 0.0, TAU, 40, OUTLINE, 3.2 * k)
 	draw_arc(at, radius, 0.0, TAU, 40, color, 1.8 * k)
 	_draw_icon(at, radius * 1.1, CROWN_ICON, Color(color, 0.95))
-
-
-## Capture the Flag: each team's base pad (team color).
-func _draw_flag_bases(k: float) -> void:
-	for node in get_tree().get_nodes_in_group(&"flags"):
-		var flag := node as CaptureFlag
-		var color: Color = Net.team_color(flag.team_id)
-		var at := _to_map(flag.home)
-		var radius := maxf(CaptureFlag.CAPTURE_RANGE / (GameConfig.world_half * 2.0) * size.x, 7.0 * k)
-		draw_circle(at, radius, Color(color, 0.3))
-		draw_arc(at, radius, 0.0, TAU, 32, Color(color, 0.9), 1.5 * k)
-
-
-## Capture the Flag: the flags where they are now (at home, carried or dropped).
-func _draw_flags(k: float) -> void:
-	for node in get_tree().get_nodes_in_group(&"flags"):
-		var flag := node as CaptureFlag
-		var color: Color = Net.team_color(flag.team_id)
-		var at := _to_map(flag.global_position)
-		if flag.state != CaptureFlag.State.HOME:
-			var pulse := fmod(_time * 1.2, 1.0)
-			draw_arc(at, 6.0 * k * (1.0 + pulse), 0.0, TAU, 24, Color(color, 1.0 - pulse), 1.5 * k)
-		_draw_badge(at, 6.0 * k, color, FLAG_ICON)
 
 
 # --- Camps / posts -----------------------------------------------------------------

@@ -7,7 +7,7 @@ var revived_seen := false
 
 
 func _ready() -> void:
-	Net.set_profile("Clienty")
+	Net.profile.name = "Clienty"
 	await get_tree().create_timer(1.0).timeout
 	Net.join("127.0.0.1")
 
