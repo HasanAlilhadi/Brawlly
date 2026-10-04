@@ -35,13 +35,14 @@ stalls = Array[StringName]([&"healer"])
 script = ExtResource("2_def")
 id = &"recruit"
 title = "Recruit"
-description = "Train a soldier (10 s each, one after another), then take it from the pen"
+description = "Trains for 10 s, then joins you (bought at the barracks: waits in its pen)"
 icon = ExtResource("icon_soldier")
 base_cost = 50
 cost_growth = 1.0
 max_level = 0
 amount = 1.0
 stalls = Array[StringName]([&"barracks"])
+sheet = true
 
 [sub_resource type="Resource" id="Upgrade_command"]
 script = ExtResource("2_def")
@@ -58,12 +59,13 @@ stalls = Array[StringName]([&"barracks"])
 script = ExtResource("2_def")
 id = &"drill"
 title = "Drill Soldiers"
-description = "Soldiers get +15% health and damage"
+description = "+25% soldier damage and health"
 icon = ExtResource("icon_soldier")
 base_cost = 60
-max_level = 8
-amount = 0.15
+max_level = 3
+amount = 0.25
 stalls = Array[StringName]([&"barracks"])
+sheet = true
 
 [sub_resource type="Resource" id="Upgrade_potion"]
 script = ExtResource("2_def")

@@ -144,7 +144,8 @@ func setup(player: Player, camps: Array[Camp]) -> void:
 	_update_weapon_controls()
 	player.health_changed.connect(_on_health_changed)
 	player.coins_changed.connect(_on_coins_changed)
-	player.soldier_ready.connect(func() -> void: show_toast("A soldier is ready at the barracks"))
+	player.soldier_ready.connect(func(at_barracks: bool) -> void:
+		show_toast("A soldier is ready at the barracks" if at_barracks else "A soldier joined you"))
 	_on_coins_changed(player.coins)
 	_on_health_changed(player.health, player.max_health)
 	minimap.setup(player, camps)

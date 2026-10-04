@@ -177,7 +177,11 @@ by touch index so the joystick and buttons work together with multi-touch.
   `combo_damage_multiplier` (1.5×) and pops "COMBO!" for everyone (`HitFx.report_combo` → `main._net_combo`). Soldiers don't count.
 - **Class upgrades** (`UpgradeDef.classes` set; in `upgrade_catalog.tres`): bought anywhere from the upgrades bottom
   sheet (`UpgradeSheet`, scenes/ui/upgrade_sheet.gd, in the HUD: T / gamepad View / the star button next to pause;
-  `Hud.toggle_upgrades()`), never at stalls. Their effects are recomputed from the replicated `upgrade_levels` on every
+  `Hud.toggle_upgrades()`; slides in / out, `_slide()` / `_place()`), never at stalls. The sheet has two tabs: Hero (the
+  class upgrades) and Army (`UpgradeDef.sheet` items, `Player.sheet_items()`: Recruit, shown as a wide card with the
+  army size and the training countdown, and Drill Soldiers, 3 levels × +25% `ally_power`). A recruit bought away from
+  a barracks trains `SOLDIER_TRAIN_TIME` and then spawns behind the player, following (`_finish_training` with no
+  stall; `soldier_ready(at_barracks)`); bought at the barracks it still goes to the pen. Their effects are recomputed from the replicated `upgrade_levels` on every
   peer (`Player._apply_class_upgrades()`: damage, Fire Rate = shorter cooldowns + `anim_speed`, `aim_range`, `arrow_pierce`,
   `knockback_power`, `sword_wave`, `dash_damage`, `knife_damage`, the carried `weapons`); `_apply_upgrade` only refills a
   newly bought shield. Swordsman: sword_damage, sword_rate, sword_knockback / sword_wave (pick one: `UpgradeDef.excludes`),
@@ -200,7 +204,8 @@ by touch index so the joystick and buttons work together with multi-touch.
   puts one town per team (`GameMode.setup`). `UpgradeDef.stalls` lists the stalls that sell an item;
   `Player.can_buy()` requires standing at one (`ShopStation.can_buy_here`, also checked on the server). main.gd
   tracks the stall in reach (`_update_stall`: highlight, HUD prompt, `interact` opens `ShopMenu.open(stall)`). Every stall is used from any side, within `ShopStation.STALL_REACH` of its building (`_distance()` from `_footprint()`: the STALLS "block", the barracks' compound); `nearest()` = the closest in reach. No ground rings: a stall in reach glows (`set_highlight` → `assets/shaders/highlight_glow.gdshader` as `material_overlay`) and its sign turns gold; a pin bobs over the barracks gate while your soldiers wait. New building = a STALLS row with its "block". Soldiers read `Player.ally_power`.
-- **Soldiers come only from the barracks** (camps and the Warlord's warband are routed — they `die()` and drop loot).
+- **Soldiers come only from recruiting** (barracks or the upgrades sheet's Army tab; camps and the Warlord's warband
+  are routed — they `die()` and drop loot).
   Recruit (50, constant) → `Player.soldiers_training` (replicated count; a queue — one after another,
   `GameConfig.SOLDIER_TRAIN_TIME` each) → server spawns an `Ally` with `penned` (replicated; group `penned`, out of
   `player_units`, can't be hurt, drawn at `Ally.PENNED_SCALE`) in that barracks' courtyard (`ShopStation.pen_spot()`).

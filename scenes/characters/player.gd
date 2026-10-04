@@ -25,8 +25,9 @@ signal revived(player: Player, helpers: Array)
 ## Every peer: the downed state changed (visuals, HUD).
 signal downed_changed(downed: bool)
 signal army_order_changed(order: int)
-## Every peer: a trained soldier is waiting in the barracks pen.
-signal soldier_ready
+## Every peer: a trained soldier is ready: waiting in the barracks pen, or (recruited away from a barracks,
+## from the upgrades sheet) already at your side.
+signal soldier_ready(at_barracks: bool)
 ## Every peer: the weapon in hand changed (id from WEAPONS).
 signal weapon_changed(weapon: String)
 ## Every peer: the shield went up / down, took a hit, or broke (`shield_health` 0).
@@ -1940,20 +1941,27 @@ func _physics_process(delta: float) -> void:
 		_update_ability_xp_lockout(delta)
 
 
-## The oldest soldier in training is ready: it appears in the pen of the barracks it was bought at.
+## The oldest soldier in training is ready: it appears in the pen of the barracks it was bought at, or (bought
+## from the upgrades sheet away from a barracks) right behind you and follows at once.
 func _finish_training() -> void:
 	var stall: ShopStation = _training_stalls.pop_front() if not _training_stalls.is_empty() else null
 	soldiers_training -= 1
-	if not is_instance_valid(stall):
+	if is_instance_valid(stall):
+		NetSpawn.unit(&"ally", stall.pen_spot(), {"team": team_id, "owner": peer_id, "pen": stall.get_path(),
+				"weapon": class_def.ally_weapon})
+		_net_soldier_ready.rpc(stall.pen_spot(), true)
 		return
-	NetSpawn.unit(&"ally", stall.pen_spot(), {"team": team_id, "owner": peer_id, "pen": stall.get_path(),
-			"weapon": class_def.ally_weapon})
-	_net_soldier_ready.rpc()
+	var at := GameConfig.clamp_to_world(global_position - facing() * 1.3)
+	NetSpawn.unit(&"ally", at, {"team": team_id, "owner": peer_id, "weapon": class_def.ally_weapon})
+	_net_soldier_ready.rpc(at, false)
 
 
 @rpc("authority", "call_local", "reliable")
-func _net_soldier_ready() -> void:
-	soldier_ready.emit()
+func _net_soldier_ready(at: Vector3, at_barracks: bool) -> void:
+	if not at_barracks:
+		HitFx.flash(at + Vector3(0, 0.6, 0), HitFx.REVIVE_SPARKLE, Color(unit_color, 0.9), 1.4, 0.5)
+		HitFx.flash(at + Vector3(0, 0.05, 0), HitFx.COMBO_RING, Color(unit_color, 0.8), 1.6, 0.4)
+	soldier_ready.emit(at_barracks)
 
 
 ## Server: every soldier waiting in a pen joins this player (they must stand at a barracks: its front
@@ -2279,6 +2287,15 @@ func is_upgrade_locked(def: UpgradeDef) -> bool:
 	return false
 
 
+## The upgrades sheet's Army section (Recruit, Drill Soldiers), in catalog order.
+func sheet_items() -> Array[UpgradeDef]:
+	var result: Array[UpgradeDef] = []
+	for def in CATALOG.upgrades:
+		if def.sheet:
+			result.append(def)
+	return result
+
+
 ## The class upgrades this hero's class can buy (upgrades sheet), in catalog order.
 func class_upgrades() -> Array[UpgradeDef]:
 	var result: Array[UpgradeDef] = []
@@ -2304,10 +2321,11 @@ func is_upgrade_useful(def: UpgradeDef) -> bool:
 	return true
 
 
-## Stall items only at a trading post stall that sells `def`; class upgrades anywhere (checked on the server too).
+## Stall items only at a trading post stall that sells `def`; class upgrades and the sheet's Army items anywhere
+## (checked on the server too).
 func can_buy(def: UpgradeDef) -> bool:
 	return not is_dead and not is_downed and not is_upgrade_maxed(def) and is_upgrade_useful(def) \
-			and coins >= upgrade_cost(def) and (def.is_class_upgrade() or ShopStation.can_buy_here(self, def))
+			and coins >= upgrade_cost(def) and (def.is_class_upgrade() or def.sheet or ShopStation.can_buy_here(self, def))
 
 
 ## Buys on the server; on clients sends the request to the server.

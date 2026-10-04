@@ -101,9 +101,16 @@ func _sheet() -> void:
 	press.action = &"upgrades"
 	press.pressed = true
 	Input.parse_input_event(press)
-	await _wait(0.3)
+	# It slides up from below the screen: sample its top edge while it opens.
+	var tops: Array[float] = []
+	for frame in 40:
+		await get_tree().process_frame
+		if hud.upgrade_sheet.visible and hud.upgrade_sheet.modulate.a > 0.0:
+			tops.append(hud.upgrade_sheet.global_position.y)
 	_check(hud.upgrade_sheet.is_open and hud.upgrade_sheet.visible, "T opens the upgrades sheet")
-	var cards := hud.upgrade_sheet.find_children("Card_*", "", true, false)
+	_check(tops.size() > 5 and tops[0] > tops[-1] + 100.0 and tops[tops.size() / 2] < tops[0] and tops[tops.size() / 2] > tops[-1] - 1.0,
+			"it slides up over several frames (%.0f -> %.0f px over %d frames)" % [tops[0] if tops else 0.0, tops[-1] if tops else 0.0, tops.size()])
+	var cards := hud.upgrade_sheet.find_child("UpgradeCards", true, false).get_children()
 	var expected := player.class_upgrades().size()
 	_check(cards.size() == expected and expected >= 4, "%d cards, all for the %s" % [cards.size(), player.class_def.display_name])
 	for card in cards:
@@ -119,10 +126,47 @@ func _sheet() -> void:
 	_check(await _buy(StringName(prefix + "_rate")), "bought Fire Rate")
 	_check(_cooldown() < cooldown_before * 0.9, "faster attacks (%.2f -> %.2f s)" % [cooldown_before, _cooldown()])
 	hud.toggle_upgrades()
-	await _wait(0.3)
+	await _wait(0.1)
+	_check(hud.upgrade_sheet.visible, "closing slides it down (still on screen right after T)")
+	await _wait(0.5)
 	_check(not hud.upgrade_sheet.is_open and not hud.upgrade_sheet.visible, "T again closes it")
 	hud.toggle_upgrades()
-	await _wait(0.3)
+	await _wait(0.6)
+	await _army(hud)
+
+
+## Army tab: recruit away from any barracks (joins beside you after 10 s), Drill Soldiers maxes at 3 levels.
+func _army(hud: Hud) -> void:
+	(hud.upgrade_sheet.find_child("ArmyTab", true, false) as Button).pressed.emit()
+	(hud.upgrade_sheet.find_child("ArmyTab", true, false) as Button).button_pressed = true
+	await _wait(0.2)
+	_check((hud.upgrade_sheet.find_child("ArmyCards", true, false) as Control).visible
+			and not (hud.upgrade_sheet.find_child("UpgradeCards", true, false) as Control).visible, "the Army tab shows the soldier cards")
+	var coins := player.coins
+	var before := player.followers().size()
+	_check(await _buy(&"recruit"), "bought a soldier away from the barracks")
+	_check(player.coins == coins - 50 and player.soldiers_training == 1, "50 coins, one soldier training")
+	await _wait(1.0)
+	var status := (hud.upgrade_sheet.find_child("RecruitStatus", true, false) as Label).text
+	_check(status.begins_with("Next soldier in 9") or status.begins_with("Next soldier in 8"), "the card counts down (%s)" % status)
+	await _wait(8.5)
+	_check(player.followers().size() == before, "not before 10 s")
+	await _wait(1.0)
+	var joined := player.followers().filter(func(a: Node) -> bool: return not a.get("penned"))
+	_check(joined.size() == before + 1, "after 10 s a soldier joins (%d following)" % joined.size())
+	if not joined.is_empty():
+		_check((joined[-1] as Node3D).global_position.distance_to(player.global_position) < 3.0, "it appears right beside you")
+	var power := player.ally_power
+	for i in 3:
+		_check(await _buy(&"drill"), "Drill Soldiers level %d" % (i + 1))
+	_check(is_equal_approx(player.ally_power, power + 0.75) and player.is_upgrade_maxed(_def(&"drill")),
+			"soldier damage and health +75%% at most (power %.2f)" % player.ally_power)
+	_check(not await _buy(&"drill"), "no fourth level")
+	for soldier in player.followers():
+		soldier.queue_free()  # it would fight the orcs the class checks below count hits on
+	(hud.upgrade_sheet.find_child("HeroTab", true, false) as Button).button_pressed = true
+	(hud.upgrade_sheet.find_child("HeroTab", true, false) as Button).pressed.emit()
+	await _wait(0.2)
 
 
 func _damage() -> float:

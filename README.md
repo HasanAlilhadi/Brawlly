@@ -13,8 +13,10 @@ portrait on phones. There is no single player: host a game (alone is fine) or jo
   - **Spearman** (`keeper.glb`): straight spear stabs that pierce everything in a line. Soldiers: spears (longer reach).
   - **Bowman** (`archer.glb`): fast arrows. **Bow Rain** marks a large area with X, then LMB rains arrows
     into it. Soldiers: archers that stop at range and shoot.
-  - **Class upgrades** (press **T**, the gamepad View button, or the star button next to pause): a bottom sheet with
-    your class's upgrades, bought with coins anywhere (free in the Training Field, which also hands out the unlocks):
+  - **Upgrades sheet** (press **T**, the gamepad View button, or the star button next to pause): slides up from the
+    bottom with two tabs. **Army**: recruit a soldier anywhere (50 coins; it trains 10 s, then joins you on the spot)
+    and **Drill Soldiers** (+25% soldier damage and health, 3 levels). **Hero**: your class's upgrades, bought with
+    coins anywhere (free in the Training Field, which also hands out the unlocks):
     - Swordsman: Increase Damage, Fire Rate, **Knock Back or Wave** (pick one: hits shove enemies far back, or each
       swing sends a slash wave through enemies), **Dash Attack** (C: dash through enemies, slashing each), Shield.
     - Spearman: Increase Damage, Fire Rate, **Can Throw** (E switches to throwing spears), Shield. (Bull Run: later.)
@@ -32,7 +34,8 @@ portrait on phones. There is no single player: host a game (alone is fine) or jo
 - **Orc camps**: small squads (≤ 7) live in a tent, bigger ones in a house. Each camp has a squad (≈4–6 near the start up to 20–25 at the edges; bigger squads get a bigger, tougher house). Killed orcs respawn after 10 s
   until the house is destroyed. Destroying it routes the surviving orcs (they fall and drop their loot) and
   spills coins.
-- **Soldiers** are bought at the trading post's **Barracks** (a walled training compound): 50 coins each, trained
+- **Soldiers** are bought from the upgrades sheet's Army tab anywhere (they join you after 10 s), or at the trading
+  post's **Barracks** (a walled training compound): 50 coins each, trained
   one after another (10 s each), then they wait in its courtyard until you take them at its gate (E / tap) or with
   the Barracks shop's **Take** button. They follow and fight for
   you; dead soldiers never come back. Army cap 10 (following + in the pen + training); **Command** raises it by 1

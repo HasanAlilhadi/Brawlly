@@ -21,7 +21,7 @@ func _ready() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--role="):
 			role = arg.substr(7)
-	get_tree().create_timer(40.0).timeout.connect(func() -> void:
+	get_tree().create_timer(60.0).timeout.connect(func() -> void:
 		if not finished:
 			printerr("FAIL %s: timed out" % role)
 			get_tree().quit(1))
@@ -77,7 +77,7 @@ func _host() -> void:
 			"the client's Dash Attack purchase reached the server (coins %d)" % client.coins)
 	me.request_buy(_def(&"bow_range"))
 	_check(is_equal_approx(me.aim_range, 14.5), "host Bowman: Fire Range on the server (%.1f m)" % me.aim_range)
-	await get_tree().create_timer(4.0).timeout
+	await get_tree().create_timer(16.0).timeout
 
 
 func _client() -> void:
@@ -111,3 +111,11 @@ func _client() -> void:
 	while not is_equal_approx(host.aim_range, 14.5) and Time.get_ticks_msec() < end:
 		await get_tree().process_frame
 	_check(is_equal_approx(host.aim_range, 14.5), "the host Bowman's Fire Range shows on the client too (%.1f m)" % host.aim_range)
+	# Army tab: a soldier recruited away from the barracks joins the client 10 s later.
+	var joined := [false]
+	me.soldier_ready.connect(func(at_barracks: bool) -> void: joined[0] = not at_barracks)
+	me.request_buy(_def(&"recruit"))
+	end = Time.get_ticks_msec() + 13000
+	while me.followers().is_empty() and Time.get_ticks_msec() < end:
+		await get_tree().process_frame
+	_check(me.followers().size() == 1 and joined[0], "a recruited soldier joins the client after 10 s")
