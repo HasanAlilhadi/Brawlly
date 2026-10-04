@@ -4,7 +4,8 @@ extends Node
 ## - archers shoot from half their hero's bow range, step back from an orc next to them, walk around a wall
 ##   that blocks their line of fire, and line up behind the hero;
 ## - teamwork: three swordsmen spread over three orcs; an orc hitting the hero is attacked first;
-## - following: a soldier cut off by a cup-shaped wall walks the hero's path out and catches up.
+## - following: a soldier cut off by a cup-shaped wall walks the hero's path out and catches up;
+## - soldiers only ever walk or run (no catch-up / charge boost): following, charging and fighting.
 ##   "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/ally_test.gd
 ## --shots=<dir> also saves frames of a spear stab (needs a window: --position -4000,-4000, no --headless).
 
@@ -48,6 +49,7 @@ func _ready() -> void:
 	await _spread()
 	await _defend()
 	await _follow_around_wall()
+	await _two_speeds()
 	printerr("%s ally: done (%d failures)" % ["PASS" if failures == 0 else "FAIL", failures])
 	get_tree().quit(1 if failures else 0)
 
@@ -267,3 +269,41 @@ func _follow_around_wall(no_trail: bool = false) -> void:
 		player.set_physics_process(true)
 		return
 	_check(out.call(), "a soldier cut off in a cup of walls walks the hero's way out and catches up (%.1f m, %.1f s)" % [gap, took])
+
+
+## Every frame a soldier moves, its speed is its walk or its run (or slower only while attacking / pushed).
+func _two_speeds() -> void:
+	await _reset()
+	var soldiers: Array[Ally] = [_ally("sword", Vector3(-6, 0, -6)), _ally("bow", Vector3(6, 0, -6)), _ally("spear", Vector3(0, 0, -8))]
+	var run := soldiers[0].move_speed
+	var walk := run * soldiers[0].walk_share
+	var count := {"frames": 0, "other": 0}  # moving frames; frames at a third speed
+	var sample := func() -> void:
+		for soldier in soldiers:
+			if soldier._action_time > 0.0 or soldier._knockback.length() > 0.05:
+				continue
+			var v := soldier.velocity
+			v.y = 0.0
+			var speed := v.length()
+			if speed < 0.05:
+				continue
+			count.frames += 1
+			if absf(speed - run) > 0.15 and absf(speed - walk) > 0.15:
+				count.other += 1
+	# Follow a hero walking away, then charge at an orc, then follow again.
+	player.joystick_vector = Vector2(0.0, 1.0)
+	for i in 180:
+		await get_tree().physics_frame
+		sample.call()
+	player.joystick_vector = Vector2.ZERO
+	var orc := _orc(player.global_position + Vector3(0, 0, 9), false)
+	player.command_army(Player.Order.CHARGE, orc.global_position)
+	for i in 240:
+		await get_tree().physics_frame
+		sample.call()
+	player.command_army(Player.Order.FOLLOW, player.global_position)
+	for i in 180:
+		await get_tree().physics_frame
+		sample.call()
+	_check(count.frames > 100 and count.other <= count.frames * 0.03,
+			"soldiers move only at walk %.1f or run %.1f m/s (%d of %d moving frames at another speed)" % [walk, run, count.other, count.frames])

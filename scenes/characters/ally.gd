@@ -57,9 +57,11 @@ const WEAPON_STATS: Dictionary = {
 @export var aggro_range: float = 6.0
 ## Stop chasing when this far from the player.
 @export var leash_range: float = 9.0
-## Speed boost while far from the formation, so the army keeps up after long runs.
-@export var catch_up_multiplier: float = 1.5
-@export var catch_up_distance: float = 4.0
+## Soldiers move at exactly two speeds: running (move_speed) or walking (this share of it, with the walk clip),
+## never faster to catch up or charge (`_get_move_input` snaps every move to one of them).
+@export var walk_share: float = 0.45
+## Closer than this to its spot in the formation a soldier walks the rest of the way.
+@export var walk_distance: float = 2.0
 ## Orders: soldiers fight hostiles within this distance of the charge / hold point.
 @export var charge_radius: float = 9.0
 @export var hold_radius: float = 6.0
@@ -108,7 +110,6 @@ var _order_serial: int = 0
 ## Server: seconds left of walking to the ordered spot without fighting (0 = not regrouping).
 var _regroup: float = 0.0
 var _slot_offset: Vector3
-var _base_speed: float
 var _base_max_health: float
 var _base_damage: float
 ## Following: a point of the hero's trail to walk to while the straight way to the slot is blocked.
@@ -130,7 +131,6 @@ func _ready() -> void:
 	if not penned:
 		add_to_group(&"player_units")
 	_think_timer = randf() * 0.3
-	_base_speed = move_speed
 	_base_separation_strength = separation_strength
 	_base_max_health = max_health
 	_base_damage = melee_damage
@@ -298,6 +298,16 @@ func take_damage(amount: float, attacker: Node3D = null, is_melee: bool = true, 
 
 
 func _get_move_input(delta: float) -> Vector3:
+	var move := _desired_move(delta)
+	move.y = 0.0
+	var strength := move.length()
+	if strength < 0.15:
+		return Vector3.ZERO
+	return move / strength * (1.0 if strength >= 0.75 else walk_share)
+
+
+## The move this frame (any length up to 1); `_get_move_input` turns it into a run or a walk.
+func _desired_move(delta: float) -> Vector3:
 	_update_compound_collision()
 	look_override = Vector3.ZERO  # archers face their target while shooting / stepping back (`_shoot_at`)
 	if penned:
@@ -312,7 +322,6 @@ func _get_move_input(delta: float) -> Vector3:
 		_think()
 
 	if not GameConfig.is_gone(target):
-		move_speed = _base_speed
 		var via := _route(target.global_position)
 		if via != target.global_position:
 			return _walk_to(via, delta)
@@ -323,11 +332,9 @@ func _get_move_input(delta: float) -> Vector3:
 	var slot := _slot_point()
 	var via := _route(slot)
 	if via != slot:
-		move_speed = _base_speed * catch_up_multiplier
 		return _walk_to(via, delta)
 	if _via != Vector3.INF:
 		# Cut off from the slot (a wall, a house): the hero's own way around.
-		move_speed = _base_speed * catch_up_multiplier
 		if _via.distance_to(Vector3(global_position.x, 0.0, global_position.z)) < 0.5:
 			_via = _trail_point(slot)
 			if _via == Vector3.INF:
@@ -336,11 +343,10 @@ func _get_move_input(delta: float) -> Vector3:
 	var to_slot := slot - global_position
 	to_slot.y = 0.0
 	var dist := to_slot.length()
-	move_speed = _base_speed * (catch_up_multiplier if dist > catch_up_distance else 1.0)
 	if dist < 0.4:
 		return _separation * 0.5
-	# Hurry when far behind, stroll when close.
-	return steer(to_slot.normalized() * clampf(dist / 3.0, 0.3, 1.0), delta)
+	# Run when behind, walk the last bit.
+	return steer(to_slot.normalized() * (1.0 if dist > walk_distance else 0.5), delta)
 
 
 ## Archer: walk up until the target is in range with a clear line of fire (around what blocks it), then
@@ -468,7 +474,6 @@ func _exit_move(delta: float) -> Vector3:
 	if to_gate.length() < 0.5:
 		_exit_path.pop_front()
 		return Vector3.ZERO
-	move_speed = _base_speed
 	return steer(to_gate.normalized(), delta)
 
 
@@ -508,8 +513,7 @@ func _pen_move(delta: float) -> Vector3:
 		_resting = true
 		return Vector3.ZERO
 	_resting = false
-	move_speed = _base_speed * 0.45
-	return to_spot.normalized() * 0.7
+	return to_spot.normalized() * 0.5  # strolls (walk speed)
 
 
 func _think() -> void:

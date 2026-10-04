@@ -292,7 +292,8 @@ by touch index so the joystick and buttons work together with multi-touch.
   level and straight ahead after each skeleton update, plus a `HitFx.stab` streak) — never thrown. Following: the
   server records `Player.trail` (a point every 0.8 m); a soldier whose straight way to its slot is blocked
   (`_clear_walk`) walks to the newest trail point it can reach (`_trail_point`), so it follows the hero around
-  walls and buildings that local steering alone can't get out of.
+  walls and buildings that local steering alone can't get out of. Speed: exactly two, run (`move_speed`) and walk (`walk_share` × it, walk clip, the last `walk_distance` m to
+  the slot and pen strolls) — `_get_move_input` snaps every move to one of them; no catch-up / charge boost.
 - Far-away camps pause their orcs (`Camp.activation_range`; downed players still count as near, only dead ones don't) — keep this for mobile performance. Orcs that are
   provoked or walking home (`Enemy.is_busy()`) stay awake. Damage calls `Unit._on_damaged(attacker)`; orcs forward it
   to `Camp.alert(attacker)`, which provokes the whole squad (tuning in `enemy.gd` → "Provoked" exports).
