@@ -36,12 +36,24 @@ func _ready() -> void:
 	row.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	row.offset_bottom = -HudStyle.UPGRADES_TAB_TUCK  # the part below the screen edge stays empty
 	add_child(row)
-	_key = UiKit.prompt("keyboard/t", HudStyle.KEY * 0.85)
+	_key = UiKit.prompt("keyboard/t", HudStyle.UPGRADES_TAB_KEY)
+	for letter in _key.find_children("*", "Label", true, false):
+		(letter as Label).add_theme_font_size_override("font_size", HudStyle.UPGRADES_TAB_KEY_FONT)
+	# The theme's key cap is padded for big prompts: a half-size copy of its frame keeps this one small.
+	var cap := _key.get_theme_stylebox(&"panel").duplicate() as StyleBoxTexture
+	if cap:
+		for side in [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]:
+			cap.set_texture_margin(side, cap.get_texture_margin(side) * 0.5)
+		cap.content_margin_left = 6
+		cap.content_margin_right = 6
+		cap.content_margin_top = 1
+		cap.content_margin_bottom = 5
+		_key.add_theme_stylebox_override(&"panel", cap)
 	row.add_child(_key)
 	_label = Label.new()
 	_label.text = "Upgrades"
 	_label.theme_type_variation = &"LabelLight"
-	_label.add_theme_font_size_override("font_size", HudStyle.FONT_TITLE)
+	_label.add_theme_font_size_override("font_size", HudStyle.FONT_BODY)
 	_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(_label)
 	_coin = TextureRect.new()

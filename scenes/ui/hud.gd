@@ -20,7 +20,8 @@ const ARMY_KEYS: PackedStringArray = ["1", "2", "3", "4"]
 ## The Warlord's bar shows while it is this close to you.
 const BOSS_BAR_RANGE: float = 40.0
 const DOWNED_PANEL_WIDTH: float = 380.0
-const DOWNED_PANEL_MARGIN: float = 48.0
+## Above the upgrades tab on the bottom edge (stall prompt, "You're down" card).
+const DOWNED_PANEL_MARGIN: float = HudStyle.UPGRADES_TAB_HEIGHT - HudStyle.UPGRADES_TAB_TUCK + HudStyle.GAP * 3.0
 ## Touch layouts lift the card above the sticks.
 const DOWNED_PANEL_TOUCH_LIFT: float = 300.0
 ## Touch control skins (Kenney Mobile Controls, style A).
