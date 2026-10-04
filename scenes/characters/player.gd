@@ -1939,6 +1939,23 @@ func followers() -> Array[Node]:
 					and not ally.get("penned"))
 
 
+## Server: where this hero walked lately (newest last), so soldiers cut off by a wall or a building can
+## follow the same way (`Ally._trail_point`). A point every TRAIL_STEP m, at most TRAIL_SIZE.
+const TRAIL_STEP: float = 0.8
+const TRAIL_SIZE: int = 48
+var trail: PackedVector3Array = PackedVector3Array()
+
+
+func _record_trail() -> void:
+	if is_dead or is_downed:
+		return
+	var here := Vector3(global_position.x, 0.0, global_position.z)
+	if trail.is_empty() or trail[trail.size() - 1].distance_to(here) >= TRAIL_STEP:
+		trail.append(here)
+		if trail.size() > TRAIL_SIZE:
+			trail.remove_at(0)
+
+
 ## Trained soldiers waiting in a barracks pen for this player.
 func penned_soldiers() -> Array[Node]:
 	return get_tree().get_nodes_in_group(&"penned").filter(
@@ -1965,6 +1982,8 @@ func _physics_process(delta: float) -> void:
 		_training_left[0] = maxf(_training_left[0] - delta, 0.0)
 	if multiplayer.is_server() and not _training_left.is_empty() and _training_left[0] <= 0.0:
 		_finish_training()
+	if multiplayer.is_server():
+		_record_trail()
 	if multiplayer.is_server() and army_order == Order.KILL:
 		_update_kill_order()
 	if multiplayer.is_server() and ability_active:

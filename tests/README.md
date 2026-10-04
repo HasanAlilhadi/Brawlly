@@ -26,6 +26,11 @@ Run from the project folder (`G` = the Godot binary). Tests start the game norma
 # point-blank arrows hit an orc / a camp wall right in front of the player
 "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/ai_test.gd
 
+# Soldiers: spear soldiers only stab, archers shoot from half the hero's bow range / step back / walk around a
+# wall in the way / line up behind the hero, swordsmen spread over orcs and defend the hero first, a soldier
+# trapped in a cup of walls follows the hero's trail out (--shots=<dir> with a window: frames of a stab)
+"$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/ally_test.gd
+
 # World events + army orders + pings + awards (solo)
 "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/events_test.gd
 

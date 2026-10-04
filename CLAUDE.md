@@ -140,7 +140,7 @@ by touch index so the joystick and buttons work together with multi-touch.
   `ClassPicker` (lobby only, with an `ArmyPreview`) → `Net.set_class()` → profile `class` + `Net.players[peer].class` → spawn data
   `class` → `Player.set_class()` (every peer, before entering the tree: swaps the Model, sets `weapons`, hand items,
   recolor hue, `hand_offset`). Soldiers carry `ClassDef.ally_weapon` (`Ally.weapon` from spawn data, `Ally.WEAPON_STATS`;
-  archers stop at `shoot_range` and shoot arrows). A class is locked to its weapons; nothing has ammo. `keeper.glb` is a rigid
+  archers shoot from `Ally.archer_range()`, spear soldiers only stab). A class is locked to its weapons; nothing has ammo. `keeper.glb` is a rigid
   Graveyard Kit model skinned onto the human's armature by `tools/blender_keeper_rig.py` (same bones and clips).
 - Anything damageable implements `take_damage(amount, attacker = null, is_melee = true)`.
 - **Weapons**: `Player.WEAPONS` rows (melee: `arc` / `reach` / `cooldown`): sword (melee 40, 80° wedge, cleaves),
@@ -280,7 +280,19 @@ by touch index so the joystick and buttons work together with multi-touch.
   `Unit.chase_avoid_mask`: extra layers `engage()` steers around while still chasing (soldiers: enemies, so they go
   around orcs in the way). Soldiers commit to their target (`Ally._commit_target`: no switching to a closer enemy
   until it's dead or out of range) — orcs keep the sticky `choose_target` rule.
-- Soldiers follow in a compact spiral formation (`Ally._update_slot`), at most `Player.follower_cap` (10–15) per player.
+- Soldiers follow in a compact spiral formation (`Ally._update_slot`), at most `Player.follower_cap` (10–15) per player;
+  archers stand in rows of five behind the hero (against its walking direction, `_heading`).
+- **Soldier AI** (`scenes/characters/ally.gd`, test `tests/ally_test.gd`): targets come from `Ally._best_enemy()` (teamwork:
+  enemies whose `target` is the hero count `DEFEND_BONUS` m closer, a squadmate `GUARD_BONUS`; melee soldiers add
+  `CROWD_PENALTY` per squadmate on the same enemy so they spread; archers prefer the wounded and a clear line);
+  melee soldiers commit (`_commit_target`) but switch to an enemy hitting the hero / a squadmate. Archers shoot from
+  `archer_range()` = `ARCHER_RANGE_SHARE` (half) × their hero's `aim_range`, look out from the hero, only with a clear
+  line of fire (`_clear_shot`; otherwise they walk around what blocks it) and step back from an enemy within
+  `ARCHER_KEEP_AWAY` while shooting. Spear soldiers only stab (`melee_anims` "spear-stab" → `_spear_stab`: the spear
+  level and straight ahead after each skeleton update, plus a `HitFx.stab` streak) — never thrown. Following: the
+  server records `Player.trail` (a point every 0.8 m); a soldier whose straight way to its slot is blocked
+  (`_clear_walk`) walks to the newest trail point it can reach (`_trail_point`), so it follows the hero around
+  walls and buildings that local steering alone can't get out of.
 - Far-away camps pause their orcs (`Camp.activation_range`; downed players still count as near, only dead ones don't) — keep this for mobile performance. Orcs that are
   provoked or walking home (`Enemy.is_busy()`) stay awake. Damage calls `Unit._on_damaged(attacker)`; orcs forward it
   to `Camp.alert(attacker)`, which provokes the whole squad (tuning in `enemy.gd` → "Provoked" exports).
