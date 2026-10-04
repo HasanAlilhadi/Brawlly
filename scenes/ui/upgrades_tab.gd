@@ -1,22 +1,17 @@
 class_name UpgradesTab
 extends Button
-## The upgrades sheet's handle: a drawer tab growing out of the bottom edge of the screen, center. Dark wood with a
-## gold trim, rounded top corners only (flush with the edge), a gold up-chevron, "Upgrades" and a small T key chip
-## (touch: no key). Click / tap it or press T to open the sheet. A coin badge pulses on its corner while you can
-## afford something. It lifts on hover and tucks below the edge while the sheet is open (`tuck`). Sizes: HudStyle.
+## The upgrades sheet's handle: a wooden tab attached to the bottom edge of the screen, center ("T  Upgrades",
+## like a content drawer's button). Click / tap it or press T to open the sheet. A coin pulses on it while you can
+## afford something. It tucks away below the edge while the sheet is open (`tuck`). Sizes from HudStyle.
 
 const COIN_ICON := preload("res://assets/ui/icons/coin.png")
 const MOVE_TIME: float = 0.2
-const WOOD := Color(0.30, 0.19, 0.11, 0.94)
-const WOOD_HOVER := Color(0.40, 0.26, 0.15, 0.97)
-const WOOD_PRESSED := Color(0.24, 0.15, 0.09, 0.97)
-const TRIM := Color(0.88, 0.66, 0.25)
-const TEXT := Color(1.0, 0.96, 0.87)
 
 var _player: Player
-var _key: PanelContainer
+var _row: HBoxContainer
+var _key: Control
+var _label: Label
 var _coin: TextureRect
-var _chevron: Chevron
 var _tween: Tween
 var _hover_tween: Tween
 var _tucked: bool = false
@@ -25,112 +20,48 @@ var _hidden: float = 0.0  # 0 up .. 1 below the edge
 var _lift: float = 0.0  # 0 .. 1 hover lift
 
 
-## A small gold "^" drawn as a line (no font glyph needed); `bob` nudges it up on hover.
-class Chevron extends Control:
-	var color := Color.WHITE
-	var bob: float = 0.0:
-		set(value):
-			bob = value
-			queue_redraw()
-
-	func _draw() -> void:
-		var w := size.x
-		var h := size.y
-		var y := -bob * 3.0
-		draw_polyline(PackedVector2Array([Vector2(w * 0.1, h * 0.72 + y), Vector2(w * 0.5, h * 0.3 + y),
-				Vector2(w * 0.9, h * 0.72 + y)]), color, 3.0, true)
-
-
 func _ready() -> void:
 	name = "UpgradesTab"
 	focus_mode = Control.FOCUS_NONE
 	mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	add_theme_stylebox_override(&"normal", _wood(WOOD, Color(TRIM, 0.85)))
-	add_theme_stylebox_override(&"hover", _wood(WOOD_HOVER, TRIM))
-	add_theme_stylebox_override(&"pressed", _wood(WOOD_PRESSED, TRIM))
-	add_theme_stylebox_override(&"hover_pressed", _wood(WOOD_PRESSED, TRIM))
-	add_theme_stylebox_override(&"focus", StyleBoxEmpty.new())
+	var wood := get_theme_stylebox(&"panel", &"PanelBrown")
+	for state in [&"normal", &"hover", &"pressed", &"hover_pressed", &"disabled", &"focus"]:
+		add_theme_stylebox_override(state, wood)
 	set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	custom_minimum_size = HudStyle.UPGRADES_TAB
+	custom_minimum_size = Vector2(0.0, HudStyle.UPGRADES_TAB_HEIGHT)
 	var row := HBoxContainer.new()
+	_row = row
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", int(HudStyle.GAP * 1.25))
+	row.add_theme_constant_override("separation", int(HudStyle.GAP))
 	row.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	row.offset_bottom = -HudStyle.UPGRADES_TAB_TUCK  # the part below the screen edge stays empty
 	add_child(row)
-	_chevron = Chevron.new()
-	_chevron.color = TRIM
-	_chevron.custom_minimum_size = Vector2(18, 18)
-	_chevron.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_child(_chevron)
-	var label := Label.new()
-	label.text = "Upgrades"
-	label.add_theme_font_size_override("font_size", HudStyle.FONT_TITLE)
-	label.add_theme_color_override("font_color", TEXT)
-	label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.5))
-	label.add_theme_constant_override("outline_size", 4)
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	row.add_child(label)
-	_key = _key_chip("T")
+	_key = UiKit.prompt("keyboard/t", HudStyle.KEY * 0.85)
 	row.add_child(_key)
+	_label = Label.new()
+	_label.text = "Upgrades"
+	_label.theme_type_variation = &"LabelLight"
+	_label.add_theme_font_size_override("font_size", HudStyle.FONT_TITLE)
+	_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(_label)
 	_coin = TextureRect.new()
 	_coin.name = "AffordableCoin"
 	_coin.texture = COIN_ICON
+	_coin.custom_minimum_size = Vector2(HudStyle.ICON_SMALL, HudStyle.ICON_SMALL)
 	_coin.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_coin.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	_coin.size = Vector2(HudStyle.BADGE, HudStyle.BADGE) * 0.68
-	_coin.position = Vector2(HudStyle.UPGRADES_TAB.x - _coin.size.x * 0.62, -_coin.size.y * 0.42)
-	_coin.pivot_offset = _coin.size * 0.5
+	_coin.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_coin.visible = false
-	add_child(_coin)
-	for part in find_children("*", "Control", true, false):
+	row.add_child(_coin)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for part in row.find_children("*", "Control", true, false):
 		(part as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
 	mouse_entered.connect(_hover.bind(true))
 	mouse_exited.connect(_hover.bind(false))
 	Platform.touch_mode_changed.connect(func(_touch: bool) -> void: _update_key())
 	_update_key()
+	row.minimum_size_changed.connect(func() -> void: _place(_hidden))  # the coin shows / hides
 	_place(0.0)
-
-
-## Rounded top corners, gold trim on top and the sides, nothing along the screen edge; a soft shadow above.
-func _wood(fill: Color, trim: Color) -> StyleBoxFlat:
-	var box := StyleBoxFlat.new()
-	box.bg_color = fill
-	box.border_color = trim
-	box.border_width_top = 2
-	box.border_width_left = 2
-	box.border_width_right = 2
-	box.border_width_bottom = 0
-	box.corner_radius_top_left = 16
-	box.corner_radius_top_right = 16
-	box.corner_detail = 8
-	box.shadow_color = Color(0, 0, 0, 0.3)
-	box.shadow_size = 6
-	box.anti_aliasing = true
-	return box
-
-
-## A small key cap: dark inset, cream outline, the letter.
-func _key_chip(letter: String) -> PanelContainer:
-	var chip := PanelContainer.new()
-	var box := StyleBoxFlat.new()
-	box.bg_color = Color(0, 0, 0, 0.3)
-	box.border_color = Color(TEXT, 0.7)
-	box.set_border_width_all(2)
-	box.set_corner_radius_all(6)
-	box.content_margin_left = 8
-	box.content_margin_right = 8
-	box.content_margin_top = 1
-	box.content_margin_bottom = 1
-	chip.add_theme_stylebox_override(&"panel", box)
-	chip.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	var key := Label.new()
-	key.text = letter
-	key.add_theme_font_size_override("font_size", HudStyle.FONT_BODY)
-	key.add_theme_color_override("font_color", TEXT)
-	key.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	chip.add_child(key)
-	return chip
 
 
 func set_player(player: Player) -> void:
@@ -156,15 +87,16 @@ func tuck(hidden: bool) -> void:
 func _process(delta: float) -> void:
 	if _coin.visible:
 		_pulse += delta * 4.0
+		_coin.pivot_offset = _coin.size * 0.5
 		_coin.scale = Vector2.ONE * (1.0 + 0.12 * sin(_pulse))
 
 
-## Keyboard: the T key chip; touch: just the label (tap it).
+## Keyboard: the T key cap; touch: just the label (tap it).
 func _update_key() -> void:
 	_key.visible = not Platform.touch_mode
 
 
-## The coin badge shows while any upgrade on the sheet (hero or army) can be bought right now.
+## The coin shows while any upgrade on the sheet (hero or army) can be bought right now.
 func _refresh() -> void:
 	if _player == null or not is_instance_valid(_player):
 		return
@@ -181,25 +113,27 @@ func _refresh() -> void:
 ## `hidden` 0 = up (the tab shows above the edge), 1 = fully below it; the hover lift is added on top.
 func _place(hidden: float) -> void:
 	_hidden = hidden
-	var height := HudStyle.UPGRADES_TAB.y
+	var height := HudStyle.UPGRADES_TAB_HEIGHT
 	var shown_top := -height + HudStyle.UPGRADES_TAB_TUCK - HudStyle.UPGRADES_TAB_LIFT * _lift
 	var top := lerpf(shown_top, HudStyle.UPGRADES_TAB_TUCK + HudStyle.MARGIN, hidden)
-	offset_left = -HudStyle.UPGRADES_TAB.x * 0.5
-	offset_right = HudStyle.UPGRADES_TAB.x * 0.5
+	# As wide as the key, the text (and the coin) plus a little room on each side.
+	var width := _row.get_combined_minimum_size().x + HudStyle.UPGRADES_TAB_PAD * 2.0
+	offset_left = -width * 0.5
+	offset_right = width * 0.5
 	offset_top = top
 	offset_bottom = top + height
 
 
 func _set_lift(value: float) -> void:
 	_lift = value
-	_chevron.bob = value
 	_place(_hidden)
 
 
-## Mouse over: the tab rises a little and the chevron nudges up, so it reads as a drawer you can pull.
+## Mouse over: lifts a little and brightens, so it reads as a button.
 func _hover(on: bool) -> void:
 	var lit := on and not _tucked
 	if _hover_tween:
 		_hover_tween.kill()
-	_hover_tween = create_tween()
-	_hover_tween.tween_method(_set_lift, _lift, 1.0 if lit else 0.0, 0.14).set_trans(Tween.TRANS_SINE)
+	_hover_tween = create_tween().set_parallel(true)
+	_hover_tween.tween_method(_set_lift, _lift, 1.0 if lit else 0.0, 0.12)
+	_hover_tween.tween_property(self, "self_modulate", Color(1.15, 1.15, 1.15) if lit else Color.WHITE, 0.12)
