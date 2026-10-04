@@ -5,7 +5,7 @@ extends PanelContainer
 ## - Hero: your class's upgrades (UpgradeDef.classes). One card each: medal, name, what it does, level, the
 ##   control that uses it, and a buy button (cost / Owned / Max / the other choice taken).
 ## - Army: the sheet items (UpgradeDef.sheet): a wide Recruit card (army size, the soldier in training with its
-##   countdown, 50 coins, joins you 10 s later) and Drill Soldiers (soldier damage and health, 3 levels).
+##   countdown, 50 coins, joins you 10 s later) and Soldier Damage / Soldier Health (3 levels each).
 ## Buying anywhere goes through Player.request_buy. Esc closes it before the pause menu opens. Sizes from HudStyle.
 
 signal toggled_open(open: bool)

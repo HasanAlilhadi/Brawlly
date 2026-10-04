@@ -143,11 +143,11 @@ func _find_leader() -> void:
 
 ## Applies the player's soldier upgrades (keeps the current health fraction).
 func refresh_army_bonus() -> void:
-	var power: float = leader.ally_power if is_instance_valid(leader) else 1.0
+	var valid := is_instance_valid(leader)
 	var ratio := health / max_health if max_health > 0.0 else 1.0
-	max_health = _base_max_health * power
+	max_health = _base_max_health * (leader.ally_health if valid else 1.0)
 	health = max_health * ratio
-	melee_damage = _base_damage * power
+	melee_damage = _base_damage * (leader.ally_damage if valid else 1.0)
 
 
 ## Compact spiral ("sunflower") formation around the player: slot i sits at radius ~sqrt(i),

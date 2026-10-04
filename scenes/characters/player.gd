@@ -187,12 +187,13 @@ const DASH_DISTANCE: float = 4.5
 const DASH_COOLDOWN: float = 4.0
 const DASH_RADIUS: float = 0.7
 const DASH_COLOR := Color(0.75, 0.9, 1.0)
-## Knife (Bowman, right mouse): a quick stab in a KNIFE_ARC° fan out to KNIFE_REACH m. The knife is the dungeon
-## sword scaled down, shown in the right hand only while stabbing.
+## Knife (Bowman, right mouse): a quick stab in a KNIFE_ARC° fan out to KNIFE_REACH m (shorter and narrower than
+## the sword's swing). The knife is the dungeon sword scaled down, shown in the right hand only while stabbing.
+## No arrows while stabbing (`shoot` waits out KNIFE_COOLDOWN).
 const KNIFE_SCENE := preload("res://assets/items/dungeon/sword.glb")
 const KNIFE_SCALE: float = 0.55
-const KNIFE_REACH: float = 1.35
-const KNIFE_ARC: float = 110.0
+const KNIFE_REACH: float = 1.0
+const KNIFE_ARC: float = 50.0
 const KNIFE_COOLDOWN: float = 0.45
 const KNIFE_HIT_DELAY: float = 0.12
 ## Wave (Swordsman): each swing also sends a slash wave forward (`sword_wave` projectile) that goes through enemies.
@@ -222,8 +223,9 @@ var class_def: ClassDef
 var training_mode: bool = false
 ## Movement input (screen axes), set from the HUD / network.
 var joystick_vector: Vector2 = Vector2.ZERO
-## Soldier health/damage multiplier (raised by the "drill" upgrade). Server only.
-var ally_power: float = 1.0
+## Soldier damage / health multipliers (the "soldier_damage" / "soldier_health" upgrades). Server only.
+var ally_damage: float = 1.0
+var ally_health: float = 1.0
 
 # --- Replicated stats (see the Sync node) ---
 var coins: int = 0:
@@ -1733,6 +1735,9 @@ func is_aiming() -> bool:
 func shoot(direction: Vector3 = Vector3.ZERO) -> void:
 	if is_dead or is_downed or (ability_active and class_def.ability != &"bow_rain") or not holds_ranged():
 		return
+	if _knife_timer > 0.0:  # stabbing with the knife: no arrows meanwhile
+		_pending_shot = Vector3.ZERO
+		return
 	if _shoot_timer > 0.0:
 		if direction != Vector3.ZERO:
 			_pending_shot = direction
@@ -2287,7 +2292,7 @@ func is_upgrade_locked(def: UpgradeDef) -> bool:
 	return false
 
 
-## The upgrades sheet's Army section (Recruit, Drill Soldiers), in catalog order.
+## The upgrades sheet's Army section (Recruit, Soldier Damage, Soldier Health), in catalog order.
 func sheet_items() -> Array[UpgradeDef]:
 	var result: Array[UpgradeDef] = []
 	for def in CATALOG.upgrades:
@@ -2357,8 +2362,11 @@ func _apply_upgrade(def: UpgradeDef) -> void:
 		&"vitality":
 			max_health += def.amount
 			heal(def.amount)
-		&"drill":
-			ally_power += def.amount
+		&"soldier_damage", &"soldier_health":
+			if def.id == &"soldier_damage":
+				ally_damage += def.amount
+			else:
+				ally_health += def.amount
 			for ally in followers():
 				(ally as Ally).refresh_army_bonus()
 		&"command":

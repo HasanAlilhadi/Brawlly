@@ -412,7 +412,7 @@ func _physics_process(delta: float) -> void:
 	var knife_aim := _cursor_direction() if _mouse_knife else aim
 	var use_held := (_attack_key_held() or Input.is_action_pressed(&"shoot")) and not _bow_rain_targeting
 	var melee_held := melee and not block and melee_aim == Vector3.ZERO and (hud.melee_button.is_held or use_held)
-	var shoot_held := not melee and use_held
+	var shoot_held := not melee and use_held and not knife_held  # the knife in hand: no arrows
 	if multiplayer.is_server():
 		local_player.set_input(move, aim, melee_aim, block)
 		if melee_held:

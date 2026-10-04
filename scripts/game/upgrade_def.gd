@@ -20,7 +20,7 @@ extends Resource
 @export var amount: float = 0.0
 ## Stalls that sell it (ShopStation.STALLS ids: blacksmith, armory, healer, barracks).
 @export var stalls: Array[StringName] = []
-## Also in the upgrades sheet's Army section, bought anywhere (soldiers: Recruit, Drill Soldiers).
+## Also in the upgrades sheet's Army section, bought anywhere (soldiers: Recruit, Soldier Damage / Health).
 @export var sheet: bool = false
 ## Class upgrade for these ClassDef ids (empty = a stall item).
 @export var classes: Array[StringName] = []

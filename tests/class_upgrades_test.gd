@@ -5,13 +5,16 @@ extends Node
 ## - swordsman: no shield until bought; Knock Back shoves far and locks Wave; Wave sends a slash through two orcs;
 ##   Dash Attack moves ~4.5 m and hits each orc crossed once, then cools down.
 ## - spearman: stab only until Can Throw (then E switches to throwing); shield bought.
-## - bowman: Fire Range lengthens aim and flight; Penetration hits 3 orcs in a line; Knife stabs up close.
+## - bowman: Fire Range lengthens aim and flight; Penetration hits 3 orcs in a line; Knife stabs up close (not as far
+##   or as wide as the sword) and no arrows fly while stabbing.
+## --shot=<png> saves the Army tab after its upgrades (needs a window: run off-screen, --position -4000,-4000).
 ##   "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/class_upgrades_test.gd --class=bowman
 
 ## Dashes and shots go +Z from here (scenery collision is off, see `_clear_scenery`).
 const LANE_START := Vector3(0, 0, -3)
 
 var failures := 0
+var shot := ""
 var main: Node
 var player: Player
 
@@ -23,6 +26,9 @@ func _check(ok: bool, message: String) -> void:
 
 
 func _ready() -> void:
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--shot="):
+			shot = arg.substr(7)
 	get_tree().change_scene_to_file("res://scenes/main/main.tscn")
 	while get_tree().current_scene == null or get_tree().current_scene.name != "Main" \
 			or get_tree().get_nodes_in_group(&"players").is_empty():
@@ -135,7 +141,7 @@ func _sheet() -> void:
 	await _army(hud)
 
 
-## Army tab: recruit away from any barracks (joins beside you after 10 s), Drill Soldiers maxes at 3 levels.
+## Army tab: recruit away from any barracks (joins beside you after 10 s), Soldier Damage / Health max at 3 levels each.
 func _army(hud: Hud) -> void:
 	(hud.upgrade_sheet.find_child("ArmyTab", true, false) as Button).pressed.emit()
 	(hud.upgrade_sheet.find_child("ArmyTab", true, false) as Button).button_pressed = true
@@ -156,12 +162,29 @@ func _army(hud: Hud) -> void:
 	_check(joined.size() == before + 1, "after 10 s a soldier joins (%d following)" % joined.size())
 	if not joined.is_empty():
 		_check((joined[-1] as Node3D).global_position.distance_to(player.global_position) < 3.0, "it appears right beside you")
-	var power := player.ally_power
+	var trained := joined[-1] as Ally if not joined.is_empty() else null
+	var trained_health := trained.max_health if trained else 0.0
+	var trained_damage := trained.melee_damage if trained else 0.0
+	var damage := player.ally_damage
 	for i in 3:
-		_check(await _buy(&"drill"), "Drill Soldiers level %d" % (i + 1))
-	_check(is_equal_approx(player.ally_power, power + 0.75) and player.is_upgrade_maxed(_def(&"drill")),
-			"soldier damage and health +75%% at most (power %.2f)" % player.ally_power)
-	_check(not await _buy(&"drill"), "no fourth level")
+		_check(await _buy(&"soldier_damage"), "Soldier Damage level %d" % (i + 1))
+	_check(is_equal_approx(player.ally_damage, damage + 0.75) and player.is_upgrade_maxed(_def(&"soldier_damage")),
+			"soldier damage +75%% at most (x%.2f)" % player.ally_damage)
+	_check(not await _buy(&"soldier_damage"), "no fourth Soldier Damage level")
+	if trained:
+		_check(trained.melee_damage > trained_damage and is_equal_approx(trained.max_health, trained_health),
+				"Soldier Damage raises only damage (%.1f, %.0f hp)" % [trained.melee_damage, trained.max_health])
+	var health := player.ally_health
+	for i in 3:
+		_check(await _buy(&"soldier_health"), "Soldier Health level %d" % (i + 1))
+	_check(is_equal_approx(player.ally_health, health + 0.75) and player.is_upgrade_maxed(_def(&"soldier_health")),
+			"soldier health +75%% at most (x%.2f)" % player.ally_health)
+	_check(not await _buy(&"soldier_health"), "no fourth Soldier Health level")
+	if trained:
+		_check(trained.max_health > trained_health, "Soldier Health raises its health (%.0f hp)" % trained.max_health)
+	if shot != "":
+		await _wait(0.3)
+		get_viewport().get_texture().get_image().save_png(shot)
 	for soldier in player.followers():
 		soldier.queue_free()  # it would fight the orcs the class checks below count hits on
 	(hud.upgrade_sheet.find_child("HeroTab", true, false) as Button).button_pressed = true
@@ -291,9 +314,18 @@ func _bowman() -> void:
 	_check(not player.has_knife(), "no knife until bought")
 	_check(await _buy(&"knife"), "bought the Knife")
 	var close := _orc(LANE_START + Vector3(0.9, 0, 0))
+	var far := _orc(LANE_START + Vector3(1.8, 0, 0))  # in the sword's reach, past the knife's
+	var aside := _orc(LANE_START + Vector3(cos(deg_to_rad(45.0)), 0, sin(deg_to_rad(45.0))) * 0.9)  # outside its narrow fan
 	await _wait(0.1)
 	player.knife_attack(Vector3.RIGHT)
+	player._shoot_timer = 0.0
+	player.shoot(Vector3.RIGHT * 5.0)
+	_check(player._shoot_timer == 0.0, "no arrow while stabbing with the knife")
 	await _wait(0.3)
 	_check(is_equal_approx(close.max_health - close.health, player.knife_damage), "the knife stabs an orc up close (%.0f)" % (close.max_health - close.health))
+	_check(far.health == far.max_health, "the knife doesn't reach as far as the sword")
+	_check(aside.health == aside.max_health, "the knife's fan is narrow (an orc 45° aside is missed)")
+	far.queue_free()
+	aside.queue_free()
 	var knife_item := player.get("_knife_item") as Node3D
 	_check(knife_item != null, "the knife shows in the hand")

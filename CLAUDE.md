@@ -181,7 +181,7 @@ by touch index so the joystick and buttons work together with multi-touch.
   edge, center: "T  Upgrades", a pulsing coin while something is affordable, tucks away while the sheet is open),
   never at stalls. The sheet has two tabs: Hero (the
   class upgrades) and Army (`UpgradeDef.sheet` items, `Player.sheet_items()`: Recruit, shown as a wide card with the
-  army size and the training countdown, and Drill Soldiers, 3 levels × +25% `ally_power`). A recruit bought away from
+  army size and the training countdown, and Soldier Damage / Soldier Health, 3 levels each × +25% `ally_damage` / `ally_health`). A recruit bought away from
   a barracks trains `SOLDIER_TRAIN_TIME` and then spawns behind the player, following (`_finish_training` with no
   stall; `soldier_ready(at_barracks)`); bought at the barracks it still goes to the pen. Their effects are recomputed from the replicated `upgrade_levels` on every
   peer (`Player._apply_class_upgrades()`: damage, Fire Rate = shorter cooldowns + `anim_speed`, `aim_range`, `arrow_pierce`,
@@ -191,7 +191,7 @@ by touch index so the joystick and buttons work together with multi-touch.
   trail, passes through enemies), shield. Spearman: spear_damage, spear_rate, spear_throw (adds "javelin" to `weapons`),
   shield (Bull Run: planned). Bowman: bow_damage, bow_rate, bow_range (+ arrow `lifetime_scale`), bow_pierce (projectile
   `pierce`), knife (right mouse / LT / the touch shield button: `knife_attack()`, the dungeon sword scaled down as the
-  knife). No hero owns a shield / throw / knife / dash until bought; the Training Field grants those
+  knife; `KNIFE_REACH` / `KNIFE_ARC` shorter and narrower than the sword; no arrows while stabbing). No hero owns a shield / throw / knife / dash until bought; the Training Field grants those
   (`Player.TRAINING_UNLOCKS`) and makes class upgrades free. Tests: `grant_upgrade(id)`; `class_upgrades_test.gd`
   (`--class=`), `class_upgrades_mp_test.gd`. New class upgrade = a catalog row with `classes` + its effect in
   `_apply_class_upgrades`.
@@ -205,7 +205,7 @@ by touch index so the joystick and buttons work together with multi-touch.
   `stall_safe_distance` of a stall. Move a building = change `STALLS` in the town script and rebuild; King of the Hill
   puts one town per team (`GameMode.setup`). `UpgradeDef.stalls` lists the stalls that sell an item;
   `Player.can_buy()` requires standing at one (`ShopStation.can_buy_here`, also checked on the server). main.gd
-  tracks the stall in reach (`_update_stall`: highlight, HUD prompt, `interact` opens `ShopMenu.open(stall)`). Every stall is used from any side, within `ShopStation.STALL_REACH` of its building (`_distance()` from `_footprint()`: the STALLS "block", the barracks' compound); `nearest()` = the closest in reach. No ground rings: a stall in reach glows (`set_highlight` → `assets/shaders/highlight_glow.gdshader` as `material_overlay`) and its sign turns gold; a pin bobs over the barracks gate while your soldiers wait. New building = a STALLS row with its "block". Soldiers read `Player.ally_power`.
+  tracks the stall in reach (`_update_stall`: highlight, HUD prompt, `interact` opens `ShopMenu.open(stall)`). Every stall is used from any side, within `ShopStation.STALL_REACH` of its building (`_distance()` from `_footprint()`: the STALLS "block", the barracks' compound); `nearest()` = the closest in reach. No ground rings: a stall in reach glows (`set_highlight` → `assets/shaders/highlight_glow.gdshader` as `material_overlay`) and its sign turns gold; a pin bobs over the barracks gate while your soldiers wait. New building = a STALLS row with its "block". Soldiers read `Player.ally_damage` / `ally_health`.
 - **Soldiers come only from recruiting** (barracks or the upgrades sheet's Army tab; camps and the Warlord's warband
   are routed — they `die()` and drop loot).
   Recruit (50, constant) → `Player.soldiers_training` (replicated count; a queue — one after another,

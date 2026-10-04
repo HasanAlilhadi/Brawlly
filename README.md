@@ -16,7 +16,7 @@ portrait on phones. There is no single player: host a game (alone is fine) or jo
   - **Upgrades sheet** (press **T**, the gamepad View button, click the "T Upgrades" tab at the bottom of the screen or
     the star button next to pause; a coin on the tab means you can afford something): slides up from the
     bottom with two tabs. **Army**: recruit a soldier anywhere (50 coins; it trains 10 s, then joins you on the spot)
-    and **Drill Soldiers** (+25% soldier damage and health, 3 levels). **Hero**: your class's upgrades, bought with
+    and **Soldier Damage** / **Soldier Health** (+25% each, 3 levels each). **Hero**: your class's upgrades, bought with
     coins anywhere (free in the Training Field, which also hands out the unlocks):
     - Swordsman: Increase Damage, Fire Rate, **Knock Back or Wave** (pick one: hits shove enemies far back, or each
       swing sends a slash wave through enemies), **Dash Attack** (C: dash through enemies, slashing each), Shield.
@@ -48,7 +48,7 @@ portrait on phones. There is no single player: host a game (alone is fine) or jo
   They chase the attacker faster and much farther than usual, and give up only after losing sight for ~10 s.
 - **Coins & the town**: orcs, chests and destroyed camps give coins. Each spawn is a town (always the same layout:
   a paved square with the Barracks north, Blacksmith + Healer west, Bows & Spears east; kept away from orc camps)
-  with one stall per trade: Healer (Potion, Vitality) and Barracks (Recruit, Drill Soldiers, Command); the Blacksmith
+  with one stall per trade: Healer (Potion, Vitality) and Barracks (Recruit, Soldier Damage, Soldier Health, Command); the Blacksmith
   and Bows & Spears sell nothing for now (weapon upgrades are class upgrades, T).
   Walk up to a stall and press B (or tap its button) to open its shop. Items are data:
   `resources/data/upgrade_catalog.tres` (`stalls` = which stalls sell it); stalls are `scenes/world/shop_station.gd`.
