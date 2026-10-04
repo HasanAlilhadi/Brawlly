@@ -13,7 +13,8 @@ portrait on phones. There is no single player: host a game (alone is fine) or jo
   - **Spearman** (`keeper.glb`): straight spear stabs that pierce everything in a line. Soldiers: spears (longer reach).
   - **Bowman** (`archer.glb`): fast arrows. **Bow Rain** marks a large area with X, then LMB rains arrows
     into it. Soldiers: archers that stop at range and shoot.
-  - **Upgrades sheet** (press **T**, the gamepad View button, or the star button next to pause): slides up from the
+  - **Upgrades sheet** (press **T**, the gamepad View button, click the "T Upgrades" tab at the bottom of the screen or
+    the star button next to pause; a coin on the tab means you can afford something): slides up from the
     bottom with two tabs. **Army**: recruit a soldier anywhere (50 coins; it trains 10 s, then joins you on the spot)
     and **Drill Soldiers** (+25% soldier damage and health, 3 levels). **Hero**: your class's upgrades, bought with
     coins anywhere (free in the Training Field, which also hands out the unlocks):

@@ -82,6 +82,7 @@ var dash_button: TouchButton
 ## Class upgrades (T / the upgrades button next to pause).
 var upgrade_sheet: UpgradeSheet
 var _upgrades_button: Button
+var _upgrades_tab: UpgradesTab
 var _shield_icon: Texture2D
 var _knife_icon: Texture2D
 var _stall_prompt: Button
@@ -141,6 +142,7 @@ func setup(player: Player, camps: Array[Camp]) -> void:
 	player.ability_changed.connect(_update_weapon_controls)
 	player.upgrades_changed.connect(_update_weapon_controls)
 	upgrade_sheet.set_player(player)
+	_upgrades_tab.set_player(player)
 	_update_weapon_controls()
 	player.health_changed.connect(_on_health_changed)
 	player.coins_changed.connect(_on_coins_changed)
@@ -194,6 +196,7 @@ func show_end(title: String, subtitle: String, restart_label: String = "Play aga
 	reset_touch_controls()
 	upgrade_sheet.close_sheet()
 	_upgrades_button.hide()
+	_upgrades_tab.hide()
 	dash_button.hide()
 	joystick.hide()
 	melee_button.hide()
@@ -398,12 +401,18 @@ func _build_extras() -> void:
 	upgrade_sheet = UpgradeSheet.new()
 	upgrade_sheet.name = "UpgradeSheet"
 	root.add_child(upgrade_sheet)
-	upgrade_sheet.toggled_open.connect(func(_open: bool) -> void: reset_touch_controls())
+	_upgrades_tab = UpgradesTab.new()
+	_upgrades_tab.pressed.connect(toggle_upgrades)
+	root.add_child(_upgrades_tab)
+	upgrade_sheet.toggled_open.connect(func(open: bool) -> void:
+		reset_touch_controls()
+		_upgrades_tab.tuck(open))
 
 	_build_downed_panel()
 	_build_weapon_controls()
 	_build_stall_prompt()
-	root.move_child(upgrade_sheet, -1)  # over the touch buttons
+	root.move_child(_upgrades_tab, -1)
+	root.move_child(upgrade_sheet, -1)  # over the touch buttons and its tab
 
 	_revive_label = _small_label("", 26)
 	_revive_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)

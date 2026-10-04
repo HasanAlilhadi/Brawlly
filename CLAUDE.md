@@ -177,7 +177,9 @@ by touch index so the joystick and buttons work together with multi-touch.
   `combo_damage_multiplier` (1.5×) and pops "COMBO!" for everyone (`HitFx.report_combo` → `main._net_combo`). Soldiers don't count.
 - **Class upgrades** (`UpgradeDef.classes` set; in `upgrade_catalog.tres`): bought anywhere from the upgrades bottom
   sheet (`UpgradeSheet`, scenes/ui/upgrade_sheet.gd, in the HUD: T / gamepad View / the star button next to pause;
-  `Hud.toggle_upgrades()`; slides in / out, `_slide()` / `_place()`), never at stalls. The sheet has two tabs: Hero (the
+  `Hud.toggle_upgrades()`; slides in / out, `_slide()` / `_place()`; its handle `UpgradesTab` sits on the bottom
+  edge, center: "T  Upgrades", a pulsing coin while something is affordable, tucks away while the sheet is open),
+  never at stalls. The sheet has two tabs: Hero (the
   class upgrades) and Army (`UpgradeDef.sheet` items, `Player.sheet_items()`: Recruit, shown as a wide card with the
   army size and the training countdown, and Drill Soldiers, 3 levels × +25% `ally_power`). A recruit bought away from
   a barracks trains `SOLDIER_TRAIN_TIME` and then spawns behind the player, following (`_finish_training` with no
