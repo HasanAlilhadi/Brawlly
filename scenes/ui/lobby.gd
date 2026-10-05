@@ -12,6 +12,7 @@ extends Node
 const SCORE_LIMITS := [
 	Vector3i(0, 0, 0),       # co-op: not used
 	Vector3i(30, 300, 120),  # king of the hill: seconds held
+	Vector3i(0, 0, 0),       # last stand: not used (ten circles)
 ]
 const PLAYERS_WIDTH: float = 700.0
 const SLOT_HEIGHT: float = 70.0
@@ -37,6 +38,8 @@ var _start_button: Button
 var _updating: bool = false
 var _mode_option: OptionButton
 var _mode_hint: Label
+var _map_option: OptionButton
+var _map_hint: Label
 var _difficulty_option: OptionButton
 var _events_option: OptionButton
 var _sliders: Dictionary = {}  # key -> {slider, value_label, row}
@@ -254,13 +257,18 @@ func _refresh_summary(settings: Dictionary) -> void:
 	var hint := MenuKit.label(Net.MODE_HINTS[match_mode], &"HintLabel", 20)
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_summary.add_child(hint)
+	var map := MapCatalog.get_map(int(settings.get("map", 0)))
+	_summary_row("Map", map.name)
+	var map_hint := MenuKit.label(map.hint, &"HintLabel", 20)
+	map_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_summary.add_child(map_hint)
 	_summary_row("Orc camps", str(settings.camp_count))
 	_summary_row("Difficulty", Net.DIFFICULTY_NAMES[settings.difficulty])
 	_summary_row("World events", "On" if settings.get("events", true) else "Off")
 	_summary_row("Starting coins", str(settings.start_coins))
 	if Net.is_team_mode(match_mode):
 		_summary_row("Teams", str(settings.team_count))
-	if match_mode != Net.Mode.COOP:
+	if match_mode == Net.Mode.KING_OF_THE_HILL:
 		_summary_row(Net.SCORE_LIMIT_LABELS[match_mode], str(settings.score_limit))
 		_summary_row("Time limit", "%d min" % settings.time_limit)
 
@@ -274,6 +282,12 @@ func _build_settings() -> void:
 	_mode_hint = MenuKit.label("", &"HintLabel", 22)
 	_mode_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_settings_box.add_child(_mode_hint)
+	_map_option = _add_option("Map", MapCatalog.names(), func(index: int) -> void:
+		Net.set_setting("map", index))
+	_map_option.name = "MapOption"
+	_map_hint = MenuKit.label("", &"HintLabel", 22)
+	_map_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_settings_box.add_child(_map_hint)
 	_add_slider("camp_count", "Orc camps", 0, 60, 1)
 	_difficulty_option = _add_option("Difficulty", Net.DIFFICULTY_NAMES, func(index: int) -> void:
 		Net.set_setting("difficulty", index))
@@ -388,6 +402,10 @@ func _refresh() -> void:
 	_mode_option.select(match_mode)
 	_mode_option.disabled = not editable
 	_mode_hint.text = Net.MODE_HINTS[match_mode]
+	var map_index := clampi(int(settings.get("map", 0)), 0, MapCatalog.MAPS.size() - 1)
+	_map_option.select(map_index)
+	_map_option.disabled = not editable
+	_map_hint.text = MapCatalog.get_map(map_index).hint
 	_difficulty_option.select(settings.difficulty)
 	_difficulty_option.disabled = not editable
 	_events_option.select(0 if settings.get("events", true) else 1)
@@ -405,8 +423,8 @@ func _refresh() -> void:
 		slider.value = settings.get(key, slider.min_value)
 		(entry.value as Label).text = str(int(slider.value))
 	(_sliders.team_count.row as Control).visible = team_mode
-	(_sliders.score_limit.row as Control).visible = match_mode != Net.Mode.COOP
-	(_sliders.time_limit.row as Control).visible = match_mode != Net.Mode.COOP
+	(_sliders.score_limit.row as Control).visible = match_mode == Net.Mode.KING_OF_THE_HILL
+	(_sliders.time_limit.row as Control).visible = match_mode == Net.Mode.KING_OF_THE_HILL
 
 	# Bottom row
 	var host := Net.is_host()

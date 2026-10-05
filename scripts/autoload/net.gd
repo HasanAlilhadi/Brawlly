@@ -15,7 +15,7 @@ signal left_game(reason: String)
 ## The host started the match: every lobby shows a countdown of `seconds`.
 signal countdown_started(seconds: int)
 
-const GAME_ID := "brawlly-lan-v3"
+const GAME_ID := "brawlly-lan-v4"
 const PORT: int = 24565
 const DISCOVERY_PORT: int = 24566
 const MAX_PLAYERS: int = 8
@@ -31,15 +31,16 @@ const GAME_SCENE := "res://scenes/main/main.tscn"
 const LOBBY_SCENE := "res://scenes/ui/lobby.tscn"
 const MENU_SCENE := "res://scenes/ui/main_menu.tscn"
 
-enum Mode { COOP, KING_OF_THE_HILL }
+enum Mode { COOP, KING_OF_THE_HILL, LAST_STAND }
 enum Difficulty { EASY, NORMAL, HARD, BRUTAL }
 
-const MODE_NAMES: PackedStringArray = ["Co-op vs Orcs", "King of the Hill"]
+const MODE_NAMES: PackedStringArray = ["Co-op vs Orcs", "King of the Hill", "Last Stand"]
 const MODE_HINTS: PackedStringArray = [
 	"Everyone together: destroy every orc camp.",
 	"Teams hold the hill in the middle to earn points.",
+	"Everyone together: hold ten circles for a minute each while the orcs grow stronger. The fallen stay down.",
 ]
-const SCORE_LIMIT_LABELS: PackedStringArray = ["", "Hill seconds to win"]
+const SCORE_LIMIT_LABELS: PackedStringArray = ["", "Hill seconds to win", ""]
 const DIFFICULTY_NAMES: PackedStringArray = ["Easy", "Normal", "Hard", "Brutal"]
 const DIFFICULTY_STRENGTH: Array[float] = [0.7, 1.0, 1.3, 1.65]
 const DIFFICULTY_RESPAWN: Array[float] = [1.5, 1.0, 0.8, 0.6]
@@ -94,6 +95,7 @@ func _ready() -> void:
 static func default_settings() -> Dictionary:
 	return {
 		"mode": Mode.COOP,
+		"map": 0,
 		"camp_count": 24,
 		"difficulty": Difficulty.NORMAL,
 		"start_coins": 0,
@@ -128,9 +130,14 @@ static func is_team_mode(match_mode: int) -> bool:
 	return match_mode == Mode.KING_OF_THE_HILL
 
 
+## Everyone on one team against the orcs (Co-op vs Orcs, Last Stand).
+static func is_coop_mode(match_mode: int) -> bool:
+	return not is_team_mode(match_mode)
+
+
 ## Team a player fights for in the current mode (co-op: everyone 0).
 func team_of(peer: int) -> int:
-	if mode() == Mode.COOP:
+	if is_coop_mode(mode()):
 		return 0
 	return players.get(peer, {}).get("team", 0)
 

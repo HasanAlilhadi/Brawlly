@@ -1,7 +1,9 @@
 class_name Minimap
 extends Control
 ## Whole-world map. Shows only what the local player's side may know:
-## - objectives: the King of the Hill zone (holder's color, pulses while contested)
+## - objectives: the King of the Hill zone (holder's color, pulses while contested), the Last Stand circle
+##   (its state color, the held share as an arc)
+## - gold veins with gold left as small gold dots
 ## - camps as tent badges (red = active, bigger = more orcs; grey + cross = destroyed)
 ## - friends only: teammates as arrows pointing where they face (their player colors; you are white) and
 ##   friendly soldiers as dots. Hostile players and their soldiers are never drawn (versus modes).
@@ -13,7 +15,9 @@ const TENT_ICON := preload("res://assets/ui/icons/game/tent.svg")
 const CROWN_ICON := preload("res://assets/ui/icons/game/crown.svg")
 const OUTLINE := Color(0, 0, 0, 0.7)
 
+## Set from the map (MapCatalog `minimap`).
 @export var background: Color = Color(0.16, 0.3, 0.14, 0.85)
+@export var vein_color: Color = Color(1.0, 0.82, 0.25)
 @export var grid_color: Color = Color(1, 1, 1, 0.07)
 @export var camp_color: Color = Color(0.85, 0.22, 0.18)
 @export var ruin_color: Color = Color(0.42, 0.42, 0.4)
@@ -56,6 +60,12 @@ func _draw() -> void:
 		draw_line(_to_map(Vector3(f, 0, -half)), _to_map(Vector3(f, 0, half)), grid_color, 1.0)
 		draw_line(_to_map(Vector3(-half, 0, f)), _to_map(Vector3(half, 0, f)), grid_color, 1.0)
 	_draw_hill(k)
+	_draw_hold_circles(k)
+	for vein in get_tree().get_nodes_in_group(&"gold_veins"):
+		if (vein as GoldVein).gold > 0:
+			var spot := _to_map((vein as Node3D).global_position)
+			draw_circle(spot, 2.2 * k, OUTLINE)
+			draw_circle(spot, 1.5 * k, vein_color)
 	for camp in _camps:
 		if is_instance_valid(camp):
 			_draw_camp(camp, k)
@@ -109,6 +119,21 @@ func _draw_hill(k: float) -> void:
 	draw_arc(at, radius, 0.0, TAU, 40, OUTLINE, 3.2 * k)
 	draw_arc(at, radius, 0.0, TAU, 40, color, 1.8 * k)
 	_draw_icon(at, radius * 1.1, CROWN_ICON, Color(color, 0.95))
+
+
+## Last Stand: the circle at its real size in its state color, the held share as a bright arc.
+func _draw_hold_circles(k: float) -> void:
+	for node in get_tree().get_nodes_in_group(&"hold_circles"):
+		var circle := node as HoldCircle
+		var at := _to_map(circle.global_position)
+		var radius := maxf(HoldCircle.RADIUS / (GameConfig.world_half * 2.0) * size.x, 8.0 * k)
+		var color := circle.state_color()
+		draw_circle(at, radius, Color(color, 0.28))
+		draw_arc(at, radius, 0.0, TAU, 40, OUTLINE, 3.2 * k)
+		draw_arc(at, radius, 0.0, TAU, 40, Color(color, 0.7), 1.6 * k)
+		if circle.progress > 0.0:
+			var start := -PI * 0.5 + _view_yaw
+			draw_arc(at, radius, start, start + TAU * circle.progress, 40, color.lightened(0.35), 3.0 * k)
 
 
 # --- Camps / posts -----------------------------------------------------------------

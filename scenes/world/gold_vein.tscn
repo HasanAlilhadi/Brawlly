@@ -1,0 +1,29 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scenes/world/gold_vein.gd" id="1_script"]
+[ext_resource type="PackedScene" path="res://assets/environment/gold/gold_vein_rock.glb" id="2_rock"]
+[ext_resource type="PackedScene" path="res://assets/environment/gold/gold_vein_crystals.glb" id="3_crystals"]
+
+[sub_resource type="CylinderShape3D" id="CylinderShape3D_vein"]
+height = 1.1
+radius = 0.68
+
+[node name="GoldVein" type="StaticBody3D"]
+collision_layer = 1
+collision_mask = 0
+script = ExtResource("1_script")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.55, 0)
+shape = SubResource("CylinderShape3D_vein")
+
+[node name="Model" type="Node3D" parent="."]
+
+[node name="Rock" parent="Model" instance=ExtResource("2_rock")]
+transform = Transform3D(1.15, 0, 0, 0, 1.15, 0, 0, 0, 1.15, 0, 0, 0)
+
+[node name="Crystals" type="Node3D" parent="Model"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.35, 0)
+
+[node name="Model" parent="Model/Crystals" instance=ExtResource("3_crystals")]
+transform = Transform3D(1.15, 0, 0, 0, 1.15, 0, 0, 0, 1.15, 0, -0.35, 0)

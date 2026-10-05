@@ -33,6 +33,12 @@ const FONT_BUTTON: int = 20
 const FONT_TITLE: int = 24
 const FONT_HEADLINE: int = 44
 
+## Last Stand objective card (top center, where the score line sits in King of the Hill).
+const OBJECTIVE_WIDTH: float = 380.0
+const OBJECTIVE_TOP: float = 104.0
+## "You fell — watching …" line (bottom center, above the upgrades tab).
+const SPECTATE_BOTTOM: float = 120.0
+
 ## Upgrades sheet (T): at most this wide; one card per class upgrade.
 const UPGRADE_SHEET_WIDTH: float = 1480.0
 const UPGRADE_CARD: Vector2 = Vector2(228.0, 176.0)

@@ -72,6 +72,23 @@ Run from the project folder (`G` = the Godot binary). Tests start the game norma
 "$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/mp_revive_host.gd &
 "$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/mp_revive_client.gd
 
+# Last Stand (solo): ten circles from the seed (clear, a gold vein in each), one hero needed alone, the clock pauses
+# outside and keeps its progress, held circles pay coins + make orcs stronger, assault squads, gold veins (per hit,
+# run dry, grow back), the Warlord on the last circle, victory (--defeat: no respawn, defeat; --map=<index>)
+"$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/last_stand_test.gd
+"$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/last_stand_test.gd --defeat --map=1
+
+# Every map × every mode: landmarks with collision, spawn areas and objectives clear, gold veins at every spawn, map light
+"$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/maps_test.gd
+
+# Map screenshots (spawn, nearest landmark, a gold vein, the first circle) — needs a window, keep it off-screen
+"$G" --path . --position -4000,-4000 --resolution 1280x720 res://tests/test_runner.tscn -- --test=res://tests/map_shots_test.gd --out=/tmp/shots
+
+# Multiplayer Last Stand (Gravemoor): same world on both (compare the SIG lines), a two-hero circle waits for both,
+# a downed hero nobody revives stays dead and spectates, the circle then needs one, defeat on both screens
+"$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/last_stand_mp_test.gd --role=host --port=24715 &
+"$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/last_stand_mp_test.gd --role=client --port=24715
+
 # Multiplayer King of the Hill: one spawn area per team (no camps near), hill score, game over (+ back to lobby)
 "$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/mp_modes_host.gd &
 "$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/mp_modes_client.gd

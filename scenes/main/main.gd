@@ -5,6 +5,8 @@ extends Node3D
 ## - Local input (HUD touch controls / keyboard) goes to the local Player on the server.
 ## - Everything is bought from the upgrades sheet (T); recruits train, then join their hero (Player.soldiers_training).
 ## - World events (treasure goblin, Orc Warlord, invasion waves), match stats + awards, pings and army orders.
+## - The map (Net.settings.map, a MapCatalog row) sets the light and what WorldBuilder lays out.
+## - Last Stand: no respawns — a fallen hero spectates a teammate (attack / switch weapon picks the next one).
 
 const PLAYER_SCENE := preload("res://scenes/characters/player.tscn")
 const ALLY_SCENE := preload("res://scenes/characters/ally.tscn")
@@ -49,6 +51,8 @@ const KILL_AHEAD_RADIUS: float = 6.0
 const KILL_MARK_TEXTURE := preload("res://assets/ui/icons/game/target.svg")
 ## A quick left click keeps aiming the sword this long, so the swing also reaches the server online.
 const MOUSE_CLICK_HOLD: float = 0.2
+## Last Stand plays on a bigger world than the other modes (same camp count, more room between the circles).
+const LAST_STAND_WORLD_SCALE: float = 1.15
 
 @onready var world: Node3D = $World
 @onready var camera: FollowCamera3D = $Camera
@@ -90,6 +94,8 @@ var _last_ping_ms: Dictionary = {}  # peer -> time of their last ping (server)
 var _training_switching: bool = false
 var _training_welcomed: bool = false
 var _bow_rain_targeting: bool = false
+## Last Stand: the teammate the camera follows while the local hero is gone.
+var _spectating: Player
 
 
 func _ready() -> void:
@@ -101,6 +107,11 @@ func _ready() -> void:
 	seed(settings.seed)
 	training_mode = settings.get("training", false)
 	GameConfig.world_half = 23.0 if training_mode else clampf(40.0 + sqrt(float(settings.camp_count)) * 10.0, 60.0, 170.0)
+	if settings.mode == Net.Mode.LAST_STAND and not training_mode:
+		GameConfig.world_half *= LAST_STAND_WORLD_SCALE
+	var map := MapCatalog.get_map(int(settings.get("map", 0)))
+	if not training_mode:
+		_apply_map(map)
 	GameConfig.orc_strength = Net.DIFFICULTY_STRENGTH[settings.difficulty]
 	GameConfig.orc_respawn_scale = Net.DIFFICULTY_RESPAWN[settings.difficulty]
 	# Downed + revive needs teammates: every online mode has them.
@@ -118,15 +129,20 @@ func _ready() -> void:
 	match_stats.awards_ready.connect(hud.show_awards)
 	world_events = WorldEvents.new()
 	world_events.setup(self, game_mode, settings.get("events", true) and not training_mode)
+	# Last Stand: orc squads assault the circles instead of the border waves.
+	world_events.waves_enabled = settings.mode != Net.Mode.LAST_STAND
 	add_child(world_events)
 	if training_mode:
 		training_field = TRAINING_FIELD_SCENE.instantiate() as TrainingField
 		world.add_child(training_field)
 	else:
 		var builder := WorldBuilder.new()
+		builder.map = map
 		builder.camp_count = settings.camp_count
 		builder.spawn_points = game_mode.world_spawn_points()
 		builder.clear_areas = game_mode.world_clear_areas()
+		builder.clear_radius = game_mode.world_clear_radius()
+		builder.vein_spots = game_mode.world_vein_spots()
 		_camps = builder.build(world)
 		game_mode.build_objectives(world)
 	_camps_left = _camps.size()
@@ -152,6 +168,9 @@ func _ready() -> void:
 		pause_menu.set_hint("F: choose hero   •   X: special ability   •   Attack the targets to test damage")
 	pause_menu.paused.connect(_on_paused)
 	game_mode.scores_changed.connect(func() -> void: hud.set_mode_label(game_mode.score_text()))
+	hud.set_objective_source(game_mode)
+	if not training_mode:
+		hud.minimap.background = map.minimap
 	game_mode.announced.connect(func(message: String) -> void: hud.show_toast(Net.localize(message)))
 	game_mode.match_over.connect(_end)
 
@@ -173,6 +192,24 @@ func _ready() -> void:
 		_on_world_ready(1)
 	else:
 		_report_world_ready()
+
+
+## The map's light: sky color, ambient, sun and (Gravemoor) a little mist.
+func _apply_map(map: Dictionary) -> void:
+	var environment := ($WorldEnvironment as WorldEnvironment).environment.duplicate() as Environment
+	environment.background_color = map.sky
+	environment.ambient_light_color = map.ambient
+	environment.ambient_light_energy = map.ambient_energy
+	var fog: float = map.get("fog_density", 0.0)
+	environment.fog_enabled = fog > 0.0
+	if fog > 0.0:
+		environment.fog_light_color = map.fog_color
+		environment.fog_density = fog
+		environment.fog_sky_affect = 0.0
+	($WorldEnvironment as WorldEnvironment).environment = environment
+	var sun := $Sun as DirectionalLight3D
+	sun.light_color = map.sun
+	sun.light_energy = map.sun_energy
 
 
 ## Client: tell the server our world is built. Repeated until our player appears, because a faster
@@ -454,6 +491,13 @@ func _unhandled_input(event: InputEvent) -> void:
 	var button := event as InputEventMouseButton
 	var real_click := button != null and button.pressed and button.device != InputEvent.DEVICE_ID_EMULATION \
 			and not Platform.mobile_layout
+	if local_player.is_dead and game_mode.match_mode == Net.Mode.LAST_STAND:
+		var tap := event is InputEventScreenTouch and (event as InputEventScreenTouch).pressed
+		if (real_click or tap or event.is_action_pressed(&"switch_weapon") or event.is_action_pressed(&"attack")) \
+				and not event.is_echo():
+			_spectate_next()
+			get_viewport().set_input_as_handled()
+		return
 	if _bow_rain_targeting:
 		if real_click:
 			if button.button_index == MOUSE_BUTTON_LEFT:
@@ -701,6 +745,7 @@ func _process(delta: float) -> void:
 	_vibrate_cooldown -= delta
 	_update_bow_rain_target()
 	_update_respawn_display(delta)
+	_update_spectating()
 	_update_camera_zoom()
 	_update_kill_mark()
 	if training_mode and training_field:
@@ -775,6 +820,33 @@ func free_spot_around(center: Vector3, distance: float) -> Vector3:
 		if space.intersect_shape(query, 1).is_empty():
 			return spot
 	return Vector3.INF
+
+
+## Last Stand: while our hero is gone, the camera follows a teammate who is still in the match.
+func _update_spectating() -> void:
+	if game_mode.match_mode != Net.Mode.LAST_STAND or not is_instance_valid(local_player) or _game_over:
+		return
+	if not local_player.is_dead:
+		return
+	if not is_instance_valid(_spectating) or _spectating.is_dead:
+		_spectate_next()
+	hud.show_spectating(_spectating.display_name if is_instance_valid(_spectating) else "")
+
+
+## Follow the next teammate still in the match (wraps around).
+func _spectate_next() -> void:
+	var candidates: Array[Player] = []
+	for node in get_tree().get_nodes_in_group(&"players"):
+		var player := node as Player
+		if player != local_player and not player.is_dead:
+			candidates.append(player)
+	if candidates.is_empty():
+		_spectating = null
+		return
+	candidates.sort_custom(func(a: Player, b: Player) -> bool: return a.peer_id < b.peer_id)
+	var at := candidates.find(_spectating)
+	_spectating = candidates[(at + 1) % candidates.size()]
+	camera.target = _spectating
 
 
 func _update_respawn_display(delta: float) -> void:
@@ -970,6 +1042,9 @@ func _on_player_revived(player: Player, helpers: Array) -> void:
 
 func _on_player_died(unit: Unit) -> void:
 	var player := unit as Player
+	if game_mode.match_mode == Net.Mode.LAST_STAND:
+		game_mode.on_player_fell(player)  # gone for good: spectates until the match ends
+		return
 	if game_mode.uses_respawn():
 		game_mode.on_player_died(player)
 		get_tree().create_timer(game_mode.respawn_time()).timeout.connect(func() -> void:

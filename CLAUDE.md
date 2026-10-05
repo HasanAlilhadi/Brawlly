@@ -119,10 +119,30 @@ by touch index so the joystick and buttons work together with multi-touch.
   when adding more). Input prompts: `UiKit.prompt("keyboard/w" | "mouse/left" | "xbox/rt" | "touch/tap")` from
   `assets/ui/prompts/` (Kenney Input Prompts, Double size; copy more from pre-assets when needed). Cursors: gauntlet in
   menus (Project Settings), gold sword in matches (main.gd).
-- **Modes** (`Net.Mode`): `COOP` and `KING_OF_THE_HILL` only (the only team mode, `Net.is_team_mode()`); rules in
-  `GameMode` (`scenes/main/game_mode.gd`). Deathmatch, Team Deathmatch and Capture the Flag were removed (in git
-  history before 2026-10-04) and may come back; a new mode = a `Net.Mode` value + MODE_NAMES / MODE_HINTS /
-  SCORE_LIMIT_LABELS + `lobby.gd` SCORE_LIMITS + its branches in `GameMode`.
+- **Modes** (`Net.Mode`): `COOP`, `KING_OF_THE_HILL` (the only team mode, `Net.is_team_mode()`) and `LAST_STAND`
+  (co-op, `Net.is_coop_mode()`: everyone team 0); rules in `GameMode` (`scenes/main/game_mode.gd`). Deathmatch,
+  Team Deathmatch and Capture the Flag were removed (in git history before 2026-10-04) and may come back; a new
+  mode = a `Net.Mode` value + MODE_NAMES / MODE_HINTS / SCORE_LIMIT_LABELS + `lobby.gd` SCORE_LIMITS + its branches
+  in `GameMode` (bump `Net.GAME_ID`: older builds can't show it).
+- **Last Stand** (`GameMode`, test `tests/last_stand_test.gd` + `--defeat`, online `tests/last_stand_mp_test.gd`):
+  the world is `main.LAST_STAND_WORLD_SCALE` (1.15×) bigger; `GameMode._plan_circles()` plans `CIRCLE_COUNT` (10)
+  circles from the seed (every peer knows them; WorldBuilder keeps `world_clear_radius()` around each and puts a
+  gold vein inside each edge, `world_vein_spots()`), each farther out. One `HoldCircle` node (scenes/world/
+  hold_circle.gd, groups `hold_circles` + `tracked`) moves from circle to circle. Server: the clock
+  (`circle_time` → `circle_seconds`, 60) runs only while ≥ `circle_required` standing heroes are inside; outside it
+  pauses and keeps its progress. `circle_required` = a rolled share of the heroes still alive (`living_players()`:
+  not dead; downed count) — about half on the first circle up to all on the last — clamped to those alive.
+  State reaches every peer by `_net_circle` (clients run the clock between updates). A held circle pays every
+  living hero `CIRCLE_REWARD` + `CIRCLE_REWARD_STEP` × index coins and raises `GameConfig.orc_strength` (base ×
+  `circle_strength(i)` = 1 + 0.12 i) for everything spawned after; while a standing hero is within
+  `ASSAULT_ENGAGE_RANGE`, `_send_assault()` sends squads (`wave_enemy` orcs: hunt the nearest player, capped)
+  from out of sight, tougher types from later circles; the last circle spawns the Warlord. Border waves are off
+  (`WorldEvents.waves_enabled`). No respawns (`uses_respawn()` false): main `_on_player_died` → `on_player_fell`;
+  a downed hero with nobody standing to revive them (`_check_wipe`) dies at once; nobody left = Defeat, all ten
+  held = Victory. A fallen local hero spectates (`main._update_spectating` / `_spectate_next`: attack / switch
+  weapon / click / tap = next teammate; `Hud.show_spectating`). HUD: `Hud._objective_panel` (top center, sizes in
+  `HudStyle.OBJECTIVE_*`) reads `GameMode` every frame (`set_objective_source`); minimap draws the circle + its
+  held share.
 - Flow: `main_menu.tscn` (run scene) → Find Game (`server_browser.tscn`) or Host Game (`host_menu.tscn`) → lobby →
   `main.tscn`; `PauseMenu` in `main.tscn`, disabled on game over. Menu pages are built in code with `MenuKit`
   (`scenes/ui/menu_kit.gd`: `frame()` page = title + tools + body + bottom buttons, `dialog()` modals) and lay out
@@ -199,6 +219,24 @@ by touch index so the joystick and buttons work together with multi-touch.
   resources in `resources/data/upgrade_catalog.tres` (effects by `id` in `Player._apply_upgrade` /
   `_apply_class_upgrades`), all sold on the upgrades sheet; `Player.can_buy()` (also checked on the server) only
   needs coins, a living hero and a useful, not maxed item.
+- **Maps** (`MapCatalog`, scripts/game/map_catalog.gd; lobby setting `map`, test `tests/maps_test.gd` = every map ×
+  every mode, screenshots `tests/map_shots_test.gd`): Greenwood (forest pack, rock outcrops), Gravemoor (Graveyard
+  Kit: pines, misty dusk light, fenced graveyards with gravestone rows, crypts, lantern lights), Sunstone Ruins
+  (Mini Arena: sand, ruined courtyards with broken walls / columns / statues, colonnades). A map is only looks +
+  landmarks (`MAPS` row: ground / sky / ambient / sun / fog, minimap color, tree models + density, border model,
+  decor list, `landmarks` → `WorldBuilder._add_outcrops / _add_graveyards / _add_ruins`); every map works with every
+  mode, so landmarks only go where `_is_free()` (spawns, objectives, wave gates stay clear). Repeated landmark
+  models go through `WorldBuilder._batch()` (chunked MultiMeshes) with plain collision from `_solid_box` /
+  `_solid_cylinder` / `_run()` (one box per unbroken wall / fence stretch; bodies named `Solid_<n>`). Content counts
+  scale with the world's area (`_area_scale()`). main applies the light (`_apply_map`) and the minimap color.
+  New map = a `MAPS` row (+ a landmark builder for a new kind of landmark).
+- **Gold veins** (`GoldVein`, scenes/world/gold_vein.gd/.tscn, model `tools/blender_gold_vein.py` → assets/
+  environment/gold/: a rock + separate crystals that shrink as it is mined): the steady coin source on every map
+  and mode. Group `breakable` (any weapon hits it) + `gold_veins` (minimap gold dots). Every hit (≥ `HIT_COOLDOWN`
+  apart) drops `COINS_PER_HIT` coins (+1 on a crit) as a pickup until `MAX_GOLD` is mined; after `REGROW_DELAY`
+  it grows back `REGROW_STEP` per `REGROW_EVERY`; state by `_net_gold` (static world node). One at every spawn
+  (`WorldBuilder.STARTER_VEIN_OFFSET`, the same for every team), one in every Last Stand circle, ~14 per
+  reference area elsewhere. Award "Gold Digger" (`MatchStats` stat `mined`).
 - **Spawn areas**: `WorldBuilder` keeps `SPAWN_SAFE_RADIUS` (14 m) around every spawn point free of trees / camps /
   chests / scatter, no camp within `spawn_camp_distance` (24 m), and puts one Uncommon starter chest at
   `spawn + STARTER_CHEST_OFFSET` (the same for every spawn). King of the Hill has one spawn area per team
@@ -217,7 +255,7 @@ by touch index so the joystick and buttons work together with multi-touch.
 - Orc types are scenes using the same `enemy.gd` with different exports (thrower = `projectile_scene` set;
   giant = `melee_cleave`, `anim_speed` < 1, big `radius`). `Camp._squad_composition()` decides the mix.
   Melee hits one target unless `melee_cleave`. Thrown spears reuse `arrow_projectile.gd` with a different `hit_mask`.
-- **Downed** (`GameConfig.downed_enabled`: every online match): `Player.die()` turns into `_go_down()`
+- **Downed** (`GameConfig.downed_enabled`: every online match; Last Stand: bleeding out is final): `Player.die()` turns into `_go_down()`
   (`is_downed`, crawl speed, out of `player_units`). `GameConfig.is_gone()` treats downed units as gone, so AI and
   aim assist skip them. Revive = teammate within `Player.REVIVE_RANGE` for `REVIVE_TIME`. Only hostile
   player-owned damage finishes a downed player. Signals `went_down` / `revived` → main.gd (announce, Help ping).

@@ -18,6 +18,7 @@ const AWARDS: Array = [
 	[&"orc_kills", "Orc Slayer", "Orcs defeated: %d", 8, "broadsword"],
 	[&"arrow_damage", "Sharpshooter", "Arrow damage: %d", 400, "target"],
 	[&"coins", "Moneybags", "Coins collected: %d", 80, "coin"],
+	[&"mined", "Gold Digger", "Gold mined: %d", 20, "star_coin"],
 	[&"trees", "Lumberjack", "Trees chopped: %d", 3, "axe"],
 	[&"downs", "Floor Inspector", "Times downed: %d", 2, "heart_break"],
 	[&"soldiers_lost", "Where's My Army?", "Soldiers lost: %d", 10, "ghost"],

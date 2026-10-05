@@ -30,6 +30,8 @@ const WAVE_MAX_ENEMIES: int = 50
 @export var warlord_distance: float = 42.0
 
 var enabled: bool = true
+## Off in Last Stand (orc squads assault the circles instead).
+var waves_enabled: bool = true
 var goblin: TreasureGoblin
 var warlord: Warlord
 var wave_number: int = 0
@@ -64,6 +66,8 @@ func _process(delta: float) -> void:
 		_warlord_timer -= delta
 		if _warlord_timer <= 0.0:
 			spawn_warlord()
+	if not waves_enabled:
+		return
 	if wave_active:
 		if not _wave_spawning and _living_wave_enemies() == 0:
 			wave_active = false

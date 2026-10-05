@@ -99,6 +99,14 @@ var _revive_label: Label
 var _awards_box: GridContainer
 var _awards_header: Label
 var _end_buttons: BoxContainer
+## Last Stand: the circle card reads its state from here (GameMode, every frame).
+var _objective_source: GameMode
+var _objective_panel: PanelContainer
+var _objective_title: Label
+var _objective_time: Label
+var _objective_bar: ProgressBar
+var _objective_hint: Label
+var _spectate_label: Label
 
 
 func _ready() -> void:
@@ -185,6 +193,8 @@ func show_end(title: String, subtitle: String, restart_label: String = "Play aga
 	respawn_label.hide()
 	_downed_panel.hide()
 	_revive_label.hide()
+	_spectate_label.hide()
+	_objective_panel.hide()
 	_boss_panel.hide()
 	_army_row.hide()
 	_ping_button.hide()
@@ -222,6 +232,7 @@ func reset_touch_controls() -> void:
 
 
 func _process(delta: float) -> void:
+	_update_objective()
 	_poll_timer -= delta
 	if _poll_timer <= 0.0:
 		_poll_timer = 0.25
@@ -418,7 +429,94 @@ func _build_extras() -> void:
 	_revive_label.hide()
 	root.add_child(_revive_label)
 
+	_build_objective_panel()
+	_spectate_label = _small_label("", HudStyle.FONT_TITLE)
+	_spectate_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_spectate_label.offset_left = -HudStyle.OBJECTIVE_WIDTH
+	_spectate_label.offset_right = HudStyle.OBJECTIVE_WIDTH
+	_spectate_label.offset_top = -HudStyle.SPECTATE_BOTTOM - HudStyle.BUTTON
+	_spectate_label.offset_bottom = -HudStyle.SPECTATE_BOTTOM
+	_spectate_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_spectate_label.hide()
+	root.add_child(_spectate_label)
+
 	_build_end_screen()
+
+
+## Last Stand card (top center): flag badge, "Circle 3 / 10", time left, the held share, heroes in the circle.
+func _build_objective_panel() -> void:
+	_objective_panel = PanelContainer.new()
+	_objective_panel.name = "ObjectivePanel"
+	_objective_panel.theme_type_variation = &"PanelCompact"
+	_objective_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_objective_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	_objective_panel.offset_left = -HudStyle.OBJECTIVE_WIDTH * 0.5
+	_objective_panel.offset_right = HudStyle.OBJECTIVE_WIDTH * 0.5
+	_objective_panel.offset_top = HudStyle.OBJECTIVE_TOP
+	_objective_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	var row := HBoxContainer.new()
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_theme_constant_override("separation", int(HudStyle.GAP))
+	_objective_panel.add_child(row)
+	row.add_child(UiKit.medal("flag", HudStyle.BADGE))
+	var column := VBoxContainer.new()
+	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	column.add_theme_constant_override("separation", 4)
+	row.add_child(column)
+	var title_row := HBoxContainer.new()
+	title_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	column.add_child(title_row)
+	_objective_title = _small_label("", HudStyle.FONT_TITLE)
+	_objective_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_row.add_child(_objective_title)
+	_objective_time = _small_label("", HudStyle.FONT_TITLE)
+	_objective_time.text_direction = Control.TEXT_DIRECTION_LTR
+	title_row.add_child(_objective_time)
+	_objective_bar = _downed_bar(&"ProgressBarGreen")
+	column.add_child(_objective_bar)
+	_objective_hint = _small_label("", HudStyle.FONT_SMALL)
+	column.add_child(_objective_hint)
+	_objective_panel.hide()
+	root.add_child(_objective_panel)
+
+
+## Last Stand: the card follows `source` (GameMode) from now on.
+func set_objective_source(source: GameMode) -> void:
+	_objective_source = source
+	_update_objective()
+
+
+func _update_objective() -> void:
+	var mode := _objective_source
+	var shown := mode != null and is_instance_valid(mode) and mode.match_mode == Net.Mode.LAST_STAND and not _ended
+	_objective_panel.visible = shown
+	if not shown:
+		return
+	var left := ceili(maxf(mode.circle_seconds - mode.circle_time, 0.0))
+	_objective_title.text = "Circle %d / %d" % [mini(mode.circle_index + 1, GameMode.CIRCLE_COUNT), GameMode.CIRCLE_COUNT]
+	_objective_time.text = "%d:%02d" % [left / 60, left % 60]
+	_objective_bar.value = mode.circle_time / mode.circle_seconds
+	var needed := mode.circle_required
+	var heroes := "hero" if needed == 1 else "heroes"
+	var color := HoldCircle.IDLE
+	if mode.circle_inside >= needed and mode.circle_inside > 0:
+		_objective_hint.text = "Holding! %d / %d %s in the circle" % [mode.circle_inside, needed, heroes]
+		color = HoldCircle.HOLDING
+	elif mode.circle_inside > 0:
+		_objective_hint.text = "Need %d / %d %s in the circle" % [mode.circle_inside, needed, heroes]
+		color = HoldCircle.SHORT
+	else:
+		_objective_hint.text = "Go to the circle: %d %s needed" % [needed, heroes]
+	_objective_hint.add_theme_color_override("font_color", color.lightened(0.3))
+
+
+## Last Stand, our hero is gone: who the camera follows ("" hides the line).
+func show_spectating(player_name: String) -> void:
+	_spectate_label.visible = player_name != "" and not _ended
+	if player_name != "":
+		var next := "tap" if Platform.touch_mode else "click"
+		_spectate_label.text = "You fell. Watching %s (%s for the next hero)" % [player_name, next]
 
 
 ## "You're down" card (bottom center, clear of the player): skull badge, bleed-out bar with seconds,

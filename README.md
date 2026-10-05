@@ -53,7 +53,7 @@ portrait on phones. There is no single player: host a game (alone is fine) or jo
   1.35× at the edges; squads grow from ~4 to ~24. The house shows how many orcs are still alive; bigger camps are
   bigger squares on the minimap. Fallen orcs don't respawn while their camp is under attack.
 - **Hero**: your sword hits every orc in front of you; you regenerate health after 5 s without damage.
-- **Win**: destroy every camp. **Lose**: player health reaches 0.
+- **Win** (Co-op vs Orcs): destroy every camp. Last Stand: hold all ten circles.
 
 ### Multiplayer (local Wi-Fi)
 
@@ -70,15 +70,29 @@ portrait on phones. There is no single player: host a game (alone is fine) or jo
   the match settings on the right, the invite address with **Copy** at the top. Players press **Ready up**; the
   host's **Start** shows how many are ready. Kicked / host left → back to the main menu with a notice saying why.
   When the host presses Start, everyone sees a **3-2-1 countdown**, then the screen fades into the match
-  (it fades in once your hero has spawned). The host sets **mode**, **orc camps** (0–60), **difficulty** (Easy/Normal/Hard/Brutal),
+  (it fades in once your hero has spawned). The host sets **mode**, **map**, **orc camps** (0–60), **difficulty** (Easy/Normal/Hard/Brutal),
   **starting coins**, and for King of the Hill **teams** (2–4), **hill seconds to win** and **time limit**. Players
   pick teams in King of the Hill, and everyone picks their **class** (each player's class shows in the list).
 - **Colors are automatic and relative to you**: you and your soldiers are blue, teammates and their soldiers green,
   enemies red (King of the Hill: each enemy team its own color — red, yellow, purple). Team names follow the same
   rule ("Your team", "Red team") everywhere: lobby, score line, announcements.
-- **Modes**: **Co-op vs Orcs** (everyone together, destroy every camp) and **King of the Hill** (teams hold the hill
-  in the middle to earn points). Orcs stay in both and fight everyone. Destroying a camp gives its soldiers to
-  whoever landed the last hit. (Deathmatch, Team Deathmatch and Capture the Flag were removed for now.)
+- **Modes**: **Co-op vs Orcs** (everyone together, destroy every camp), **King of the Hill** (teams hold the hill
+  in the middle to earn points) and **Last Stand** (below). Orcs stay in all of them and fight everyone.
+  (Deathmatch, Team Deathmatch and Capture the Flag were removed for now.)
+- **Last Stand** (co-op, a slightly bigger world): hold **ten circles**, one after another, for **one minute each**.
+  A circle only counts down while enough heroes stand in it ("2 / 3 heroes"): alone you need yourself; with more
+  players a circle needs some of the heroes still in the match (about half at first, everyone on the last one).
+  Step out and the circle keeps its progress until you come back. While you are near it, orc squads march on the
+  circle, and every circle makes all orcs stronger; the tenth brings the Orc Warlord. Holding a circle pays every
+  hero coins (more each circle). There are **no respawns**: a downed hero nobody revives is gone for the match and
+  watches a teammate (click / attack for the next one). Everyone gone = defeat; ten circles held = victory.
+- **Maps** (the host picks one in the lobby; every map works with every mode):
+  - **Greenwood**: meadows between thick forests and mossy rock outcrops.
+  - **Gravemoor**: a misty moor at dusk with pine woods, fenced graveyards, crypts and lantern posts.
+  - **Sunstone Ruins**: sun-baked sand around broken courtyards (walls, columns, statues) and colonnades.
+- **Gold veins** (rocks with gold crystals, on every map): hit one with any weapon and it knocks loose 2 coins a hit
+  until it runs dry, then it slowly grows back. There's one at every spawn, one in every Last Stand circle and more
+  around the world — the steady way to earn coins for upgrades and soldiers.
 - **Spawns in multiplayer**: co-op shares one spawn area; King of the Hill gives every team its own, far apart.
 - Online matches don't pause (pause menu → Leave Game); players respawn after a few seconds.
 - The host's device runs the match; up to 8 players. Joining by IP always works; automatic discovery on iPhone may
