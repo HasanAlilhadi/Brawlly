@@ -8,7 +8,7 @@ static var world_half: float = 80.0
 ## The "Command" upgrade (Army tab) raises Player.follower_cap by 1 per level, up to 15.
 const BASE_FOLLOWER_CAP: int = 10
 ## Seconds a recruited soldier trains before it joins its player.
-const SOLDIER_TRAIN_TIME: float = 10.0
+const SOLDIER_TRAIN_TIME: float = 5.0
 
 ## Orcs are their own team, hostile to everyone.
 const ORC_TEAM: int = -1

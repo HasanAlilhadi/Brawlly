@@ -104,20 +104,20 @@ func _tick(delta: float) -> bool:
 					printerr("FAILED potions: bought %d, health %.0f" % [potions, player.health])
 				_next("nearest warband to the spawn %.1f m; bought vitality + %d potions: max health %.0f, coins %d" % [nearest_camp, potions, player.max_health, player.coins])
 		6:
-			# Recruit: 50 each, trains one after another (10 s each), then joins right behind the player.
-			player.coins = 150
+			# Recruit: 10 each, trains one after another (5 s each), then joins right behind the player.
+			player.coins = 30
 			var recruit := _def(&"recruit")
 			var bought := int(player.buy_upgrade(recruit)) + int(player.buy_upgrade(recruit))
-			if bought != 2 or player.coins != 50 or player.soldiers_training != 2:
+			if bought != 2 or player.coins != 10 or player.soldiers_training != 2:
 				printerr("FAILED recruit: bought %d, coins %d, training %d" % [bought, player.coins, player.soldiers_training])
 			_next("recruited 2 (training %d, next in %.1fs)" % [player.soldiers_training, player.next_soldier_in()])
 		7:
-			if pt > 10.6 and pt < 10.65 and (player.followers().size() != 1 or player.soldiers_training != 1):
-				printerr("FAILED queue at 10 s: following %d training %d" % [player.followers().size(), player.soldiers_training])
-			if pt > 20.6:
+			if pt > 5.6 and pt < 5.65 and (player.followers().size() != 1 or player.soldiers_training != 1):
+				printerr("FAILED queue at 5 s: following %d training %d" % [player.followers().size(), player.soldiers_training])
+			if pt > 10.6:
 				var d := _army_center().distance_to(player.global_position)
 				if player.followers().size() != 2 or player.soldiers_training != 0 or d > 4.0:
-					printerr("FAILED joined at 20 s: following %d training %d, %.1f m from the player" % [player.followers().size(), player.soldiers_training, d])
+					printerr("FAILED joined at 10 s: following %d training %d, %.1f m from the player" % [player.followers().size(), player.soldiers_training, d])
 				# Fill the army (cap 10) and skip the training.
 				player.coins = 100000
 				var recruit := _def(&"recruit")

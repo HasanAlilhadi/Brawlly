@@ -15,8 +15,8 @@ portrait on phones. There is no single player: host a game (alone is fine) or jo
     into it. Soldiers: archers that stop at range and shoot.
   - **Upgrades sheet** (press **T**, the gamepad View button, click the "T Upgrades" tab at the bottom of the screen or
     the star button next to pause; a coin on the tab means you can afford something): slides up from the
-    bottom with two tabs. Everything in the game is bought here. **Army**: recruit a soldier anywhere (50 coins; it
-    trains 10 s, then joins you on the spot), **Soldier Damage** / **Soldier Health** (+25% each, 3 levels each) and
+    bottom with two tabs. Everything in the game is bought here. **Army**: recruit a soldier anywhere (10 coins; it
+    trains 5 s, then joins you on the spot), **Soldier Damage** / **Soldier Health** (+25% each, 3 levels each) and
     **Command** (+1 army size). **Hero**: **Vitality** (+30 max health), **Potion** (heal 60, buy again and again) and
     your class's upgrades, bought with coins anywhere (free in the Training Field, which also hands out the unlocks):
     - Swordsman: Increase Damage, Fire Rate, **Knock Back or Wave** (pick one: hits shove enemies far back, or each
@@ -40,8 +40,8 @@ portrait on phones. There is no single player: host a game (alone is fine) or jo
   crypt — Graveyard Kit). Nothing floats over a band: scout for them. Only **large bands** (10+) show on the
   minimap (skull = undead, axe = orcs; a pulsing ring = a boss leads it). Fallen members return only while the band
   is calm and nobody is near; wipe a band out and it's gone for good. Fell a boss and its whole band is routed.
-- **Soldiers** are recruited from the upgrades sheet's Army tab, anywhere: 50 coins each, trained one after another
-  (10 s each), then each appears right behind you. They follow and fight for you; dead soldiers never come back.
+- **Soldiers** are recruited from the upgrades sheet's Army tab, anywhere: 10 coins each, trained one after another
+  (5 s each), then each appears right behind you. They follow and fight for you; dead soldiers never come back.
   Army cap 10 (following + training); **Command** (Army tab) raises it by 1 per level (100 coins each) up to 15.
 - **Enemy types** (each its own movement, attacks and abilities, built from components):
   - **Orc Grunt** — runs in and swings. **Orc Spear Thrower** — keeps 4–7 m away, throws spears ahead of you.

@@ -143,7 +143,7 @@ func _sheet() -> void:
 	await _army(hud)
 
 
-## Army tab: recruit anywhere (joins beside you after 10 s), Soldier Damage / Health max at 3 levels each.
+## Army tab: recruit anywhere (10 coins, joins beside you after 5 s), Soldier Damage / Health max at 3 levels each.
 func _army(hud: Hud) -> void:
 	(hud.upgrade_sheet.find_child("ArmyTab", true, false) as Button).pressed.emit()
 	(hud.upgrade_sheet.find_child("ArmyTab", true, false) as Button).button_pressed = true
@@ -156,15 +156,15 @@ func _army(hud: Hud) -> void:
 	var coins := player.coins
 	var before := player.followers().size()
 	_check(await _buy(&"recruit"), "bought a soldier from the Army tab")
-	_check(player.coins == coins - 50 and player.soldiers_training == 1, "50 coins, one soldier training")
+	_check(player.coins == coins - 10 and player.soldiers_training == 1, "10 coins, one soldier training")
 	await _wait(1.0)
 	var status := (hud.upgrade_sheet.find_child("RecruitStatus", true, false) as Label).text
-	_check(status.begins_with("Next soldier in 9") or status.begins_with("Next soldier in 8"), "the card counts down (%s)" % status)
-	await _wait(8.5)
-	_check(player.followers().size() == before, "not before 10 s")
+	_check(status.begins_with("Next soldier in 5") or status.begins_with("Next soldier in 4"), "the card counts down (%s)" % status)
+	await _wait(3.5)
+	_check(player.followers().size() == before, "not before 5 s")
 	await _wait(1.0)
 	var joined := player.followers()
-	_check(joined.size() == before + 1, "after 10 s a soldier joins (%d following)" % joined.size())
+	_check(joined.size() == before + 1, "after 5 s a soldier joins (%d following)" % joined.size())
 	if not joined.is_empty():
 		_check((joined[-1] as Node3D).global_position.distance_to(player.global_position) < 3.0, "it appears right beside you")
 	var trained := joined[-1] as Ally if not joined.is_empty() else null

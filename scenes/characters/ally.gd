@@ -39,6 +39,8 @@ const STAB_BACK: float = -0.15
 const STAB_REACH: float = 0.55
 ## Weapon id (ClassDef.ally_weapon) -> stats over the scene's (the sword soldier). `damage` is per hit
 ## (an arrow for the bow).
+## Every soldier's health and damage × this (on top of the weapon's stats and the Soldier Damage / Health upgrades).
+const BASE_POWER: float = 1.25
 const WEAPON_STATS: Dictionary = {
 	"sword": {},
 	"spear": {"damage": 11.5, "range": 1.45, "cooldown": 1.1},
@@ -96,8 +98,8 @@ func _ready() -> void:
 	add_to_group(&"allies")
 	add_to_group(&"player_units")
 	_think_timer = randf() * 0.3
-	_base_max_health = max_health
-	_base_damage = melee_damage
+	_base_max_health = max_health * BASE_POWER
+	_base_damage = melee_damage * BASE_POWER
 	_find_leader()
 	refresh_army_bonus()
 

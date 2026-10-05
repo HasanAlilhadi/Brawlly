@@ -235,8 +235,8 @@ by touch index so the joystick and buttons work together with multi-touch.
   (`GameMode.world_spawn_points()` = `team_bases`).
 - **Soldiers come only from recruiting** (the upgrades sheet's Army tab; a band whose boss falls is routed —
   they `die()` and drop loot).
-  Recruit (50, constant) → `Player.soldiers_training` (replicated count; a queue — one after another,
-  `GameConfig.SOLDIER_TRAIN_TIME` each) → the server spawns an `Ally` right behind the player, which follows at once.
+  Recruit (10, constant) → `Player.soldiers_training` (replicated count; a queue — one after another,
+  `GameConfig.SOLDIER_TRAIN_TIME` (5 s) each) → the server spawns an `Ally` right behind the player, which follows at once.
   `army_size()` = followers + training ≤ `follower_cap`
   (`GameConfig.BASE_FOLLOWER_CAP` 10, Command +1 per level, 100 constant, max 15). Soldiers read
   `Player.ally_damage` / `ally_health`.
@@ -386,7 +386,7 @@ by touch index so the joystick and buttons work together with multi-touch.
   (~1080 on 6); Spearman 3.5 m/s, spear 68 dps with 2.6 m reach (pierces ~2), javelin ~38 dps, shield 200, Bull Rush
   4 × spear damage = 168 per enemy crossed (~1000 on 6); Bowman 3.6 m/s, bow 58 dps at 12 m, no shield, knife 44 dps,
   Bow Rain ~110 per enemy on 6 (+ it keeps shooting, ~950). Damage +20% × 5 and Fire Rate +15% × 3 are the same for
-  every class (maxed ×2.9 for all). Soldiers: sword 80 hp / 12 dps, spear 80 / ~10.5 (1.45 m reach), bow 65 / ~9.6 (from
+  every class (maxed ×2.9 for all). Soldiers (× `Ally.BASE_POWER` 1.25 health and damage): sword 100 hp / 15 dps, spear 100 / ~13 (1.45 m reach), bow 81 / ~12 (from
   half the hero's bow range). Enemies (hp / damage, before the band's 0.8–1.3× and difficulty): Orc Grunt 80/10;
   Thrower 55, spear 10; Brute 420/24 cleave (stomp 26, charge 28); Skeleton Warrior 60/9 (gets up once at 50%);
   Skeleton Archer 45, arrow 9; Zombie 130/14 (lunge 16, burst 16); Ghost 50/9; Vampire 170/15 (60% life steal);
