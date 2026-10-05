@@ -1,31 +1,37 @@
 extends Node
-## Both enemy weapons wait briefly before their first attack, then use normal cooldowns.
+## Both kinds of enemy attack (a thrown spear, a melee swing) wait briefly before their first use, then use
+## their normal cooldowns.
 
-const THROWER_SCENE := preload("res://scenes/characters/enemy_thrower.tscn")
-const MELEE_SCENE := preload("res://scenes/characters/enemy.tscn")
+const THROWER_SCENE := preload("res://scenes/characters/enemies/orc_thrower.tscn")
+const MELEE_SCENE := preload("res://scenes/characters/enemies/orc_grunt.tscn")
 
 
 func _ready() -> void:
 	var thrower := THROWER_SCENE.instantiate() as Enemy
 	var fighter := MELEE_SCENE.instantiate() as Enemy
+	var target := Node3D.new()
+	target.position = Vector3(6, 0, 0)
 	get_tree().root.add_child.call_deferred(thrower)
 	get_tree().root.add_child.call_deferred(fighter)
-	_check_enemies.call_deferred(thrower, fighter)
+	get_tree().root.add_child.call_deferred(target)
+	_check_enemies.call_deferred(thrower, fighter, target)
 
 
-func _check_enemies(thrower: Enemy, fighter: Enemy) -> void:
+func _check_enemies(thrower: Enemy, fighter: Enemy, target: Node3D) -> void:
 	thrower.set_physics_process(false)
 	fighter.set_physics_process(false)
+	var throw := thrower.component(ProjectileAttack) as ProjectileAttack
 	var throw_action := thrower.action_token
-	thrower._try_throw()
-	var throw_delayed := is_equal_approx(thrower._first_attack_delay_left, Enemy.FIRST_ATTACK_DELAY) \
-			and thrower.action_token == throw_action and is_zero_approx(thrower._throw_timer)
-	thrower._try_throw()
-	throw_delayed = throw_delayed and thrower.action_token == throw_action
+	var throw_delayed := not throw.can_start(target) \
+			and is_equal_approx(thrower._first_attack_delay_left, Enemy.FIRST_ATTACK_DELAY) \
+			and thrower.action_token == throw_action and is_zero_approx(throw._cooldown_left)
+	throw_delayed = throw_delayed and not throw.can_start(target)
 	thrower._first_attack_delay_left = 0.0
-	thrower._try_throw()
-	var throw_started := thrower.action_token != throw_action \
-			and thrower._throw_timer >= thrower.throw_cooldown * 0.85
+	var throw_started := throw.can_start(target)
+	if throw_started:
+		throw.start(target)
+	throw_started = throw_started and thrower.action_token != throw_action \
+			and throw._cooldown_left >= throw.cooldown * (1.0 - throw.cooldown_jitter)
 
 	var melee_action := fighter.action_token
 	var melee_delayed := not fighter.melee() \

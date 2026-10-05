@@ -10,7 +10,7 @@ var pt := 0.0
 var main: Node
 var player: Player
 var goblin: TreasureGoblin
-var warlord: Warlord
+var warlord: Enemy
 var start_dist := 0.0
 var coins_before := 0
 var point := Vector3.ZERO
@@ -93,7 +93,7 @@ func _process(delta: float) -> void:
 		3:
 			if pt > 0.5:
 				_check(main.match_stats.stat(1, &"goblin_kills") == 1.0, "goblin catch counted")
-				# Orders are checked in the (camp-free) spawn area, away from orcs the chase may have woken.
+				# Orders are checked in the (warband-free) spawn area, away from orcs the chase may have woken.
 				player.global_position = main.game_mode.spawn_point_for(1)
 				for orc in get_tree().get_nodes_in_group(&"active_enemies"):
 					if (orc as Node3D).global_position.distance_to(player.global_position) < 25.0:
@@ -137,12 +137,12 @@ func _process(delta: float) -> void:
 			if pt > 0.2:
 				_check(get_tree().get_nodes_in_group(&"pings").size() > 0, "ping marker shown")
 				warlord = main.world_events.spawn_warlord(player)
-				_check(warlord != null, "warlord spawned")
+				_check(warlord != null and warlord.is_in_group(&"tracked"), "warlord spawned + tracked")
 				start_dist = warlord.global_position.distance_to(player.global_position)
 				_next()
 		9:
 			if pt > 6.0:
-				_check(warlord._band.size() >= 7, "warband raised (%d orcs)" % warlord._band.size())
+				_check(main.world_events.warlord_band.members().size() >= 7, "warband raised (%d orcs)" % main.world_events.warlord_band.members().size())
 				var dist := warlord.global_position.distance_to(player.global_position)
 				_check(dist < start_dist - 5.0, "warlord marches on the player (%.1f -> %.1f m)" % [start_dist, dist])
 				start_dist = player.followers().size()
@@ -152,8 +152,9 @@ func _process(delta: float) -> void:
 			if pt > 1.0:
 				var army := player.followers().size()
 				_check(army <= start_dist, "warband is routed, not recruited (%d -> %d soldiers)" % [start_dist, army])
-				_check(warlord._band.is_empty(), "warband cleared")
-				_check(main.match_stats.stat(1, &"warlord_kills") == 1.0, "warlord kill counted")
+				var band: Variant = main.world_events.warlord_band
+				_check(not is_instance_valid(band) or (band as Warband).members().is_empty(), "warband cleared")
+				_check(main.match_stats.stat(1, &"boss_kills") == 1.0, "warlord kill counted")
 				_check(main.world_events._wave_scenes(1).size() == 10 \
 						and main.world_events._wave_scenes(2).size() == 20 \
 						and main.world_events._wave_scenes(5).size() == 50 \

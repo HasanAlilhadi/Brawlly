@@ -30,6 +30,11 @@ const HIT_HEIGHT: float = 1.0
 ## Difficulty (set per match): orc health/damage multiplier and respawn-delay multiplier.
 static var orc_strength: float = 1.0
 static var orc_respawn_scale: float = 1.0
+## Blood Moon event (WorldEvents): every enemy is faster and hits harder, and drops double loot.
+static var blood_moon: bool = false
+const BLOOD_MOON_SPEED: float = 1.2
+const BLOOD_MOON_DAMAGE: float = 1.3
+const BLOOD_MOON_LOOT: float = 2.0
 ## Players at 0 health go down (teammates can revive them) instead of dying. Set by main.gd per match.
 static var downed_enabled: bool = false
 

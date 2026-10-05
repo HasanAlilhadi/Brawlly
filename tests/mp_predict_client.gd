@@ -44,5 +44,5 @@ func _physics_process(delta: float) -> void:
 		2:
 			if pt > 1.0:
 				_log("after stopping: shown x=%.3f, server x=%.3f, gap=%.3f; anim=%s" % [me.global_position.x, me.net_position.x, absf(me.global_position.x - me.net_position.x), me.anim.current_animation])
-				_log("orcs visible=%d camps=%d my health=%.0f/%.0f" % [get_tree().get_nodes_in_group(&"enemies").size(), get_tree().get_nodes_in_group(&"camps").size(), me.health, me.max_health])
+				_log("enemies visible=%d warbands=%d my health=%.0f/%.0f" % [get_tree().get_nodes_in_group(&"enemies").size(), get_tree().get_nodes_in_group(&"warbands").size(), me.health, me.max_health])
 				phase = 3

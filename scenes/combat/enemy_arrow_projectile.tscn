@@ -1,0 +1,13 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scenes/combat/arrow_projectile.gd" id="1_script"]
+[ext_resource type="PackedScene" path="res://assets/items/forest/arrow.glb" id="2_model"]
+
+[node name="EnemyArrowProjectile" type="Node3D"]
+script = ExtResource("1_script")
+speed = 15.0
+lifetime = 0.85
+hit_mask = 11
+
+[node name="Model" parent="." instance=ExtResource("2_model")]
+transform = Transform3D(-1.1, 0, 0, 0, 1.1, 0, 0, 0, -1.1, 0, 0, 0)

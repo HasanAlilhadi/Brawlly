@@ -5,7 +5,7 @@ var pt := 0.0
 var main: Node
 var player: Player
 var hud: Hud
-var camp: Camp
+var band: Warband
 
 func _ready() -> void:
 	get_tree().change_scene_to_file("res://scenes/main/main.tscn")
@@ -50,7 +50,7 @@ func _tick(delta: float) -> bool:
 						or float(next.health) <= float(current.health) or next.color == current.color:
 					printerr("FAILED chest rarity progression at tier %d" % i)
 			player.max_health = 1e6; player.health = 1e6
-			_next("solo started: players=%d camps=%d orcs=%d peer=%d team=%d" % [players.size(), get_tree().get_nodes_in_group(&"camps").size(), get_tree().get_nodes_in_group(&"enemies").size(), player.peer_id, player.team_id])
+			_next("solo started: players=%d warbands=%d enemies=%d peer=%d team=%d" % [players.size(), get_tree().get_nodes_in_group(&"warbands").size(), get_tree().get_nodes_in_group(&"enemies").size(), player.peer_id, player.team_id])
 		1:
 			var chest: Node3D = null
 			for c in main.get_node("World").get_children():
@@ -63,28 +63,29 @@ func _tick(delta: float) -> bool:
 			if tree and _drive(tree.global_position, 1.1): player.attack_melee()
 			if pt > 6: _next("chop: tree %s" % ("felled" if tree == null or tree.is_dead else "standing"))
 		3:
-			camp = _nearest(&"camps")
-			player.global_position = camp.global_position + Vector3(0, 0, camp.radius + 3)
-			_next("at camp squad=%d" % camp.squad_size)
+			band = _nearest(&"warbands", func(b: Warband) -> bool: return b.size <= 6 and not b.is_dead)
+			player.global_position = band.global_position + Vector3(0, 0, 4)
+			_next("at a warband of %d" % band.size)
 		4:
-			# Sword only (no bow in hand): get within reach of the wall and keep swinging at it.
-			if _drive(camp.global_position, camp.radius + 0.7): player.attack_melee_toward(camp.global_position - player.global_position)
-			else: player.attack_melee()
-			if camp.is_dead:
-				if player.followers().size() > 0: printerr("FAILED a destroyed camp gave soldiers")
-				_next("camp destroyed: my soldiers=%d coins=%d" % [player.followers().size(), player.coins])
-			elif pt > 40: _next("FAILED camp hp %.0f" % camp.health)
+			# Sword only: fight the band until it is wiped out (they come to us).
+			var foe := _nearest(&"active_enemies")
+			if foe and _drive(foe.global_position, 1.2): player.attack_melee_toward(foe.global_position - player.global_position)
+			elif foe == null: hud.joystick.output = Vector2.ZERO
+			if band.is_dead:
+				if player.followers().size() > 0: printerr("FAILED a wiped-out band gave soldiers")
+				_next("warband wiped out: my soldiers=%d coins=%d" % [player.followers().size(), player.coins])
+			elif pt > 60: _next("FAILED warband still has %d" % band.alive)
 		5:
-			_drive(camp.global_position + Vector3(0, 0, 4), 0.5)
+			_drive(band.global_position + Vector3(0, 0, 4), 0.5)
 			if pt > 3:
 				hud.joystick.output = Vector2.ZERO
-				# No town, no stalls: the spawn area stays clear of camps; everything is bought anywhere.
+				# No town, no stalls: the spawn area stays clear of warbands; everything is bought anywhere.
 				for group: StringName in [&"towns", &"shop_stations", &"penned"]:
 					if get_tree().get_node_count_in_group(group) > 0: printerr("FAILED group %s still used" % group)
 				var nearest_camp := INF
-				for c: Camp in get_tree().get_nodes_in_group(&"camps"):
+				for c: Warband in get_tree().get_nodes_in_group(&"warbands"):
 					nearest_camp = minf(nearest_camp, Vector3.ZERO.distance_to(c.global_position))
-				if nearest_camp < 24.0: printerr("FAILED a camp %.1f m from the spawn" % nearest_camp)
+				if nearest_camp < 24.0: printerr("FAILED a warband %.1f m from the spawn" % nearest_camp)
 				player.coins += 100
 				var vitality := _def(&"vitality")
 				var max_before := player.max_health
@@ -101,7 +102,7 @@ func _tick(delta: float) -> bool:
 					potions += int(player.buy_upgrade(potion))
 				if potions != 3 or player.health <= player.max_health * 0.3:
 					printerr("FAILED potions: bought %d, health %.0f" % [potions, player.health])
-				_next("nearest camp to the spawn %.1f m; bought vitality + %d potions: max health %.0f, coins %d" % [nearest_camp, potions, player.max_health, player.coins])
+				_next("nearest warband to the spawn %.1f m; bought vitality + %d potions: max health %.0f, coins %d" % [nearest_camp, potions, player.max_health, player.coins])
 		6:
 			# Recruit: 50 each, trains one after another (10 s each), then joins right behind the player.
 			player.coins = 150

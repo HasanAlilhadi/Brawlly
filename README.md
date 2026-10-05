@@ -4,7 +4,7 @@ Windows PC game (desktop first) that also runs on Android / iOS, built with Godo
 
 ## The game
 
-Multiplayer heroes vs. orc camps (and each other) in a big procedural world (3D, Kenney mini packs). Landscape on PC,
+Multiplayer heroes vs. roaming warbands of orcs and undead (and each other) in a big procedural world (3D, Kenney mini packs). Landscape on PC,
 portrait on phones. There is no single player: host a game (alone is fine) or join one.
 
 - **Classes** (picked in the lobby, with a preview of your hero and soldiers; `resources/data/classes/*.tres`, `ClassDef`): each hero fights
@@ -29,31 +29,43 @@ portrait on phones. There is no single player: host a game (alone is fine) or jo
     It breaks when worn out and comes back when you respawn.
   - Every class has a special ability charged by XP: Swordsman Whirlwind, Spearman Bull Rush, and Bowman Bow Rain.
 - Melee weapons are aim sticks (drag to keep swinging toward a direction, independent of movement); ranged = drag to
-  aim, release to shoot. A tap auto-targets the nearest enemy. **Health** comes from potions (orc drops, chests).
+  aim, release to shoot. A tap auto-targets the nearest enemy. **Health** comes from potions (enemy drops, chests).
 - **Chests** have five rarities: Common (gray), Uncommon (green), Rare (blue), Epic (purple), and Legendary (gold).
   Higher rarities are tougher and drop progressively more ammo, healing, and coins. The starter chest next to
   each spawn is always Uncommon so every player/team begins with the same reward; world chests roll 55% / 25% / 12% / 6% / 2%.
-- **Orc camps**: small squads (≤ 7) live in a tent, bigger ones in a house. Each camp has a squad (≈4–6 near the start up to 20–25 at the edges; bigger squads get a bigger, tougher house). Killed orcs respawn after 10 s
-  until the house is destroyed. Destroying it routes the surviving orcs (they fall and drop their loot) and
-  spills coins.
+- **Warbands** (no camps): enemies roam the map in groups — the **size of a band is its power**. Near the start a
+  few grunts or skeletons; farther out bigger bands with throwers, archers and elites, tougher too (0.8× → 1.3×);
+  the biggest (18+) are led by a boss. Bands march in formation (melee in front, ranged behind) from one spot of
+  their ground to the next, rest, and go on. The undead gather around **graveyards** (iron fences, gravestones, a
+  crypt — Graveyard Kit). Nothing floats over a band: scout for them. Only **large bands** (10+) show on the
+  minimap (skull = undead, axe = orcs; a pulsing ring = a boss leads it). Fallen members return only while the band
+  is calm and nobody is near; wipe a band out and it's gone for good. Fell a boss and its whole band is routed.
 - **Soldiers** are recruited from the upgrades sheet's Army tab, anywhere: 50 coins each, trained one after another
   (10 s each), then each appears right behind you. They follow and fight for you; dead soldiers never come back.
   Army cap 10 (following + training); **Command** (Army tab) raises it by 1 per level (100 coins each) up to 15.
-- **Orc types**: Spearman (basic; carries the arena sword), Swordsman (tougher, faster attacks; orc sword), Spear Thrower (throws spears from ~8 units,
-  backs off when you close in), Giant (huge, slow, heavy punches that hit everything in front). Camps mix them:
-  ~25% swordsmen, ~20% throwers, rest spearmen, plus 1 giant at 10+ orcs and 2 at 18+.
-- **Aggro**: hitting an orc or its camp (even with an arrow from far away) alerts the whole squad (red "!").
+- **Enemy types** (each its own movement, attacks and abilities, built from components):
+  - **Orc Grunt** — runs in and swings. **Orc Spear Thrower** — keeps 4–7 m away, throws spears ahead of you.
+  - **Orc Brute** (elite) — huge and slow, cleaves, **charges** along a red lane, **stomps** (red ring), enrages when hurt.
+  - **Skeleton Warrior** — quick, circles to your side or back; falls apart once and **gets back up** (hit the bone pile to stop it).
+  - **Skeleton Archer** — stays 6–10 m back and shoots arrows.
+  - **Zombie** — slow lurching shambler, tanky, **lunges** at you, **bursts** in a toxic cloud when it dies (green ring: step out).
+  - **Ghost** — floats through trees and walls in weaving curves, **phases** (hits pass through) when struck.
+  - **Vampire** (elite) — circles you, **blinks** behind you in a puff of bats, heals by biting.
+  - **Necromancer** (elite) — keeps away, casts slow magic bolts, **raises skeletons** from the ground.
+  - Bosses: **Orc Warlord** (charges, stomps, rallies orcs at half health, enrages) and **Vampire Lord** (stalks,
+    blinks, blood-bolt volleys, raises the dead at 66% and 33%, life steal, enrages).
+- **Aggro**: hitting any member of a band (even with an arrow from far away), or one of them spotting you, alerts the
+  whole band (red "!").
   They chase the attacker faster and much farther than usual, and give up only after losing sight for ~10 s.
-- **Coins & upgrades**: orcs, chests and destroyed camps give coins, spent anywhere on the upgrades sheet (T / View /
+- **Coins & upgrades**: enemies, chests and bosses give coins, spent anywhere on the upgrades sheet (T / View /
   the star button): the **Hero** tab has your class's upgrades plus Vitality and Potion; the **Army** tab has Recruit,
   Soldier Damage, Soldier Health and Command. There are no shops or towns: each spawn is an open area kept clear of
-  orc camps, with a starter chest. Items are data: `resources/data/upgrade_catalog.tres` (`sheet` = the tab of a
+  warbands, with a starter chest. Items are data: `resources/data/upgrade_catalog.tres` (`sheet` = the tab of a
   non-class item, `classes` = a class upgrade).
-- **Difficulty curve**: each camp has a tier (distance from the start). Orcs are 0.75× strength near the start up to
-  1.35× at the edges; squads grow from ~4 to ~24. The house shows how many orcs are still alive; bigger camps are
-  bigger squares on the minimap. Fallen orcs don't respawn while their camp is under attack.
-- **Hero**: your sword hits every orc in front of you; you regenerate health after 5 s without damage.
-- **Win** (Co-op vs Orcs): destroy every camp. Last Stand: hold all ten circles.
+- **Difficulty curve**: bands grow from 3 near the start to ~24 at the edges, and with size their strength
+  (0.8× → 1.3×) and loot. The lobby's difficulty multiplies it all.
+- **Hero**: your sword hits every enemy in front of you; you regenerate health after 5 s without damage.
+- **Win** (Co-op vs the Horde): wipe out every warband. Last Stand: hold all ten circles.
 
 ### Multiplayer (local Wi-Fi)
 
@@ -70,26 +82,35 @@ portrait on phones. There is no single player: host a game (alone is fine) or jo
   the match settings on the right, the invite address with **Copy** at the top. Players press **Ready up**; the
   host's **Start** shows how many are ready. Kicked / host left → back to the main menu with a notice saying why.
   When the host presses Start, everyone sees a **3-2-1 countdown**, then the screen fades into the match
-  (it fades in once your hero has spawned). The host sets **mode**, **map**, **orc camps** (0–60), **difficulty** (Easy/Normal/Hard/Brutal),
+  (it fades in once your hero has spawned). The host sets **mode**, **map**, **warbands** (0–60), **difficulty** (Easy/Normal/Hard/Brutal),
   **starting coins**, and for King of the Hill **teams** (2–4), **hill seconds to win** and **time limit**. Players
   pick teams in King of the Hill, and everyone picks their **class** (each player's class shows in the list).
 - **Colors are automatic and relative to you**: you and your soldiers are blue, teammates and their soldiers green,
   enemies red (King of the Hill: each enemy team its own color — red, yellow, purple). Team names follow the same
   rule ("Your team", "Red team") everywhere: lobby, score line, announcements.
-- **Modes**: **Co-op vs Orcs** (everyone together, destroy every camp), **King of the Hill** (teams hold the hill
-  in the middle to earn points) and **Last Stand** (below). Orcs stay in all of them and fight everyone.
-  (Deathmatch, Team Deathmatch and Capture the Flag were removed for now.)
+- **Maps** (lobby → Map; **every map works with every mode**):
+  - **Wildlands** — a new procedural forest every match: meadows, mossy rock outcrops, graveyards.
+  - **Gravemoor** — a misty moor at dusk: pine woods and many fenced graveyards, so the undead rule here.
+  - **Sunstone Ruins** — sun-baked sand around broken courtyards (walls, columns, statues) and colonnades: orc country.
+  - **Crown Ruins** — a designed arena: the hill in a ruined amphitheater, a ring of walls with eight doors, bases with
+    two exits, haunted corner shrines with Rare chests, groves to flank through (rebuild with
+    `tools/build_map_crown_ruins.gd`, or edit `scenes/maps/crown_ruins.tscn` in the editor). Co-op modes start at
+    the south base; Last Stand's ten circles are placed by hand (meadows, shrines, the hill last).
+- **World events** (lobby → toggle each): treasure goblin, Orc Warlord, invasion waves, **meteor shower** (red
+  rings, then burning rocks — star shards drop coins + XP), **thunderstorm** (rain, darkness, lightning strikes),
+  **Blood Moon** (a red night: monsters faster and stronger, double loot), **supply drop** (a Legendary crate
+  parachutes in — in King of the Hill right by the hill).
+- **Modes**: **Co-op vs the Horde** (everyone together, wipe out every warband), **King of the Hill** (teams hold
+  the hill in the middle to earn points) and **Last Stand** (below). Warbands roam in all of them and fight
+  everyone. (Deathmatch, Team Deathmatch and Capture the Flag were removed for now.)
 - **Last Stand** (co-op, a slightly bigger world): hold **ten circles**, one after another, for **one minute each**.
   A circle only counts down while enough heroes stand in it ("2 / 3 heroes"): alone you need yourself; with more
   players a circle needs some of the heroes still in the match (about half at first, everyone on the last one).
-  Step out and the circle keeps its progress until you come back. While you are near it, orc squads march on the
-  circle, and every circle makes all orcs stronger; the tenth brings the Orc Warlord. Holding a circle pays every
+  Step out and the circle keeps its progress until you come back. While you are near it, enemy squads march on the
+  circle (tougher kinds every couple of circles), and every circle makes every enemy stronger; the tenth brings the
+  Orc Warlord and its warband. Holding a circle pays every
   hero coins (more each circle). There are **no respawns**: a downed hero nobody revives is gone for the match and
   watches a teammate (click / attack for the next one). Everyone gone = defeat; ten circles held = victory.
-- **Maps** (the host picks one in the lobby; every map works with every mode):
-  - **Greenwood**: meadows between thick forests and mossy rock outcrops.
-  - **Gravemoor**: a misty moor at dusk with pine woods, fenced graveyards, crypts and lantern posts.
-  - **Sunstone Ruins**: sun-baked sand around broken courtyards (walls, columns, statues) and colonnades.
 - **Gold veins** (rocks with gold crystals, on every map): hit one with any weapon and it knocks loose 2 coins a hit
   until it runs dry, then it slowly grows back. There's one at every spawn, one in every Last Stand circle and more
   around the world — the steady way to earn coins for upgrades and soldiers.
@@ -107,9 +128,9 @@ portrait on phones. There is no single player: host a game (alone is fine) or jo
 - **World events** (lobby → World events, on by default):
   - **Treasure goblin** (~1–1.5 min in, then every ~3 min): a golden goblin near a player that runs from anyone close,
     spills coins with every hit and drops a jackpot when caught; it escapes after ~55 s.
-  - **Orc Warlord** (~4–5 min in, then every ~8 min): a huge boss marching on a player (in versus modes on the leader)
-    with a warband that grows every 25 s. It stomps everyone around it. Whoever lands the final blow gets its
-    surviving warband as soldiers, plus a pile of coins.
+  - **Orc Warlord** (~4–5 min in, then every ~8 min): a boss leading its own warband, marching on a player (in
+    versus modes on the leader); the band grows every 25 s. It charges, stomps and rallies more orcs at half
+    health. Fell it and its warband is routed, plus a pile of coins.
   - **Waves** (~2 min in): red invasion beacons warn at all four map borders before raiders march in and hunt the
     nearest living player. Waves contain 10, 20, 30, 40, then at most 50 enemies, adding swordsmen, throwers and
     giants as they advance. A new wave starts only after the current one is defeated and a short recovery period.
@@ -117,15 +138,15 @@ portrait on phones. There is no single player: host a game (alone is fine) or jo
   Buttons under the soldier count, keys 1 / 2 / 3 (at the cursor), D-pad on a gamepad.
 - **Pings** (online, your team only): Q / middle mouse / the "!" button. Pinging an enemy says "Attack!", a chest
   "Loot!", anywhere else "Here!"; H calls for help. Pings show in the world, on the minimap and as screen-edge arrows.
-- **Off-screen arrows** point at the goblin, the Warlord, downed teammates and pings; the Warlord's health bar shows
+- **Off-screen arrows** point at the goblin, the Warlord, downed teammates and pings; the nearest boss's health bar shows
   while it's near.
-- **Awards** at the end of every match: MVP, Warlord Slayer, Medic, Goblin Hunter, Headhunter, Camp Crusher,
-  Orc Slayer, Sharpshooter, Moneybags, Lumberjack, Floor Inspector, Where's My Army?, Chatterbox
+- **Awards** at the end of every match: MVP, Giant Slayer, Medic, Goblin Hunter, Headhunter, Warband Breaker,
+  Monster Slayer, Sharpshooter, Moneybags, Lumberjack, Floor Inspector, Where's My Army?, Chatterbox
   (`scripts/game/match_stats.gd`).
 
 ### Menus & UI
 
-- Starts at the **main menu** (`scenes/ui/main_menu.tscn`, 3D camp backdrop from `menu_backdrop.tscn`):
+- Starts at the **main menu** (`scenes/ui/main_menu.tscn`, 3D diorama backdrop from `menu_backdrop.tscn`):
   Find Game (`server_browser.tscn`) · Host Game (`host_menu.tscn`) · Training Field · Controls · Quit.
   Lobby: `lobby.tscn`. These pages share `MenuKit` (`scenes/ui/menu_kit.gd`: page frame, modal dialogs, buttons).
 - **Training Field** is a local onboarding area with every hero on display, unlimited special abilities and
@@ -179,18 +200,19 @@ bindings change). Bindings are Input Map actions (Project Settings → Input Map
 
 | What | File |
 |---|---|
-| Match settings (mode, camps, difficulty, coins, teams, limits) | Lobby → `Net.settings` (`scripts/autoload/net.gd`) |
+| Match settings (mode, warbands, difficulty, coins, teams, limits) | Lobby → `Net.settings` (`scripts/autoload/net.gd`) |
 | Networking, lobby, profile, LAN discovery | `scripts/autoload/net.gd` (autoload `Net`) |
 | Mode rules, scoring, respawns, spawn points | `scenes/main/game_mode.gd`, `scenes/world/capture_flag.gd`, `scenes/world/hill.gd` |
-| World generation (trees, chests, camp tiers/squad sizes) | `scenes/main/world_builder.gd` |
-| Enemy mix per camp | `resources/data/orc_roster.tres` (add a RosterEntry for a new enemy type) |
+| World generation (trees, chests, graveyards, warband sizes / factions) | `scenes/main/world_builder.gd` |
+| Enemy mix per warband | `resources/data/orc_warband.tres`, `undead_warband.tres` (add a RosterEntry for a new enemy type) |
 | Upgrades sheet items | `resources/data/upgrade_catalog.tres` + effects in `Player._apply_upgrade()` |
 | Win / lose, HUD ↔ player wiring, pings, army orders | `scenes/main/main.gd` |
-| Treasure goblin / Orc Warlord timing | `scenes/main/world_events.gd` (+ `treasure_goblin.gd`, `warlord.gd` in `scenes/characters/`) |
+| Treasure goblin / Orc Warlord timing | `scenes/main/world_events.gd` (+ `treasure_goblin.gd`; the Warlord is `scenes/characters/enemies/orc_warlord.tscn`) |
 | Match stats & awards | `scripts/game/match_stats.gd` |
 | Character base (health, melee, animations, weapons in hands) | `scenes/characters/unit.gd` |
-| Player / orc AI / soldier AI | `scenes/characters/player.gd`, `enemy.gd`, `ally.gd` (stats in the `.tscn` files: `enemy.tscn` spearman, `enemy_swordsman.tscn`, `enemy_thrower.tscn`, `enemy_giant.tscn`, `ally.tscn`) |
-| Camp spawning, respawn, conversion to soldiers | `scenes/world/camp.gd` |
+| Player / soldier AI | `scenes/characters/player.gd`, `ally.gd` (stats in `ally.tscn`) |
+| Enemies (composition) | `scenes/characters/enemy.gd` + components in `scripts/enemies/` (movement, attacks, abilities, traits); one scene per type in `scenes/characters/enemies/` |
+| Warbands: marching, formation, alerts, respawns, rout | `scenes/world/warband.gd` |
 | Trees, chests, pickups, arrows | `scenes/world/`, `scenes/items/`, `scenes/combat/` |
 | HUD, minimap | `scenes/ui/` |
 

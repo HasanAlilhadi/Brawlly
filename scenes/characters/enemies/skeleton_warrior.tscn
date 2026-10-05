@@ -1,0 +1,83 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scenes/characters/enemy.gd" id="1_enemy"]
+[ext_resource type="PackedScene" path="res://assets/characters/skeleton.glb" id="2_skeleton"]
+[ext_resource type="PackedScene" path="res://assets/items/dungeon/sword.glb" id="3_sword"]
+[ext_resource type="Script" path="res://scripts/enemies/flank_movement.gd" id="4_flank_movement"]
+[ext_resource type="Script" path="res://scripts/enemies/melee_attack.gd" id="5_melee_attack"]
+[ext_resource type="Script" path="res://scripts/enemies/reassemble_trait.gd" id="6_reassemble_trait"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
+radius = 0.27
+height = 1
+
+[sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_sync"]
+properties/0/path = NodePath(".:net_position")
+properties/0/spawn = true
+properties/0/replication_mode = 1
+properties/1/path = NodePath(".:net_yaw")
+properties/1/spawn = true
+properties/1/replication_mode = 1
+properties/2/path = NodePath(".:health")
+properties/2/spawn = true
+properties/2/replication_mode = 2
+properties/3/path = NodePath(".:max_health")
+properties/3/spawn = true
+properties/3/replication_mode = 2
+properties/4/path = NodePath(".:anim_state")
+properties/4/spawn = true
+properties/4/replication_mode = 2
+properties/5/path = NodePath(".:action_token")
+properties/5/spawn = true
+properties/5/replication_mode = 2
+properties/6/path = NodePath(".:is_dead")
+properties/6/spawn = true
+properties/6/replication_mode = 2
+properties/7/path = NodePath(".:alert_seq")
+properties/7/spawn = true
+properties/7/replication_mode = 2
+
+[node name="SkeletonWarrior" type="CharacterBody3D"]
+collision_layer = 4
+collision_mask = 31
+motion_mode = 1
+script = ExtResource("1_enemy")
+enemy_name = "Skeleton Warrior"
+faction = &"undead"
+prefers_weak = true
+max_health = 60
+move_speed = 3.4
+melee_damage = 9
+melee_range = 1.1
+melee_cooldown = 0.8
+melee_mask = 15
+right_hand_item = ExtResource("3_sword")
+right_swing_offset = Vector3(-0.24, 0, 0.02)
+right_swing_rotation = Vector3(90, 0, 0)
+health_bar_color = Color(0.9, 0.85, 0.7, 1)
+aggro_range = 7
+coin_drop_min = 1
+coin_drop_max = 3
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
+shape = SubResource("CapsuleShape3D_body")
+
+[node name="Model" parent="." instance=ExtResource("2_skeleton")]
+transform = Transform3D(1.25, 0, 0, 0, 1.25, 0, 0, 0, 1.25, 0, 0, 0)
+
+[node name="Sync" type="MultiplayerSynchronizer" parent="."]
+replication_interval = 0.05
+delta_interval = 0.05
+replication_config = SubResource("SceneReplicationConfig_sync")
+
+[node name="Movement" type="Node" parent="."]
+script = ExtResource("4_flank_movement")
+
+[node name="Melee" type="Node" parent="."]
+script = ExtResource("5_melee_attack")
+
+[node name="Reassemble" type="Node" parent="."]
+script = ExtResource("6_reassemble_trait")
+rise_time = 3.5
+health_share = 0.5

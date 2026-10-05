@@ -18,6 +18,13 @@ func _process(delta: float) -> void:
 		_log("scene -> %s" % main.name)
 		saw_respawn = false
 	if main.name != "Main": return
+	var world := main.get_node("World")
+	if world.has_node("Layout") and not has_meta("map"):
+		set_meta("map", true)
+		_log("map: %s (layout built here too)" % main.map.display_name)
+	if world.has_node("SupplyDrop_1") and not has_meta("crate"):
+		set_meta("crate", true)
+		_log("supply crate landed here: %s" % (world.get_node("SupplyDrop_1") as Chest).rarity_name())
 	var hud: Hud = main.get_node("HUD")
 	if hud.respawn_label.visible and not saw_respawn:
 		saw_respawn = true

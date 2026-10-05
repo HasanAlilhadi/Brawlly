@@ -1,13 +1,14 @@
 [gd_scene format=3]
 
-[ext_resource type="Script" path="res://scenes/characters/enemy.gd" id="1_script"]
-[ext_resource type="PackedScene" path="res://assets/characters/orc.glb" id="2_model"]
-[ext_resource type="PackedScene" path="res://assets/items/dungeon/spear.glb" id="3_spear"]
-[ext_resource type="PackedScene" path="res://scenes/combat/spear_projectile.tscn" id="4_projectile"]
+[ext_resource type="Script" path="res://scenes/characters/enemy.gd" id="1_enemy"]
+[ext_resource type="PackedScene" path="res://assets/characters/ghost.glb" id="2_ghost"]
+[ext_resource type="Script" path="res://scripts/enemies/float_movement.gd" id="3_float_movement"]
+[ext_resource type="Script" path="res://scripts/enemies/phase_ability.gd" id="4_phase_ability"]
+[ext_resource type="Script" path="res://scripts/enemies/melee_attack.gd" id="5_melee_attack"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
-radius = 0.27
-height = 1.0
+radius = 0.3
+height = 1
 
 [sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_sync"]
 properties/0/path = NodePath(".:net_position")
@@ -35,35 +36,51 @@ properties/7/path = NodePath(".:alert_seq")
 properties/7/spawn = true
 properties/7/replication_mode = 2
 
-[node name="OrcThrower" type="CharacterBody3D"]
+[node name="Ghost" type="CharacterBody3D"]
 collision_layer = 4
 collision_mask = 31
 motion_mode = 1
-script = ExtResource("1_script")
-max_health = 55.0
-move_speed = 2.9
-melee_damage = 6.0
-melee_cooldown = 1.2
+script = ExtResource("1_enemy")
+enemy_name = "Ghost"
+faction = &"undead"
+max_health = 50
+move_speed = 3.6
+melee_damage = 9
+melee_range = 1.05
+melee_cooldown = 1
 melee_mask = 15
-right_hand_item = ExtResource("3_spear")
-right_hand_offset = Vector3(-0.27, -0.2, 0)
-right_swing_offset = Vector3(-0.1, 0, 0)
-health_bar_color = Color(0.9, 0.22, 0.2, 1)
-aggro_range = 9.0
-projectile_scene = ExtResource("4_projectile")
-throw_range = 8.0
-throw_cooldown = 2.8
-throw_damage = 10.0
-coin_drop_min = 3
+hold_right_arm = false
+knockback_taken = 1.4
+separation_strength = 0.5
+health_bar_color = Color(0.6, 0.85, 1, 1)
+health_bar_height = 1.65
+aggro_range = 8
+coin_drop_min = 2
+coin_drop_max = 3
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
 shape = SubResource("CapsuleShape3D_body")
 
-[node name="Model" parent="." instance=ExtResource("2_model")]
-transform = Transform3D(1.15, 0, 0, 0, 1.15, 0, 0, 0, 1.15, 0, 0, 0)
+[node name="Model" parent="." instance=ExtResource("2_ghost")]
+transform = Transform3D(1.3, 0, 0, 0, 1.3, 0, 0, 0, 1.3, 0, 0, 0)
 
 [node name="Sync" type="MultiplayerSynchronizer" parent="."]
 replication_interval = 0.05
 delta_interval = 0.05
 replication_config = SubResource("SceneReplicationConfig_sync")
+
+[node name="Movement" type="Node" parent="."]
+script = ExtResource("3_float_movement")
+
+[node name="Phase" type="Node" parent="."]
+script = ExtResource("4_phase_ability")
+priority = 3
+cooldown = 6
+max_range = 2.2
+duration = 1.6
+on_hit_chance = 0.45
+first_use_delay = 2
+
+[node name="Melee" type="Node" parent="."]
+script = ExtResource("5_melee_attack")

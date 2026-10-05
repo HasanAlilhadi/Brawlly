@@ -2,23 +2,22 @@
 
 [ext_resource type="Script" uid="uid://dfqixa0m5f1q4" path="res://scripts/game/upgrade_catalog.gd" id="1_catalog"]
 [ext_resource type="Script" uid="uid://bofqa8lkh8430" path="res://scripts/game/upgrade_def.gd" id="2_def"]
+[ext_resource type="Texture2D" uid="uid://djipbgiur3f68" path="res://assets/ui/icons/game/arrow.svg" id="glyph_arrow"]
+[ext_resource type="Texture2D" uid="uid://cba75l7xy4tiq" path="res://assets/ui/icons/game/axe.svg" id="glyph_axe"]
+[ext_resource type="Texture2D" uid="uid://xxdeyv84nyan" path="res://assets/ui/icons/game/bow.svg" id="glyph_bow"]
+[ext_resource type="Texture2D" uid="uid://cjn2dlr4shdkf" path="res://assets/ui/icons/game/broadsword.svg" id="glyph_broadsword"]
+[ext_resource type="Texture2D" uid="uid://bn6g3j81hsl8s" path="res://assets/ui/icons/game/cursor_move.svg" id="glyph_cursor_move"]
+[ext_resource type="Texture2D" uid="uid://bmxmc00pct0n6" path="res://assets/ui/icons/game/expand.svg" id="glyph_expand"]
+[ext_resource type="Texture2D" uid="uid://wlhp1wllelm" path="res://assets/ui/icons/game/ghost.svg" id="glyph_ghost"]
+[ext_resource type="Texture2D" uid="uid://d1leu55trgc8d" path="res://assets/ui/icons/game/heart.svg" id="glyph_heart"]
+[ext_resource type="Texture2D" uid="uid://mkqs2cj2l4b8" path="res://assets/ui/icons/game/rotate_right.svg" id="glyph_rotate_right"]
+[ext_resource type="Texture2D" uid="uid://bt7fvpkd557ys" path="res://assets/ui/icons/game/shield.svg" id="glyph_shield"]
+[ext_resource type="Texture2D" uid="uid://drvr60mshoqi" path="res://assets/ui/icons/game/spear.svg" id="glyph_spear"]
+[ext_resource type="Texture2D" uid="uid://cuny4r1sbx63f" path="res://assets/ui/icons/game/target.svg" id="glyph_target"]
 [ext_resource type="Texture2D" uid="uid://cij7p2003q5jv" path="res://assets/ui/icons/banner.png" id="icon_banner"]
 [ext_resource type="Texture2D" uid="uid://c8jbhlg8oj0es" path="res://assets/ui/icons/potion.png" id="icon_potion"]
 [ext_resource type="Texture2D" uid="uid://87gmfgn5duiw" path="res://assets/ui/icons/shield.png" id="icon_shield"]
 [ext_resource type="Texture2D" uid="uid://nlolsqkgsmsa" path="res://assets/ui/icons/soldier.png" id="icon_soldier"]
-
-[ext_resource type="Texture2D" uid="uid://cjn2dlr4shdkf" path="res://assets/ui/icons/game/broadsword.svg" id="glyph_broadsword"]
-[ext_resource type="Texture2D" uid="uid://mkqs2cj2l4b8" path="res://assets/ui/icons/game/rotate_right.svg" id="glyph_rotate_right"]
-[ext_resource type="Texture2D" uid="uid://bmxmc00pct0n6" path="res://assets/ui/icons/game/expand.svg" id="glyph_expand"]
-[ext_resource type="Texture2D" uid="uid://wlhp1wllelm" path="res://assets/ui/icons/game/ghost.svg" id="glyph_ghost"]
-[ext_resource type="Texture2D" uid="uid://bn6g3j81hsl8s" path="res://assets/ui/icons/game/cursor_move.svg" id="glyph_cursor_move"]
-[ext_resource type="Texture2D" uid="uid://bt7fvpkd557ys" path="res://assets/ui/icons/game/shield.svg" id="glyph_shield"]
-[ext_resource type="Texture2D" uid="uid://drvr60mshoqi" path="res://assets/ui/icons/game/spear.svg" id="glyph_spear"]
-[ext_resource type="Texture2D" uid="uid://cuny4r1sbx63f" path="res://assets/ui/icons/game/target.svg" id="glyph_target"]
-[ext_resource type="Texture2D" uid="uid://xxdeyv84nyan" path="res://assets/ui/icons/game/bow.svg" id="glyph_bow"]
-[ext_resource type="Texture2D" uid="uid://djipbgiur3f68" path="res://assets/ui/icons/game/arrow.svg" id="glyph_arrow"]
-[ext_resource type="Texture2D" uid="uid://cba75l7xy4tiq" path="res://assets/ui/icons/game/axe.svg" id="glyph_axe"]
-[ext_resource type="Texture2D" uid="uid://d1leu55trgc8d" path="res://assets/ui/icons/game/heart.svg" id="glyph_heart"]
 
 [sub_resource type="Resource" id="Upgrade_vitality"]
 script = ExtResource("2_def")
@@ -32,6 +31,18 @@ max_level = 8
 amount = 30.0
 sheet = &"hero"
 
+[sub_resource type="Resource" id="Upgrade_potion"]
+script = ExtResource("2_def")
+id = &"potion"
+title = "Potion"
+description = "Heal 60 health"
+icon = ExtResource("icon_potion")
+base_cost = 20
+cost_growth = 1.1
+max_level = 0
+amount = 60.0
+sheet = &"hero"
+
 [sub_resource type="Resource" id="Upgrade_recruit"]
 script = ExtResource("2_def")
 id = &"recruit"
@@ -41,17 +52,6 @@ icon = ExtResource("icon_soldier")
 base_cost = 50
 cost_growth = 1.0
 max_level = 0
-amount = 1.0
-sheet = &"army"
-
-[sub_resource type="Resource" id="Upgrade_command"]
-script = ExtResource("2_def")
-id = &"command"
-title = "Command"
-description = "+1 army size (up to 15)"
-icon = ExtResource("icon_banner")
-base_cost = 100
-cost_growth = 1.0
 amount = 1.0
 sheet = &"army"
 
@@ -77,17 +77,16 @@ max_level = 3
 amount = 0.25
 sheet = &"army"
 
-[sub_resource type="Resource" id="Upgrade_potion"]
+[sub_resource type="Resource" id="Upgrade_command"]
 script = ExtResource("2_def")
-id = &"potion"
-title = "Potion"
-description = "Heal 60 health"
-icon = ExtResource("icon_potion")
-base_cost = 20
-cost_growth = 1.1
-max_level = 0
-amount = 60.0
-sheet = &"hero"
+id = &"command"
+title = "Command"
+description = "+1 army size (up to 15)"
+icon = ExtResource("icon_banner")
+base_cost = 100
+cost_growth = 1.0
+amount = 1.0
+sheet = &"army"
 
 [sub_resource type="Resource" id="Upgrade_sword_damage"]
 script = ExtResource("2_def")

@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="MapDef" format=3]
+
+[ext_resource type="Script" path="res://scripts/game/map_def.gd" id="1_map"]
+[ext_resource type="PackedScene" path="res://scenes/maps/crown_ruins.tscn" id="2_layout"]
+
+[resource]
+script = ExtResource("1_map")
+id = &"crown_ruins"
+display_name = "Crown Ruins"
+description = "A designed arena: the ruined amphitheater in the middle, eight doors through the old walls, haunted shrines with treasure in the corners, groves to flank through."
+layout = ExtResource("2_layout")
+world_half = 52.0
+team_bases = PackedVector3Array(0, 0, 44, 0, 0, -44, 44, 0, 0, -44, 0, 0)
+wave_entries = PackedVector3Array(46, 0, 46, -46, 0, 46, 46, 0, -46, -46, 0, -46)
+ground_color = Color(0.47, 0.64, 0.36, 1)
+hold_circles = PackedVector3Array(-6, 0, 27, 27, 0, 6, 6, 0, -27, -27, 0, -6, 18.4, 0, 18.4, -18.4, 0, -18.4, 18.4, 0, -18.4, -18.4, 0, 18.4, -11, 0, -28, 0, 0, 0)
+vein_spots = PackedVector3Array(29, 0, 9, 9, 0, -29, -29, 0, -9, -9, 0, 29)

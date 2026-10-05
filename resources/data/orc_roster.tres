@@ -1,11 +1,11 @@
-[gd_resource type="Resource" script_class="EnemyRoster" load_steps=9 format=3]
+[gd_resource type="Resource" script_class="EnemyRoster" format=3 uid="uid://betq6o3ynh24y"]
 
-[ext_resource type="Script" path="res://scripts/game/enemy_roster.gd" id="1_roster"]
-[ext_resource type="Script" path="res://scripts/game/roster_entry.gd" id="2_entry"]
+[ext_resource type="Script" uid="uid://d0vawe6jstsvt" path="res://scripts/game/enemy_roster.gd" id="1_roster"]
+[ext_resource type="Script" uid="uid://c4pjm0ku26fsq" path="res://scripts/game/roster_entry.gd" id="2_entry"]
 [ext_resource type="PackedScene" path="res://scenes/characters/enemy.tscn" id="3_spearman"]
 [ext_resource type="PackedScene" path="res://scenes/characters/enemy_swordsman.tscn" id="4_swordsman"]
 [ext_resource type="PackedScene" path="res://scenes/characters/enemy_thrower.tscn" id="5_thrower"]
-[ext_resource type="PackedScene" path="res://scenes/characters/enemy_giant.tscn" id="6_giant"]
+[ext_resource type="PackedScene" uid="uid://djkpvve1k78dk" path="res://scenes/characters/enemy_giant.tscn" id="6_giant"]
 
 [sub_resource type="Resource" id="Entry_giant"]
 script = ExtResource("2_entry")
@@ -13,7 +13,6 @@ scene = ExtResource("6_giant")
 share = 0.1
 min_squad = 14
 max_count = 2
-inner_ring = true
 
 [sub_resource type="Resource" id="Entry_swordsman"]
 script = ExtResource("2_entry")
@@ -24,7 +23,6 @@ min_squad = 3
 [sub_resource type="Resource" id="Entry_thrower"]
 script = ExtResource("2_entry")
 scene = ExtResource("5_thrower")
-share = 0.2
 min_squad = 4
 
 [resource]

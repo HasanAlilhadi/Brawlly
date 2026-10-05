@@ -1,5 +1,5 @@
 extends Node
-## Screenshots of every map (MapCatalog.MAPS) in Last Stand: the spawn area from above, the nearest landmark, a gold
+## Screenshots of every map (MapCatalog.all()) in Last Stand: the spawn area from above, the nearest landmark, a gold
 ## vein up close and the first circle. Needs a window (not --headless; keep it off-screen):
 ##   "$G" --path . --position -4000,-4000 --resolution 1280x720 res://tests/test_runner.tscn -- --test=res://tests/map_shots_test.gd --out=/tmp/shots [--mode=<Net.Mode>]
 
@@ -25,14 +25,14 @@ func _ready() -> void:
 
 func _next_map() -> void:
 	_map += 1
-	if _map >= MapCatalog.MAPS.size():
+	if _map >= MapCatalog.all().size():
 		get_tree().quit()
 		return
 	Net.open_offline_lobby()
 	Net.settings.mode = _mode
-	Net.settings.map = _map
+	Net.settings.map = String(MapCatalog.all()[_map].id)
 	Net.settings.seed = 777
-	Net.settings.events = false
+	Net.settings.events = []
 	_shot = -1
 	_loading = true
 	get_tree().change_scene_to_file("res://scenes/main/main.tscn")
@@ -53,7 +53,7 @@ func _process(delta: float) -> void:
 	if _wait > 0.0:
 		return
 	var image := get_viewport().get_texture().get_image()
-	var path := "%s/map_%s_%s.png" % [_out, MapCatalog.MAPS[_map].id, SHOTS[_shot]]
+	var path := "%s/map_%s_%s.png" % [_out, MapCatalog.all()[_map].id, SHOTS[_shot]]
 	image.save_png(path)
 	printerr("saved ", path)
 	if _shot + 1 >= SHOTS.size():
@@ -74,7 +74,7 @@ func _set_shot(main: Node, index: int) -> void:
 		"landmark":
 			var best := INF
 			for node in main.world.get_children():
-				if node is StaticBody3D and str(node.name).begins_with("Solid_"):
+				if node is StaticBody3D and str(node.name).begins_with("Solid_") or str(node.name).begins_with("Graveyard_"):
 					var d := (node as Node3D).global_position.length()
 					if d > WorldBuilder.SPAWN_SAFE_RADIUS + 3.0 and d < best:
 						best = d

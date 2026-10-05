@@ -3,7 +3,7 @@ extends Node
 ## trees, a gold vein in each), one hero needed when alone, the clock only runs inside and keeps its progress
 ## outside, a held circle pays coins and makes orcs stronger, assault squads come while a hero is near, gold veins
 ## pay per hit / run dry / grow back, the last circle brings the Warlord and holding it wins. `--defeat`: the hero
-## dies instead → no respawn, defeat. `--map=<index>` picks the map (MapCatalog.MAPS).
+## dies instead → no respawn, defeat. `--map=<id>` picks the map (MapCatalog; default wildlands).
 ##   "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/last_stand_test.gd
 ##   "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/last_stand_test.gd --defeat
 
@@ -15,7 +15,7 @@ var main: Node
 var player: Player
 var mode: GameMode
 var defeat := false
-var map_index := 0
+var map_id := &"wildlands"
 var coins_before := 0
 var strength_before := 0.0
 var held_before := 0.0
@@ -27,12 +27,12 @@ func _ready() -> void:
 		if arg == "--defeat":
 			defeat = true
 		elif arg.begins_with("--map="):
-			map_index = int(arg.substr(6))
+			map_id = StringName(arg.substr(6))
 	Net.open_offline_lobby()
 	Net.settings.mode = Net.Mode.LAST_STAND
-	Net.settings.map = map_index
+	Net.settings.map = String(map_id)
 	Net.settings.seed = 4242
-	Net.settings.events = false
+	Net.settings.events = []
 	get_tree().change_scene_to_file("res://scenes/main/main.tscn")
 
 
@@ -81,34 +81,47 @@ func _process(delta: float) -> void:
 			_check(circles.size() == GameMode.CIRCLE_COUNT, "ten circles (%d)" % circles.size())
 			var apart := true
 			var inside := true
+			# Planned circles keep CIRCLE_SPACING from each other; on a designed map one never overlaps the one
+			# before it (only one exists at a time).
+			var designed := (main.map as MapDef).layout != null
 			for i in circles.size():
 				inside = inside and absf(circles[i].x) < GameConfig.world_half - 10.0 and absf(circles[i].z) < GameConfig.world_half - 10.0
 				for j in i:
-					apart = apart and circles[i].distance_to(circles[j]) >= GameMode.CIRCLE_SPACING - 0.01
+					if not designed:
+						apart = apart and circles[i].distance_to(circles[j]) >= GameMode.CIRCLE_SPACING - 0.01
+					elif j == i - 1:
+						apart = apart and circles[i].distance_to(circles[j]) >= HoldCircle.RADIUS * 2.0
 			_check(apart and inside, "circles apart and inside the world")
-			_check(circles[0].length() < circles[9].length(), "the last circle is farther out than the first")
-			var default_half := clampf(40.0 + sqrt(float(Net.settings.camp_count)) * 10.0, 60.0, 170.0)
-			_check(GameConfig.world_half > default_half, "bigger world (%.0f > %.0f)" % [GameConfig.world_half, default_half])
+			var map: MapDef = main.map
+			if map.layout == null:
+				_check(circles[0].length() < circles[9].length(), "the last circle is farther out than the first")
+				var default_half := clampf(40.0 + sqrt(float(Net.settings.band_count)) * 10.0, 60.0, 170.0)
+				_check(GameConfig.world_half > default_half, "bigger world (%.0f > %.0f)" % [GameConfig.world_half, default_half])
+			else:
+				_check(circles == Array(map.hold_circles), "the map's own circles")
 			_check(mode.hold_circle != null and mode.hold_circle.position.distance_to(circles[0]) < 0.1, "the circle stands on circle 1")
-			var blocked := 0
-			for node in main.world.get_children():
-				var body := node as Node3D
-				if body is ChoppableTree or body is Camp or (body is StaticBody3D and str(body.name).begins_with("Solid_")):
-					for c in circles:
-						if Vector2(body.global_position.x - c.x, body.global_position.z - c.z).length() < HoldCircle.RADIUS + 0.5:
-							blocked += 1
-			_check(blocked == 0, "circles clear of trees, camps and landmarks (%d in the way)" % blocked)
+			if map.layout == null:
+				var blocked := 0
+				for node in main.world.get_children():
+					var body := node as Node3D
+					if body is ChoppableTree or str(body.name).begins_with("Graveyard_") 							or (body is StaticBody3D and str(body.name).begins_with("Solid_")):
+						for c in circles:
+							if Vector2(body.global_position.x - c.x, body.global_position.z - c.z).length() < HoldCircle.RADIUS + 0.5:
+								blocked += 1
+				_check(blocked == 0, "circles clear of trees, graveyards and landmarks (%d in the way)" % blocked)
 			var veins := get_tree().get_nodes_in_group(&"gold_veins")
 			var near_spawn := veins.filter(func(v: Node) -> bool: return (v as Node3D).global_position.length() < WorldBuilder.SPAWN_SAFE_RADIUS)
+			var spawn: Vector3 = mode.world_spawn_points()[0]
+			near_spawn = veins.filter(func(v: Node) -> bool: return (v as Node3D).global_position.distance_to(spawn) < WorldBuilder.SPAWN_SAFE_RADIUS)
 			_check(veins.size() >= 8 and near_spawn.size() == 1, "gold veins (%d, %d at the spawn)" % [veins.size(), near_spawn.size()])
 			var per_circle := true
 			for c in circles:
 				per_circle = per_circle and veins.any(func(v: Node) -> bool: return (v as Node3D).global_position.distance_to(c) < HoldCircle.RADIUS)
 			_check(per_circle, "a gold vein in every circle")
 			var env := (main.get_node("WorldEnvironment") as WorldEnvironment).environment
-			_check(env.background_color.is_equal_approx(MapCatalog.get_map(map_index).sky), "map light: %s" % MapCatalog.get_map(map_index).name)
+			_check(env.background_color.is_equal_approx(map.sky_color), "map light: %s" % map.display_name)
 			_check(not main.game_mode.uses_respawn(), "no respawns")
-			_check(not main.world_events.waves_enabled, "border waves off")
+			_check(not main.world_events.is_on("waves"), "border waves off")
 			player.max_health = 1e6
 			player.health = 1e6
 			mode.circle_seconds = 3.0
@@ -162,7 +175,8 @@ func _process(delta: float) -> void:
 			if not raiders.is_empty():
 				var orc := raiders[0] as Enemy
 				_check(orc.global_position.distance_to(mode.circles[1]) > 15.0, "it comes from out of sight")
-				_check(orc.max_health > 80.0, "assault orcs are stronger than a plain spearman (%.0f hp)" % orc.max_health)
+				_check(orc.power > 1.05 and is_equal_approx(orc.power, GameConfig.orc_strength),
+						"assault enemies come at the circle's strength (×%.2f)" % orc.power)
 			for orc in raiders:
 				(orc as Node).queue_free()
 			_put(mode.circles[1])

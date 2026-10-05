@@ -5,8 +5,8 @@ extends Node
 ## decides, other peers receive scores / circle state / announcements / game over via RPC.
 ## Last Stand: ten circles (positions from the match seed, so every peer knows them) held for `circle_seconds`
 ## each by enough standing heroes (`circle_required`: a share of the heroes still alive, more for later circles);
-## stepping out pauses the clock. While heroes are near the circle, orc squads assault it, stronger every circle
-## (also every orc spawned anywhere: `GameConfig.orc_strength`); the last circle brings the Orc Warlord. No
+## stepping out pauses the clock. While heroes are near the circle, enemy squads assault it, stronger every circle
+## (also every enemy spawned anywhere: `GameConfig.orc_strength`); the last circle brings the Orc Warlord. No
 ## respawns: a downed hero nobody revives is gone for the match and spectates; everyone gone = defeat.
 
 signal scores_changed
@@ -35,12 +35,8 @@ const ASSAULT_FIRST: float = 4.0
 const ASSAULT_SQUAD: Vector2 = Vector2(3.0, 8.0)
 ## Living assault orcs at most: base + per hero alive.
 const ASSAULT_CAP: Vector2i = Vector2i(10, 5)
-const ASSAULT_SCENES := {
-	&"spearman": "res://scenes/characters/enemy.tscn",
-	&"swordsman": "res://scenes/characters/enemy_swordsman.tscn",
-	&"thrower": "res://scenes/characters/enemy_thrower.tscn",
-	&"giant": "res://scenes/characters/enemy_giant.tscn",
-}
+## Assault squads draw from the wave enemy rows (WorldEvents.WAVE_TYPES): one more row every this many circles.
+const ASSAULT_ROW_EVERY: int = 2
 ## Circles stay this far apart, and this far from the start / map border.
 const CIRCLE_SPACING: float = 22.0
 const CIRCLE_BORDER: float = 14.0
@@ -74,7 +70,8 @@ var _assault_timer: float = ASSAULT_FIRST
 var _base_strength: float = 1.0
 
 
-func setup(match_settings: Dictionary, players: Dictionary) -> void:
+## `map`: a designed map brings its own team bases.
+func setup(match_settings: Dictionary, players: Dictionary, map: MapDef = null) -> void:
 	name = "GameMode"
 	settings = match_settings
 	match_mode = settings.mode
@@ -87,17 +84,28 @@ func setup(match_settings: Dictionary, players: Dictionary) -> void:
 	var team_count: int = settings.team_count
 	if Net.is_team_mode(match_mode):
 		for team in team_count:
-			var angle: float = PI * 0.5 + TAU * team / team_count
-			team_bases.append(Vector3(cos(angle), 0.0, sin(angle)) * half * 0.62)
+			if map and map.team_bases.size() >= team_count:
+				team_bases.append(map.team_bases[team])
+			else:
+				var angle: float = PI * 0.5 + TAU * team / team_count
+				team_bases.append(Vector3(cos(angle), 0.0, sin(angle)) * half * 0.62)
 			scores[team] = 0
+	# Co-op modes start together: in the middle of a procedural map, at the first base of a designed one.
+	var coop_spawn := map.team_bases[0] if map and map.layout and not map.team_bases.is_empty() else Vector3.ZERO
+	if Net.is_coop_mode(match_mode):
+		team_bases.append(coop_spawn)
 	if match_mode == Net.Mode.LAST_STAND:
-		_plan_circles(int(settings.get("seed", 0)))
+		if map and not map.hold_circles.is_empty():
+			for spot in map.hold_circles:
+				circles.append(spot)  # a designed map places its own
+		else:
+			_plan_circles(int(settings.get("seed", 0)))
 	var team_slots := {}
 	for i in peers.size():
 		var peer: int = peers[i]
 		var point := Vector3.ZERO
 		if Net.is_coop_mode(match_mode):
-			point = Vector3(cos(TAU * i / peers.size()), 0, sin(TAU * i / peers.size())) * (2.5 if peers.size() > 1 else 0.0)
+			point = coop_spawn + Vector3(cos(TAU * i / peers.size()), 0, sin(TAU * i / peers.size())) * (2.5 if peers.size() > 1 else 0.0)
 		else:
 			var team: int = players[peer].get("team", 0)
 			var slot: int = team_slots.get(team, 0)
@@ -106,8 +114,8 @@ func setup(match_settings: Dictionary, players: Dictionary) -> void:
 		_spawn_points[peer] = point
 
 
-## Last Stand: ten circles, each a walk away from the last (turning 70–140° around the start), farther out — into
-## bigger camps — the later they come. From the seed, so every peer plans the same.
+## Last Stand: ten circles, each a walk away from the last (turning 70–140° around the start), farther out — among
+## bigger warbands — the later they come. From the seed, so every peer plans the same.
 func _plan_circles(match_seed: int) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = match_seed + 7919
@@ -142,7 +150,7 @@ func _plan_circles(match_seed: int) -> void:
 
 ## Where the world must stay clear of camps (spawns / bases).
 func world_spawn_points() -> Array[Vector3]:
-	if Net.is_team_mode(match_mode):
+	if Net.is_team_mode(match_mode) or not team_bases.is_empty():
 		return team_bases
 	var points: Array[Vector3] = [Vector3.ZERO]
 	return points
@@ -412,10 +420,12 @@ func _check_wipe() -> void:
 			player.die()  # nobody can revive them: gone for good
 		return  # each death comes back here through on_player_fell
 	if alive.is_empty():
-		finish("Defeat", "The orcs overran circle %d of %d." % [circle_index + 1, CIRCLE_COUNT])
+		finish("Defeat", "The horde overran circle %d of %d." % [circle_index + 1, CIRCLE_COUNT])
 
 
-## A squad of orcs marches on the circle from out of sight; tougher types join in later circles.
+## A squad marches on the circle from out of sight: the wave enemy rows, one more row every ASSAULT_ROW_EVERY
+## circles (grunts and skeletons first, then throwers and zombies, archers and ghosts, brutes and vampires,
+## necromancers); the newest row comes in smaller numbers.
 func _send_assault(heroes: int) -> void:
 	var living := get_tree().get_nodes_in_group(&"wave_enemies").filter(
 			func(enemy: Node) -> bool: return not GameConfig.is_gone(enemy)).size()
@@ -429,17 +439,15 @@ func _send_assault(heroes: int) -> void:
 	var spot: Vector3 = main.free_spot_around(center, randf_range(ASSAULT_DISTANCE.x, ASSAULT_DISTANCE.y))
 	if spot == Vector3.INF:
 		return
+	var rows := mini(1 + circle_index / ASSAULT_ROW_EVERY, WorldEvents.WAVE_TYPES.size())
 	for i in size:
-		var kind := &"spearman"
-		var roll := randf()
-		if circle_index >= 5 and i == 0 and randf() < lerpf(0.35, 0.7, t):
-			kind = &"giant"
-		elif circle_index >= 3 and roll < 0.2:
-			kind = &"thrower"
-		elif circle_index >= 2 and roll < 0.5:
-			kind = &"swordsman"
+		var row := randi() % rows
+		if row == rows - 1 and rows > 1 and randf() < 0.5:
+			row = randi() % (rows - 1)  # the newest row: about half as many
+		var types: Array = WorldEvents.WAVE_TYPES[row]
+		var scene := WorldEvents.ENEMIES + str(types[randi() % types.size()]) + ".tscn"
 		var at := GameConfig.clamp_to_world(spot + Vector3(i % 3 - 1, 0.0, i / 3) * 0.9)
-		NetSpawn.unit(&"enemy", at, {"scene": ASSAULT_SCENES[kind], "strength": GameConfig.orc_strength, "coins": 0.7,
+		NetSpawn.unit(&"enemy", at, {"scene": scene, "strength": GameConfig.orc_strength, "coins": 0.7,
 				"wave_enemy": true, "wave_number": circle_index + 1})
 
 

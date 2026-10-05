@@ -137,7 +137,7 @@ func _orcs_ignore() -> void:
 	await _reset()
 	var pig := _animal("pig", Vector3(2, 0, 6))
 	var hog := _animal("hog", Vector3(-2, 0, 6))
-	var orc := NetSpawn.unit(&"enemy", Vector3(0, 0, 6), {"scene": "res://scenes/characters/enemy.tscn", "strength": 1.0,
+	var orc := NetSpawn.unit(&"enemy", Vector3(0, 0, 6), {"scene": "res://scenes/characters/enemies/orc_grunt.tscn", "strength": 1.0,
 			"coins": 1.0}) as Enemy
 	orc.add_to_group(&"active_enemies")
 	player.global_position = Vector3(0, 0, -40)  # far: the orc has nobody else to fight

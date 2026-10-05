@@ -17,6 +17,8 @@ const SCORE_LIMITS := [
 const PLAYERS_WIDTH: float = 700.0
 const SLOT_HEIGHT: float = 70.0
 const CROWN_COLOR := Color("e0a830")
+const EVENT_ON := preload("res://assets/ui/icons/icon_check_bronze.png")
+const EVENT_OFF := preload("res://assets/ui/icons/icon_circle_brown.png")
 
 var _frame: Dictionary
 var _invite_label: Label
@@ -38,10 +40,11 @@ var _start_button: Button
 var _updating: bool = false
 var _mode_option: OptionButton
 var _mode_hint: Label
+var _difficulty_option: OptionButton
 var _map_option: OptionButton
 var _map_hint: Label
-var _difficulty_option: OptionButton
-var _events_option: OptionButton
+var _map_ids: Array[StringName] = []
+var _event_boxes: Dictionary = {}  # event id -> toggle Button
 var _sliders: Dictionary = {}  # key -> {slider, value_label, row}
 var _countdown_overlay: Control
 var _countdown_number: Label
@@ -257,14 +260,22 @@ func _refresh_summary(settings: Dictionary) -> void:
 	var hint := MenuKit.label(Net.MODE_HINTS[match_mode], &"HintLabel", 20)
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_summary.add_child(hint)
-	var map := MapCatalog.get_map(int(settings.get("map", 0)))
-	_summary_row("Map", map.name)
-	var map_hint := MenuKit.label(map.hint, &"HintLabel", 20)
+	var map := MapCatalog.find(StringName(settings.get("map", "wildlands")))
+	_summary_row("Map", map.display_name)
+	var map_hint := MenuKit.label(map.description, &"HintLabel", 20)
 	map_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_summary.add_child(map_hint)
-	_summary_row("Orc camps", str(settings.camp_count))
+	if map.layout == null:
+		_summary_row("Warbands", str(settings.band_count))
 	_summary_row("Difficulty", Net.DIFFICULTY_NAMES[settings.difficulty])
-	_summary_row("World events", "On" if settings.get("events", true) else "Off")
+	var on := WorldEvents.ids_from_setting(settings.get("events", true))
+	var names := PackedStringArray()
+	for row: Array in WorldEvents.EVENTS:
+		if on.has(row[0]):
+			names.append(row[1])
+	var events := MenuKit.label("World events: " + (", ".join(names) if not names.is_empty() else "off"), &"HintLabel", 20)
+	events.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_summary.add_child(events)
 	_summary_row("Starting coins", str(settings.start_coins))
 	if Net.is_team_mode(match_mode):
 		_summary_row("Teams", str(settings.team_count))
@@ -276,27 +287,66 @@ func _refresh_summary(settings: Dictionary) -> void:
 func _build_settings() -> void:
 	_mode_option = _add_option("Mode", Net.MODE_NAMES, func(index: int) -> void:
 		Net.set_setting("mode", index)
+		Net.set_setting("map", String(MapCatalog.default_for(index).id))
 		var limits: Vector3i = SCORE_LIMITS[index]
 		if limits.y > 0:
 			Net.set_setting("score_limit", limits.z))
 	_mode_hint = MenuKit.label("", &"HintLabel", 22)
 	_mode_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_settings_box.add_child(_mode_hint)
-	_map_option = _add_option("Map", MapCatalog.names(), func(index: int) -> void:
-		Net.set_setting("map", index))
+	_map_option = _add_option("Map", PackedStringArray(), func(index: int) -> void:
+		if index >= 0 and index < _map_ids.size():
+			Net.set_setting("map", String(_map_ids[index])))
 	_map_option.name = "MapOption"
 	_map_hint = MenuKit.label("", &"HintLabel", 22)
 	_map_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_settings_box.add_child(_map_hint)
-	_add_slider("camp_count", "Orc camps", 0, 60, 1)
+	_add_slider("band_count", "Warbands", 0, 60, 1)
 	_difficulty_option = _add_option("Difficulty", Net.DIFFICULTY_NAMES, func(index: int) -> void:
 		Net.set_setting("difficulty", index))
-	_events_option = _add_option("World events", PackedStringArray(["On: goblin + Warlord + Waves", "Off"]), func(index: int) -> void:
-		Net.set_setting("events", index == 0))
+	_build_event_boxes()
 	_add_slider("start_coins", "Starting coins", 0, 1000, 50)
 	_add_slider("team_count", "Teams", 2, 4, 1)
 	_add_slider("score_limit", "Score to win", 1, 50, 1)
 	_add_slider("time_limit", "Time limit (minutes)", 3, 30, 1)
+
+
+## World events: one toggle each (any mix: check = on), two columns (one on phones).
+func _build_event_boxes() -> void:
+	var header := MenuKit.label("World events")
+	_settings_box.add_child(header)
+	var grid := GridContainer.new()
+	grid.columns = 1 if MenuKit.is_compact(_settings_box) else 2
+	grid.add_theme_constant_override("h_separation", 18)
+	grid.add_theme_constant_override("v_separation", 4)
+	_settings_box.add_child(grid)
+	for row: Array in WorldEvents.EVENTS:
+		var box := Button.new()
+		box.toggle_mode = true
+		box.theme_type_variation = &"ButtonTab"
+		box.text = row[1]
+		box.tooltip_text = row[2]
+		box.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		box.expand_icon = false
+		box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		box.custom_minimum_size = Vector2(0, 56)
+		box.add_theme_font_size_override("font_size", 24)
+		box.add_theme_constant_override("icon_max_width", 30)
+		box.icon = EVENT_OFF
+		box.toggled.connect(func(on: bool) -> void:
+			box.icon = EVENT_ON if on else EVENT_OFF
+			if not _updating:
+				Net.set_setting("events", _checked_events()))
+		grid.add_child(box)
+		_event_boxes[row[0]] = box
+
+
+func _checked_events() -> Array:
+	var on: Array = []
+	for row: Array in WorldEvents.EVENTS:
+		if (_event_boxes[row[0]] as Button).button_pressed:
+			on.append(row[0])
+	return on
 
 
 func _add_option(label_text: String, items: PackedStringArray, on_select: Callable) -> OptionButton:
@@ -402,14 +452,24 @@ func _refresh() -> void:
 	_mode_option.select(match_mode)
 	_mode_option.disabled = not editable
 	_mode_hint.text = Net.MODE_HINTS[match_mode]
-	var map_index := clampi(int(settings.get("map", 0)), 0, MapCatalog.MAPS.size() - 1)
-	_map_option.select(map_index)
-	_map_option.disabled = not editable
-	_map_hint.text = MapCatalog.get_map(map_index).hint
 	_difficulty_option.select(settings.difficulty)
 	_difficulty_option.disabled = not editable
-	_events_option.select(0 if settings.get("events", true) else 1)
-	_events_option.disabled = not editable
+	_map_ids.clear()
+	_map_option.clear()
+	var current_map := MapCatalog.find(StringName(settings.get("map", "wildlands")))
+	for map in MapCatalog.for_mode(match_mode):
+		_map_ids.append(map.id)
+		_map_option.add_item(map.display_name)
+		if map == current_map:
+			_map_option.select(_map_ids.size() - 1)
+	_map_option.disabled = not editable
+	_map_hint.text = current_map.description
+	var on := WorldEvents.ids_from_setting(settings.get("events", true))
+	for id in _event_boxes:
+		var box: Button = _event_boxes[id]
+		box.button_pressed = on.has(id)
+		box.icon = EVENT_ON if box.button_pressed else EVENT_OFF
+		box.disabled = not editable
 	for key in _sliders:
 		var entry: Dictionary = _sliders[key]
 		var slider: HSlider = entry.slider
@@ -422,6 +482,7 @@ func _refresh() -> void:
 			(entry.label as Label).text = Net.SCORE_LIMIT_LABELS[match_mode]
 		slider.value = settings.get(key, slider.min_value)
 		(entry.value as Label).text = str(int(slider.value))
+	(_sliders.band_count.row as Control).visible = current_map.layout == null  # designed maps place their own
 	(_sliders.team_count.row as Control).visible = team_mode
 	(_sliders.score_limit.row as Control).visible = match_mode == Net.Mode.KING_OF_THE_HILL
 	(_sliders.time_limit.row as Control).visible = match_mode == Net.Mode.KING_OF_THE_HILL

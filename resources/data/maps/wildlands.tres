@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="MapDef" format=3]
+
+[ext_resource type="Script" path="res://scripts/game/map_def.gd" id="1_map"]
+
+[resource]
+script = ExtResource("1_map")
+id = &"wildlands"
+display_name = "Wildlands"
+description = "A new forest every match: meadows, mossy rock outcrops, graveyards, roaming warbands that grow toward the edges, chests in the woods."
+landmarks = &"outcrops"

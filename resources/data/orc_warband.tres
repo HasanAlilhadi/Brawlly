@@ -1,0 +1,35 @@
+[gd_resource type="Resource" script_class="EnemyRoster" format=3 uid="uid://imgu0cnsh6e7"]
+
+[ext_resource type="Script" uid="uid://d0vawe6jstsvt" path="res://scripts/game/enemy_roster.gd" id="1_roster"]
+[ext_resource type="Script" uid="uid://c4pjm0ku26fsq" path="res://scripts/game/roster_entry.gd" id="2_entry"]
+[ext_resource type="PackedScene" path="res://scenes/characters/enemies/orc_grunt.tscn" id="3_orc_grunt"]
+[ext_resource type="PackedScene" path="res://scenes/characters/enemies/orc_warlord.tscn" id="4_orc_warlord"]
+[ext_resource type="PackedScene" path="res://scenes/characters/enemies/orc_brute.tscn" id="5_orc_brute"]
+[ext_resource type="PackedScene" path="res://scenes/characters/enemies/orc_thrower.tscn" id="6_orc_thrower"]
+
+[sub_resource type="Resource" id="Entry_orc_warlord"]
+script = ExtResource("2_entry")
+scene = ExtResource("4_orc_warlord")
+share = 0.05
+min_squad = 18
+max_count = 1
+leader = true
+
+[sub_resource type="Resource" id="Entry_orc_brute"]
+script = ExtResource("2_entry")
+scene = ExtResource("5_orc_brute")
+share = 0.08
+min_squad = 8
+max_count = 3
+
+[sub_resource type="Resource" id="Entry_orc_thrower"]
+script = ExtResource("2_entry")
+scene = ExtResource("6_orc_thrower")
+share = 0.28
+min_squad = 3
+rear = true
+
+[resource]
+script = ExtResource("1_roster")
+filler = ExtResource("3_orc_grunt")
+entries = Array[ExtResource("2_entry")]([SubResource("Entry_orc_warlord"), SubResource("Entry_orc_brute"), SubResource("Entry_orc_thrower")])

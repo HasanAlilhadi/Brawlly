@@ -1,0 +1,91 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scenes/characters/enemy.gd" id="1_enemy"]
+[ext_resource type="PackedScene" path="res://assets/characters/vampire.glb" id="2_vampire"]
+[ext_resource type="Script" path="res://scripts/enemies/stalk_movement.gd" id="3_stalk_movement"]
+[ext_resource type="Script" path="res://scripts/enemies/blink_ability.gd" id="4_blink_ability"]
+[ext_resource type="Script" path="res://scripts/enemies/melee_attack.gd" id="5_melee_attack"]
+[ext_resource type="Script" path="res://scripts/enemies/life_steal_trait.gd" id="6_life_steal_trait"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
+radius = 0.28
+height = 1.05
+
+[sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_sync"]
+properties/0/path = NodePath(".:net_position")
+properties/0/spawn = true
+properties/0/replication_mode = 1
+properties/1/path = NodePath(".:net_yaw")
+properties/1/spawn = true
+properties/1/replication_mode = 1
+properties/2/path = NodePath(".:health")
+properties/2/spawn = true
+properties/2/replication_mode = 2
+properties/3/path = NodePath(".:max_health")
+properties/3/spawn = true
+properties/3/replication_mode = 2
+properties/4/path = NodePath(".:anim_state")
+properties/4/spawn = true
+properties/4/replication_mode = 2
+properties/5/path = NodePath(".:action_token")
+properties/5/spawn = true
+properties/5/replication_mode = 2
+properties/6/path = NodePath(".:is_dead")
+properties/6/spawn = true
+properties/6/replication_mode = 2
+properties/7/path = NodePath(".:alert_seq")
+properties/7/spawn = true
+properties/7/replication_mode = 2
+
+[node name="Vampire" type="CharacterBody3D"]
+collision_layer = 4
+collision_mask = 31
+motion_mode = 1
+script = ExtResource("1_enemy")
+enemy_name = "Vampire"
+faction = &"undead"
+prefers_weak = true
+max_health = 170
+move_speed = 3.5
+melee_damage = 15
+melee_range = 1.15
+melee_cooldown = 0.9
+melee_mask = 15
+melee_anims = PackedStringArray("attack-melee-right", "attack-melee-left")
+hold_right_arm = false
+health_bar_color = Color(0.75, 0.1, 0.25, 1)
+aggro_range = 8.5
+provoked_sight_range = 13
+health_drop_chance = 0.5
+coin_drop_min = 8
+coin_drop_max = 12
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.525, 0)
+shape = SubResource("CapsuleShape3D_body")
+
+[node name="Model" parent="." instance=ExtResource("2_vampire")]
+transform = Transform3D(1.3, 0, 0, 0, 1.3, 0, 0, 0, 1.3, 0, 0, 0)
+
+[node name="Sync" type="MultiplayerSynchronizer" parent="."]
+replication_interval = 0.05
+delta_interval = 0.05
+replication_config = SubResource("SceneReplicationConfig_sync")
+
+[node name="Movement" type="Node" parent="."]
+script = ExtResource("3_stalk_movement")
+
+[node name="Blink" type="Node" parent="."]
+script = ExtResource("4_blink_ability")
+priority = 2
+cooldown = 6
+min_range = 4
+max_range = 12
+first_use_delay = 1
+
+[node name="Melee" type="Node" parent="."]
+script = ExtResource("5_melee_attack")
+
+[node name="LifeSteal" type="Node" parent="."]
+script = ExtResource("6_life_steal_trait")
+share = 0.6

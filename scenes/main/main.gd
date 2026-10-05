@@ -1,7 +1,7 @@
 extends Node3D
 ## Game entry point for multiplayer matches (every player's hero is of the class picked in the lobby).
 ## - Every peer builds the same world from the shared seed in Net.settings.
-## - The server waits until every peer has built it, then spawns one Player per peer and starts the camps.
+## - The server waits until every peer has built it, then spawns one Player per peer and starts the warbands.
 ## - Local input (HUD touch controls / keyboard) goes to the local Player on the server.
 ## - Everything is bought from the upgrades sheet (T); recruits train, then join their hero (Player.soldiers_training).
 ## - World events (treasure goblin, Orc Warlord, invasion waves), match stats + awards, pings and army orders.
@@ -22,6 +22,9 @@ const PROJECTILE_SCENES := {
 	&"spear": preload("res://scenes/combat/spear_projectile.tscn"),
 	&"player_spear": preload("res://scenes/combat/player_spear_projectile.tscn"),
 	&"sword_wave": preload("res://scenes/combat/sword_wave_projectile.tscn"),
+	&"enemy_arrow": preload("res://scenes/combat/enemy_arrow_projectile.tscn"),
+	&"bolt": preload("res://scenes/combat/bolt_projectile.tscn"),
+	&"blood_bolt": preload("res://scenes/combat/blood_bolt_projectile.tscn"),
 }
 ## Desktop monitors show the world from a bit further away than phones.
 const DESKTOP_CAMERA_ZOOM: float = 1.25
@@ -51,7 +54,7 @@ const KILL_AHEAD_RADIUS: float = 6.0
 const KILL_MARK_TEXTURE := preload("res://assets/ui/icons/game/target.svg")
 ## A quick left click keeps aiming the sword this long, so the swing also reaches the server online.
 const MOUSE_CLICK_HOLD: float = 0.2
-## Last Stand plays on a bigger world than the other modes (same camp count, more room between the circles).
+## Last Stand plays on a bigger procedural world than the other modes (same band count, more room between the circles).
 const LAST_STAND_WORLD_SCALE: float = 1.15
 
 @onready var world: Node3D = $World
@@ -65,9 +68,11 @@ var match_stats: MatchStats
 var world_events: WorldEvents
 var training_field: TrainingField
 var training_mode: bool = false
+## The map being played (MapCatalog; setting `map`).
+var map: MapDef
 
-var _camps: Array[Camp] = []
-var _camps_left: int = 0
+var _bands: Array[Warband] = []
+var _bands_left: int = 0
 var _ready_peers: Dictionary = {}
 var _started: bool = false
 var _game_over: bool = false
@@ -106,31 +111,41 @@ func _ready() -> void:
 	var settings := Net.settings
 	seed(settings.seed)
 	training_mode = settings.get("training", false)
-	GameConfig.world_half = 23.0 if training_mode else clampf(40.0 + sqrt(float(settings.camp_count)) * 10.0, 60.0, 170.0)
-	if settings.mode == Net.Mode.LAST_STAND and not training_mode:
-		GameConfig.world_half *= LAST_STAND_WORLD_SCALE
-	var map := MapCatalog.get_map(int(settings.get("map", 0)))
+	map = MapCatalog.find(StringName(settings.get("map", &"wildlands")))
+	if not map.supports(settings.mode):
+		map = MapCatalog.for_mode(settings.mode)[0]
+	if training_mode:
+		GameConfig.world_half = 23.0
+	elif map.layout:
+		GameConfig.world_half = map.world_half
+	else:
+		GameConfig.world_half = clampf(40.0 + sqrt(float(settings.band_count)) * 10.0, 60.0, 170.0)
+		if settings.mode == Net.Mode.LAST_STAND:
+			GameConfig.world_half *= LAST_STAND_WORLD_SCALE
+	WorldBuilder.wave_entries = map.wave_entries
 	if not training_mode:
 		_apply_map(map)
 	GameConfig.orc_strength = Net.DIFFICULTY_STRENGTH[settings.difficulty]
 	GameConfig.orc_respawn_scale = Net.DIFFICULTY_RESPAWN[settings.difficulty]
 	# Downed + revive needs teammates: every online mode has them.
 	GameConfig.downed_enabled = Net.is_online()
+	GameConfig.blood_moon = false
 	_setup_spawners()
 	HitFx.world = world
 	HitFx.main = self
 	HitFx.camera = camera
 
 	game_mode = GameMode.new()
-	game_mode.setup(settings, Net.players)
+	game_mode.setup(settings, Net.players, map)
 	add_child(game_mode)
 	match_stats = MatchStats.new()
 	add_child(match_stats)
 	match_stats.awards_ready.connect(hud.show_awards)
 	world_events = WorldEvents.new()
-	world_events.setup(self, game_mode, settings.get("events", true) and not training_mode)
-	# Last Stand: orc squads assault the circles instead of the border waves.
-	world_events.waves_enabled = settings.mode != Net.Mode.LAST_STAND
+	var events := PackedStringArray() if training_mode else WorldEvents.ids_from_setting(settings.get("events", true))
+	if settings.mode == Net.Mode.LAST_STAND:
+		events.erase("waves")  # squads assault the circles instead of the border waves
+	world_events.setup(self, game_mode, events)
 	add_child(world_events)
 	if training_mode:
 		training_field = TRAINING_FIELD_SCENE.instantiate() as TrainingField
@@ -138,18 +153,19 @@ func _ready() -> void:
 	else:
 		var builder := WorldBuilder.new()
 		builder.map = map
-		builder.camp_count = settings.camp_count
+		builder.band_count = settings.band_count
 		builder.spawn_points = game_mode.world_spawn_points()
 		builder.clear_areas = game_mode.world_clear_areas()
 		builder.clear_radius = game_mode.world_clear_radius()
 		builder.vein_spots = game_mode.world_vein_spots()
-		_camps = builder.build(world)
+		builder.bands_avoid_clear_areas = settings.mode != Net.Mode.LAST_STAND
+		_bands = builder.build(world)
 		game_mode.build_objectives(world)
-	_camps_left = _camps.size()
-	for camp in _camps:
-		camp.destroyed.connect(_on_camp_destroyed)
+	_bands_left = _bands.size()
+	for band in _bands:
+		band.defeated.connect(_on_band_defeated)
 
-	hud.set_camps(_camps_left, _camps.size())
+	hud.set_bands(_bands_left, _bands.size())
 	hud.set_training_mode(training_mode)
 	hud.restart_requested.connect(_restart)
 	hud.main_menu_requested.connect(func() -> void: Net.leave())
@@ -170,7 +186,7 @@ func _ready() -> void:
 	game_mode.scores_changed.connect(func() -> void: hud.set_mode_label(game_mode.score_text()))
 	hud.set_objective_source(game_mode)
 	if not training_mode:
-		hud.minimap.background = map.minimap
+		hud.minimap.background = map.minimap_color
 	game_mode.announced.connect(func(message: String) -> void: hud.show_toast(Net.localize(message)))
 	game_mode.match_over.connect(_end)
 
@@ -194,22 +210,22 @@ func _ready() -> void:
 		_report_world_ready()
 
 
-## The map's light: sky color, ambient, sun and (Gravemoor) a little mist.
-func _apply_map(map: Dictionary) -> void:
+## The map's light: sky color, ambient, sun and (Gravemoor) a little mist. The Weather (storm, Blood Moon)
+## blends from these.
+func _apply_map(map_def: MapDef) -> void:
 	var environment := ($WorldEnvironment as WorldEnvironment).environment.duplicate() as Environment
-	environment.background_color = map.sky
-	environment.ambient_light_color = map.ambient
-	environment.ambient_light_energy = map.ambient_energy
-	var fog: float = map.get("fog_density", 0.0)
-	environment.fog_enabled = fog > 0.0
-	if fog > 0.0:
-		environment.fog_light_color = map.fog_color
-		environment.fog_density = fog
+	environment.background_color = map_def.sky_color
+	environment.ambient_light_color = map_def.ambient_color
+	environment.ambient_light_energy = map_def.ambient_energy
+	environment.fog_enabled = map_def.fog_density > 0.0
+	if map_def.fog_density > 0.0:
+		environment.fog_light_color = map_def.fog_color
+		environment.fog_density = map_def.fog_density
 		environment.fog_sky_affect = 0.0
 	($WorldEnvironment as WorldEnvironment).environment = environment
 	var sun := $Sun as DirectionalLight3D
-	sun.light_color = map.sun
-	sun.light_energy = map.sun_energy
+	sun.light_color = map_def.sun_color
+	sun.light_energy = map_def.sun_energy
 
 
 ## Client: tell the server our world is built. Repeated until our player appears, because a faster
@@ -274,13 +290,13 @@ func _spawn_unit(data: Dictionary) -> Node:
 			enemy.home = data.pos
 			enemy.wave_enemy = data.get("wave_enemy", false)
 			enemy.wave_number = data.get("wave_number", 0)
-			if data.has("camp"):
-				enemy.camp = get_node_or_null(data.camp) as Camp
-			if data.has("warlord"):
-				enemy.warlord = get_node_or_null(data.warlord) as Warlord
+			enemy.rising = data.get("rise", false)
+			enemy.tracked = data.get("tracked", false)
+			if data.has("band"):
+				enemy.band = get_node_or_null(data.band) as Warband
+			enemy.power = data.strength
 			enemy.max_health *= data.strength
 			enemy.melee_damage *= data.strength
-			enemy.throw_damage *= data.strength
 			enemy.coin_multiplier = data.coins
 			unit = enemy
 			if data.get("training_orc", false):
@@ -357,7 +373,7 @@ func _bind_local_player(player: Player) -> void:
 		player.enable_prediction()  # move instantly on this device, the server corrects drift
 	camera.target = player
 	camera.snap()
-	hud.setup(player, _camps)
+	hud.setup(player, _bands)
 	hud.set_training_mode(training_mode)
 	_last_coins = player.coins
 	player.coins_changed.connect(_on_local_coins_changed)
@@ -387,8 +403,8 @@ func _on_world_ready(peer: int) -> void:
 	_started = true
 	for p in Net.players:
 		_spawn_player(p)
-	for camp in _camps:
-		camp.start()
+	for band in _bands:
+		band.start()
 	for herd in get_tree().get_nodes_in_group(&"herds"):
 		(herd as AnimalHerd).start()
 
@@ -907,7 +923,7 @@ func _command_army(order: int, point: Vector3 = Vector3.INF) -> void:
 				local_player.display_name)
 
 
-## The hostile unit / camp drawn nearest the mouse cursor (models stand up, so compare on screen).
+## The hostile unit drawn nearest the mouse cursor (models stand up, so compare on screen).
 func _kill_pick() -> Node3D:
 	var mouse := get_viewport().get_mouse_position()
 	var best: Node3D = null
@@ -922,8 +938,7 @@ func _kill_pick() -> Node3D:
 			if camera.is_position_behind(center):
 				continue
 			var px := camera.unproject_position(center).distance_to(mouse)
-			if candidate is Camp:  # big: anywhere over the camp counts
-				px = maxf(px - Unit.target_radius(candidate) * 40.0, 0.0)
+			px = maxf(px - maxf(Unit.target_radius(candidate) - 0.4, 0.0) * 40.0, 0.0)  # big ones: anywhere over them
 			if px < best_px:
 				best_px = px
 				best = candidate
@@ -948,7 +963,8 @@ func _update_kill_mark() -> void:
 		_kill_mark.pixel_size = 0.004
 		_kill_mark.modulate = Color(1.0, 0.3, 0.25)
 		world.add_child(_kill_mark)
-	var height := 1.9 + Unit.target_radius(prey) * (1.0 if prey is Camp else 0.8)  # just over the health bar
+	var bar: Variant = prey.get("health_bar_height")
+	var height: float = (bar if bar is float else 1.3) + 0.6  # just over the health bar
 	_kill_mark.visible = true
 	_kill_mark.global_position = prey.global_position + Vector3(0, height + 0.15 * sin(Time.get_ticks_msec() * 0.006), 0)
 
@@ -972,7 +988,7 @@ func _ping(point: Vector3, help: bool = false) -> void:
 func _ping_target(point: Vector3) -> Node3D:
 	var best: Node3D = null
 	var best_dist := 2.5
-	for group in [&"active_enemies", &"camps", &"players", &"allies"]:
+	for group in [&"active_enemies", &"players", &"allies"]:
 		for node in get_tree().get_nodes_in_group(group):
 			var candidate := node as Node3D
 			if GameConfig.is_gone(candidate) or not GameConfig.is_hostile(local_player, candidate):
@@ -1113,15 +1129,16 @@ func _on_local_coins_changed(count: int) -> void:
 	_last_coins = count
 
 
-func _on_camp_destroyed(camp: Camp) -> void:
-	_camps_left -= 1
-	hud.set_camps(_camps_left, _camps.size())
-	if camp.destroyed_by() == Net.my_id():
-		hud.show_toast("Camp destroyed!")
-	elif Net.is_online():
-		hud.show_toast("%s destroyed a camp" % Net.name_of(camp.destroyed_by()))
-	if multiplayer.is_server() and game_mode.match_mode == Net.Mode.COOP and _camps_left <= 0:
-		game_mode.finish("Victory!", "Every orc camp has fallen.")
+func _on_band_defeated(band: Warband) -> void:
+	_bands_left -= 1
+	hud.set_bands(_bands_left, _bands.size())
+	var what := "an undead horde" if band.faction == &"undead" else "an orc warband"
+	if band.defeated_by() == Net.my_id():
+		hud.show_toast("You wiped out %s!" % what)
+	elif Net.is_online() and band.defeated_by() != 0:
+		hud.show_toast("%s wiped out %s" % [Net.name_of(band.defeated_by()), what])
+	if multiplayer.is_server() and game_mode.match_mode == Net.Mode.COOP and _bands_left <= 0:
+		game_mode.finish("Victory!", "Every warband has been wiped out.")
 
 
 func _end(title: String, subtitle: String) -> void:

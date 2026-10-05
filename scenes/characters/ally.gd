@@ -17,7 +17,6 @@ extends Unit
 ## fighting (`_regroup`, until they get there or `regroup_time` runs out); KILL goes straight for the target.
 
 const TARGET_GROUPS: Array[StringName] = [&"active_enemies", &"player_units"]
-const CAMP_GROUPS: Array[StringName] = [&"camps"]
 const SPEAR_SCENE := preload("res://assets/items/dungeon/spear.glb")
 const BOW_SCENE := preload("res://assets/items/forest/bow.glb")
 ## Archers shoot from this share of their hero's bow range (Player.aim_range, Fire Range included).
@@ -54,6 +53,8 @@ const WEAPON_STATS: Dictionary = {
 @export var walk_share: float = 0.45
 ## Closer than this to its spot in the formation a soldier walks the rest of the way.
 @export var walk_distance: float = 2.0
+## > 0 this frame: move at exactly this share of move_speed (keeping pace with a moving hero).
+var _match_pace: float = -1.0
 ## Orders: soldiers fight hostiles within this distance of the charge / hold point.
 @export var charge_radius: float = 9.0
 @export var hold_radius: float = 6.0
@@ -230,11 +231,16 @@ func _update_slot() -> void:
 
 
 func _get_move_input(delta: float) -> Vector3:
+	_match_pace = -1.0
 	var move := _desired_move(delta)
 	move.y = 0.0
 	var strength := move.length()
 	if strength < 0.15:
 		return Vector3.ZERO
+	if _match_pace > 0.0:
+		return move / strength * _match_pace  # marching with a moving hero: one steady run
+	if not is_archer() and not GameConfig.is_gone(target):
+		return move / strength  # going for an enemy: always the run (no walk / run flicker at its edge)
 	return move / strength * (1.0 if strength >= 0.75 else walk_share)
 
 
@@ -264,10 +270,23 @@ func _desired_move(delta: float) -> Vector3:
 	var to_slot := slot - global_position
 	to_slot.y = 0.0
 	var dist := to_slot.length()
+	var leader_speed := _leader_speed() if order == Player.Order.FOLLOW else 0.0
+	if leader_speed > 1.0 and dist < walk_distance * 3.0:
+		# The hero is on the move and the slot with them: keep pace (their speed, a bit more when behind,
+		# never past our own run) instead of flipping between run and walk around the slot's edge.
+		_match_pace = clampf((leader_speed + dist * 1.2) / maxf(move_speed, 0.1), walk_share, 1.0)
+		return steer(to_slot.normalized(), delta) if dist >= 0.15 else leader.velocity.normalized()
 	if dist < 0.4:
 		return _separation * 0.5
 	# Run when behind, walk the last bit.
 	return steer(to_slot.normalized() * (1.0 if dist > walk_distance else 0.5), delta)
+
+
+## How fast the hero is moving right now (flat), 0 without one.
+func _leader_speed() -> float:
+	if GameConfig.is_gone(leader):
+		return 0.0
+	return Vector2(leader.velocity.x, leader.velocity.z).length()
 
 
 ## Archer: walk up until the target is in range with a clear line of fire (around what blocks it), then
@@ -409,8 +428,6 @@ func _think() -> void:
 			else _best_enemy(global_position, sight)
 	target = _commit_target(unit_target, candidate, sight + 2.5)
 	if target == null:
-		target = _camp_to_attack()
-	if target == null:
 		_via = _trail_point(_slot_point())
 
 
@@ -514,42 +531,8 @@ func _think_order(order: int) -> void:
 	if candidate == null and order == Player.Order.CHARGE:
 		candidate = _best_enemy(global_position, _sight())
 	target = _commit_target(target if is_instance_valid(target) and target is Unit else null, candidate, guard + 6.0)
-	if target == null:
-		target = _camp_near(point, guard + 3.0)
 	if target and target.global_position.distance_to(point) > guard + 6.0:
 		target = null  # don't get dragged away from the point
-
-
-func _camp_near(point: Vector3, max_distance: float) -> Node3D:
-	var best: Node3D = null
-	var best_dist := max_distance
-	for node in get_tree().get_nodes_in_group(CAMP_GROUPS[0]):
-		var camp := node as Camp
-		if camp == null or camp.is_dead:
-			continue
-		var d := camp.global_position.distance_to(point) - camp.radius
-		if d < best_dist:
-			best_dist = d
-			best = camp
-	return best
-
-
-## Help knock down a camp the player is attacking or standing next to.
-func _camp_to_attack() -> Node3D:
-	var best: Node3D = null
-	var best_dist := INF
-	for node in get_tree().get_nodes_in_group(CAMP_GROUPS[0]):
-		var camp := node as Camp
-		if camp == null or camp.is_dead:
-			continue
-		var from_leader := camp.global_position.distance_to(leader.global_position)
-		if from_leader > 8.0 + camp.radius and not (camp.attacked_recently_by(owner_peer) and from_leader < 16.0):
-			continue
-		var d := camp.global_position.distance_to(global_position)
-		if d < best_dist:
-			best_dist = d
-			best = camp
-	return best
 
 
 func _on_died() -> void:

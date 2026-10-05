@@ -1,8 +1,8 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://c4bi84v0m0iif"]
 
-[ext_resource type="Script" path="res://scenes/characters/enemy.gd" id="1_script"]
-[ext_resource type="PackedScene" path="res://assets/characters/orc.glb" id="2_model"]
-[ext_resource type="PackedScene" path="res://assets/items/dungeon/sword.glb" id="3_sword"]
+[ext_resource type="Script" uid="uid://d2e2pfmkye62p" path="res://scenes/characters/enemy.gd" id="1_script"]
+[ext_resource type="PackedScene" uid="uid://drxnn0ocv43uv" path="res://assets/characters/orc.glb" id="2_model"]
+[ext_resource type="PackedScene" uid="uid://cm3c02s6d4j08" path="res://assets/items/dungeon/sword.glb" id="3_sword"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
 radius = 0.27
@@ -34,29 +34,28 @@ properties/7/path = NodePath(".:alert_seq")
 properties/7/spawn = true
 properties/7/replication_mode = 2
 
-[node name="OrcSwordsman" type="CharacterBody3D"]
+[node name="OrcSwordsman" type="CharacterBody3D" unique_id=1667745002]
 collision_layer = 4
 collision_mask = 31
 motion_mode = 1
 script = ExtResource("1_script")
+coin_drop_min = 3
+coin_drop_max = 4
 max_health = 95.0
 move_speed = 3.0
 melee_damage = 11.0
 melee_cooldown = 0.9
 melee_mask = 15
 right_hand_item = ExtResource("3_sword")
-health_bar_color = Color(0.9, 0.22, 0.2, 1)
-coin_drop_min = 3
-coin_drop_max = 4
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=848635504]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
 shape = SubResource("CapsuleShape3D_body")
 
-[node name="Model" parent="." instance=ExtResource("2_model")]
+[node name="Model" parent="." unique_id=2140629074 instance=ExtResource("2_model")]
 transform = Transform3D(1.3, 0, 0, 0, 1.3, 0, 0, 0, 1.3, 0, 0, 0)
 
-[node name="Sync" type="MultiplayerSynchronizer" parent="."]
+[node name="Sync" type="MultiplayerSynchronizer" parent="." unique_id=2087755667]
 replication_interval = 0.05
 delta_interval = 0.05
 replication_config = SubResource("SceneReplicationConfig_sync")

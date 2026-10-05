@@ -1,12 +1,15 @@
 [gd_scene format=3]
 
-[ext_resource type="Script" path="res://scenes/characters/enemy.gd" id="1_script"]
-[ext_resource type="PackedScene" path="res://assets/characters/orc.glb" id="2_model"]
-[ext_resource type="PackedScene" path="res://assets/items/arena/sword.glb" id="3_sword"]
+[ext_resource type="Script" path="res://scenes/characters/enemy.gd" id="1_enemy"]
+[ext_resource type="PackedScene" path="res://assets/characters/orc.glb" id="2_orc"]
+[ext_resource type="PackedScene" path="res://assets/items/dungeon/spear.glb" id="3_spear"]
+[ext_resource type="Script" path="res://scripts/enemies/kite_movement.gd" id="4_kite_movement"]
+[ext_resource type="Script" path="res://scripts/enemies/projectile_attack.gd" id="5_projectile_attack"]
+[ext_resource type="Script" path="res://scripts/enemies/melee_attack.gd" id="6_melee_attack"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
 radius = 0.27
-height = 1.0
+height = 1
 
 [sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_sync"]
 properties/0/path = NodePath(".:net_position")
@@ -34,30 +37,51 @@ properties/7/path = NodePath(".:alert_seq")
 properties/7/spawn = true
 properties/7/replication_mode = 2
 
-[node name="OrcSpearman" type="CharacterBody3D"]
+[node name="OrcThrower" type="CharacterBody3D"]
 collision_layer = 4
 collision_mask = 31
 motion_mode = 1
-script = ExtResource("1_script")
-max_health = 80.0
-move_speed = 2.8
-melee_damage = 10.0
-melee_range = 1.15
-melee_cooldown = 1.1
+script = ExtResource("1_enemy")
+enemy_name = "Orc Spear Thrower"
+faction = &"orc"
+max_health = 55
+move_speed = 3
+melee_damage = 6
+melee_cooldown = 1.2
 melee_mask = 15
-right_hand_item = ExtResource("3_sword")
-right_hand_rotation = Vector3(0, 0, 180)
-right_swing_rotation = Vector3(0, 0, -90)
+right_hand_item = ExtResource("3_spear")
+right_hand_offset = Vector3(-0.27, -0.2, 0)
+right_swing_offset = Vector3(-0.1, 0, 0)
 health_bar_color = Color(0.9, 0.22, 0.2, 1)
+aggro_range = 9
+coin_drop_min = 3
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
 shape = SubResource("CapsuleShape3D_body")
 
-[node name="Model" parent="." instance=ExtResource("2_model")]
-transform = Transform3D(1.25, 0, 0, 0, 1.25, 0, 0, 0, 1.25, 0, 0, 0)
+[node name="Model" parent="." instance=ExtResource("2_orc")]
+transform = Transform3D(1.15, 0, 0, 0, 1.15, 0, 0, 0, 1.15, 0, 0, 0)
 
 [node name="Sync" type="MultiplayerSynchronizer" parent="."]
 replication_interval = 0.05
 delta_interval = 0.05
 replication_config = SubResource("SceneReplicationConfig_sync")
+
+[node name="Movement" type="Node" parent="."]
+script = ExtResource("4_kite_movement")
+keep_min = 4
+keep_max = 7.5
+
+[node name="Throw" type="Node" parent="."]
+script = ExtResource("5_projectile_attack")
+priority = 1
+projectile = &"spear"
+damage = 10
+cooldown = 2.6
+min_range = 2.5
+max_range = 8.5
+hide_hand_item = true
+
+[node name="Melee" type="Node" parent="."]
+script = ExtResource("6_melee_attack")

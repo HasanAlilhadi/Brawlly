@@ -1,0 +1,101 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scenes/characters/enemy.gd" id="1_enemy"]
+[ext_resource type="PackedScene" path="res://assets/characters/zombie.glb" id="2_zombie"]
+[ext_resource type="Script" path="res://scripts/enemies/shamble_movement.gd" id="3_shamble_movement"]
+[ext_resource type="Script" path="res://scripts/enemies/charge_ability.gd" id="4_charge_ability"]
+[ext_resource type="Script" path="res://scripts/enemies/melee_attack.gd" id="5_melee_attack"]
+[ext_resource type="Script" path="res://scripts/enemies/death_burst_trait.gd" id="6_death_burst_trait"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
+radius = 0.3
+height = 1
+
+[sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_sync"]
+properties/0/path = NodePath(".:net_position")
+properties/0/spawn = true
+properties/0/replication_mode = 1
+properties/1/path = NodePath(".:net_yaw")
+properties/1/spawn = true
+properties/1/replication_mode = 1
+properties/2/path = NodePath(".:health")
+properties/2/spawn = true
+properties/2/replication_mode = 2
+properties/3/path = NodePath(".:max_health")
+properties/3/spawn = true
+properties/3/replication_mode = 2
+properties/4/path = NodePath(".:anim_state")
+properties/4/spawn = true
+properties/4/replication_mode = 2
+properties/5/path = NodePath(".:action_token")
+properties/5/spawn = true
+properties/5/replication_mode = 2
+properties/6/path = NodePath(".:is_dead")
+properties/6/spawn = true
+properties/6/replication_mode = 2
+properties/7/path = NodePath(".:alert_seq")
+properties/7/spawn = true
+properties/7/replication_mode = 2
+
+[node name="Zombie" type="CharacterBody3D"]
+collision_layer = 4
+collision_mask = 31
+motion_mode = 1
+script = ExtResource("1_enemy")
+enemy_name = "Zombie"
+faction = &"undead"
+max_health = 130
+move_speed = 2
+melee_damage = 14
+melee_range = 1.15
+melee_cooldown = 1.4
+melee_mask = 15
+melee_anims = PackedStringArray("attack-melee-left", "attack-melee-right")
+hold_left_arm = true
+radius = 0.38
+sprint_threshold = 1.1
+knockback_taken = 0.6
+health_bar_color = Color(0.45, 0.75, 0.3, 1)
+aggro_range = 6
+coin_drop_min = 2
+coin_drop_max = 4
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
+shape = SubResource("CapsuleShape3D_body")
+
+[node name="Model" parent="." instance=ExtResource("2_zombie")]
+transform = Transform3D(1.3, 0, 0, 0, 1.3, 0, 0, 0, 1.3, 0, 0, 0)
+
+[node name="Sync" type="MultiplayerSynchronizer" parent="."]
+replication_interval = 0.05
+delta_interval = 0.05
+replication_config = SubResource("SceneReplicationConfig_sync")
+
+[node name="Movement" type="Node" parent="."]
+script = ExtResource("3_shamble_movement")
+
+[node name="Lunge" type="Node" parent="."]
+script = ExtResource("4_charge_ability")
+priority = 2
+cooldown = 5
+min_range = 2.2
+max_range = 4.5
+windup = 0.45
+dash_time = 0.4
+speed_multiplier = 3.4
+damage = 16
+push = 3
+hits_all = false
+recover = 0.6
+show_lane = false
+shout = "Braaains!"
+first_use_delay = 1
+
+[node name="Melee" type="Node" parent="."]
+script = ExtResource("5_melee_attack")
+
+[node name="DeathBurst" type="Node" parent="."]
+script = ExtResource("6_death_burst_trait")
+radius = 2.2
+damage = 16

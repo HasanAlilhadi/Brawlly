@@ -2,7 +2,7 @@ class_name HudStyle
 ## In-match HUD design tokens: every HUD size, gap and font size comes from here, so all panels and
 ## buttons line up and share one scale. Use these instead of numbers in hud.gd / hud.tscn.
 ## Layout (Hud._apply_design): a column at the top left (stats panel, then the square button row),
-## a column at the top right (minimap, camp / soldier stats, army orders), weapon bar at the bottom
+## a column at the top right (minimap, warband / soldier stats, army orders), weapon bar at the bottom
 ## right, match messages top center, "You're down" bottom center.
 
 ## Distance from the screen (safe area) edge.

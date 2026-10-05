@@ -10,12 +10,12 @@ signal awards_ready(awards: Array)
 ## [stat, title, detail ("%d" = the value), minimum value to earn it, icon: a Game Icon Pack glyph (assets/ui/icons/game/), see UiKit.medal].
 ## The order is the priority.
 const AWARDS: Array = [
-	[&"warlord_kills", "Warlord Slayer", "Final blow on the Warlord", 1, "boss"],
+	[&"boss_kills", "Giant Slayer", "Bosses felled: %d", 1, "boss"],
 	[&"revives", "Medic", "Revives: %d", 1, "medical_kit"],
 	[&"goblin_kills", "Goblin Hunter", "Goblins caught: %d", 1, "star_coin"],
 	[&"player_kills", "Headhunter", "Players defeated: %d", 2, "skull"],
-	[&"camps", "Camp Crusher", "Camps destroyed: %d", 2, "tent"],
-	[&"orc_kills", "Orc Slayer", "Orcs defeated: %d", 8, "broadsword"],
+	[&"bands", "Warband Breaker", "Warbands wiped out: %d", 2, "skull"],
+	[&"orc_kills", "Monster Slayer", "Enemies defeated: %d", 8, "broadsword"],
 	[&"arrow_damage", "Sharpshooter", "Arrow damage: %d", 400, "target"],
 	[&"coins", "Moneybags", "Coins collected: %d", 80, "coin"],
 	[&"mined", "Gold Digger", "Gold mined: %d", 20, "star_coin"],
@@ -67,12 +67,12 @@ static func on_unit_died(unit: Unit) -> void:
 			add(killer, &"player_kills")
 	elif unit is Ally:
 		add(unit.owner_peer, &"soldiers_lost")
-	elif unit is Warlord:
-		add(killer, &"warlord_kills")
 	elif unit is TreasureGoblin:
 		add(killer, &"goblin_kills")
 	elif unit is Enemy:
 		add(killer, &"orc_kills")
+		if (unit as Enemy).component(BossTrait):
+			add(killer, &"boss_kills")
 
 
 func stat(peer: int, key: StringName) -> float:
@@ -123,13 +123,13 @@ func compute_awards(names: Dictionary) -> Array:
 	if awards.is_empty() and peers.size() == 1:
 		var peer: int = peers[0]
 		awards.append({"title": "Your match", "peer": peer, "name": names[peer], "icon": "trophy",
-				"detail": "%d orcs · %d camps · %d coins" % [stat(peer, &"orc_kills"), stat(peer, &"camps"), stat(peer, &"coins")]})
+				"detail": "%d enemies · %d warbands · %d coins" % [stat(peer, &"orc_kills"), stat(peer, &"bands"), stat(peer, &"coins")]})
 	return awards
 
 
 func _mvp_score(peer: int) -> float:
 	return stat(peer, &"damage") * 0.02 + stat(peer, &"orc_kills") + stat(peer, &"player_kills") * 5.0 \
-			+ stat(peer, &"camps") * 6.0 + stat(peer, &"revives") * 5.0 + stat(peer, &"warlord_kills") * 15.0 \
+			+ stat(peer, &"bands") * 6.0 + stat(peer, &"revives") * 5.0 + stat(peer, &"boss_kills") * 15.0 \
 			+ stat(peer, &"goblin_kills") * 6.0 - stat(peer, &"deaths") * 2.0
 
 

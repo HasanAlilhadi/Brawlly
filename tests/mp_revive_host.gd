@@ -45,7 +45,7 @@ func _process(delta: float) -> void:
 	match step:
 		0:
 			if Net.players.size() >= 2 and st > 1.0:
-				Net.set_setting("camp_count", 4)
+				Net.set_setting("band_count", 4)
 				Net.set_setting("events", false)
 				Net.start_game()
 				step = 1

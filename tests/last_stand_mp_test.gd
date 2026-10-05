@@ -70,10 +70,7 @@ func _signature(main: Node) -> String:
 	var veins := 0.0
 	for v in get_tree().get_nodes_in_group(&"gold_veins"):
 		veins += (v as Node3D).global_position.x * 0.37 + (v as Node3D).global_position.z
-	var solids := 0
-	for node in main.world.get_children():
-		if node is StaticBody3D and str(node.name).begins_with("Solid_"):
-			solids += 1
+	var solids: int = main.world.find_children("Solid*", "StaticBody3D", true, false).size()
 	return "circles %s veins %.2f solids %d trees %d" % [" ".join(parts), veins, solids, get_tree().get_nodes_in_group(&"choppable").size()]
 
 
@@ -91,9 +88,9 @@ func _process(delta: float) -> void:
 	if host and phase == 0:
 		if Net.players.size() >= 2 and pt > 0.5:
 			Net.set_setting("mode", Net.Mode.LAST_STAND)
-			Net.set_setting("map", 1)
-			Net.set_setting("camp_count", 8)
-			Net.set_setting("events", false)
+			Net.set_setting("map", "gravemoor")
+			Net.set_setting("band_count", 8)
+			Net.set_setting("events", [])
 			Net.start_game(false)
 			_next()
 		return
@@ -170,7 +167,7 @@ func _client(main: Node) -> void:
 				return
 			_log("SIG " + _signature(main))
 			_check(mode.hold_circle != null and mode.hold_circle.position.distance_to(mode.circles[0]) < 0.1, "the circle shows here")
-			_check((MapCatalog.get_map(1).sky as Color).is_equal_approx((main.get_node("WorldEnvironment") as WorldEnvironment).environment.background_color), "Gravemoor here too")
+			_check(MapCatalog.find(&"gravemoor").sky_color.is_equal_approx((main.get_node("WorldEnvironment") as WorldEnvironment).environment.background_color), "Gravemoor here too")
 			_next()
 		1:
 			if mode.circle_index == 1:

@@ -125,7 +125,7 @@ var health: float = 100.0:
 	set(value):
 		var lost := health - value
 		health = value
-		if lost > 0.5 and is_node_ready() and not is_dead:
+		if lost > 0.5 and _spawned and not is_dead:
 			_hurt_visuals()
 		if _health_bar:
 			_health_bar.set_ratio(health / max_health if max_health > 0.0 else 0.0)
@@ -164,6 +164,7 @@ var _action_seq: int = 0
 var _saved_layers: Vector2i
 static var _recolor_materials: Dictionary = {}  # "texture_rid|color|hue" -> ShaderMaterial (shared)
 const RECOLOR_SHADER := preload("res://assets/shaders/palette_recolor.gdshader")
+const XRAY_SHADER := preload("res://assets/shaders/xray_silhouette.gdshader")
 var _regen_pool: float = 0.0
 var _full_body_action: bool = false
 var _knockback: Vector3 = Vector3.ZERO
@@ -179,6 +180,10 @@ var _separation: Vector3 = Vector3.ZERO
 var _slot_angle: float = 0.0
 var _slot_target: Node3D
 var _probe_shape: SphereShape3D
+## True once _ready is done: health changes before that (max health set at spawn) aren't hits.
+var _spawned: bool = false
+var _locomotion_wanted: String = ""
+var _locomotion_wanted_time: float = 0.0
 var _target_lock: float = 0.0
 var _last_steer_pos: Vector3 = Vector3.INF
 var _stuck_checks: int = 0
@@ -190,11 +195,11 @@ var _unstick_time: float = 0.0
 
 func _ready() -> void:
 	add_to_group(&"units")
-	health = max_health
+	_model_scale = model.scale  # before anything can squash it
+	health = max_health  # not a hit (`_spawned` is still false: no squash / flash)
 	net_position = global_position
 	motion_mode = CharacterBody3D.MOTION_MODE_FLOATING
 	anim.speed_scale = anim_speed
-	_model_scale = model.scale
 	for anim_name in LOOPING_ANIMS:
 		if anim.has_animation(anim_name):
 			anim.get_animation(anim_name).loop_mode = Animation.LOOP_LINEAR
@@ -206,7 +211,9 @@ func _ready() -> void:
 	_health_bar.width = health_bar_width
 	add_child(_health_bar)
 	_apply_color()
-	play_anim("idle")
+	play_anim("idle", 0.0)
+	anim.advance(0.0)  # take the idle pose now: a unit spawned paused would otherwise keep the model's rest (T) pose
+	_spawned = true
 	if _is_remote():
 		# Other peers only show what the server simulates (the predicted local player still
 		# bumps into trees / houses, see `enable_prediction()`).
@@ -279,7 +286,7 @@ func _predict(delta: float) -> void:
 	elif moving:
 		face(move, delta)
 	if not _full_body_busy():
-		play_anim(_move_anim(strength) if moving else _idle_anim())
+		_play_locomotion(_move_anim(strength) if moving else _idle_anim(), delta)
 
 
 ## Virtual: local client prediction input. Player abilities may force movement independently of the stick.
@@ -321,7 +328,7 @@ func _physics_process(delta: float) -> void:
 		face(move, delta)
 	_advance_live_arm(delta)
 	if not _full_body_busy():
-		play_anim(_idle_anim() if strength < 0.05 else _move_anim(strength))
+		_play_locomotion(_idle_anim() if strength < 0.05 else _move_anim(strength), delta)
 	net_position = global_position
 	net_yaw = model.rotation.y
 
@@ -329,6 +336,28 @@ func _physics_process(delta: float) -> void:
 ## Virtual: desired movement on the XZ plane (length 0..1).
 func _get_move_input(_delta: float) -> Vector3:
 	return Vector3.ZERO
+
+
+## Idle / walk / run: a new clip only starts once it has been wanted for `_locomotion_settle()` seconds, so AI
+## moves that hover at a threshold (stop-go at a formation spot, run / walk at the edge) don't flicker clips.
+func _play_locomotion(wanted: String, delta: float) -> void:
+	var settle := _locomotion_settle()
+	if settle <= 0.0 or wanted == anim_state or not LOOPING_ANIMS.has(anim_state) or not LOOPING_ANIMS.has(wanted):
+		_locomotion_wanted = wanted
+		_locomotion_wanted_time = 0.0
+		play_anim(wanted)
+		return
+	if wanted != _locomotion_wanted:
+		_locomotion_wanted = wanted
+		_locomotion_wanted_time = 0.0
+	_locomotion_wanted_time += delta
+	if _locomotion_wanted_time >= settle:
+		play_anim(wanted)
+
+
+## Virtual: how long a new locomotion clip must be wanted before it plays (players: at once).
+func _locomotion_settle() -> float:
+	return 0.18
 
 
 ## Virtual: animation to play while standing still.
@@ -352,17 +381,40 @@ func _hurt_visuals() -> void:
 	HitFx.burst(global_position + Vector3(0, health_bar_height * 0.55, 0), HitFx.Kind.FLESH, 9)
 	HitFx.flash(global_position + Vector3(0, health_bar_height * 0.55, 0), HitFx.HIT_SPARK, Color(1.0, 0.9, 0.6), 1.1 * sqrt(radius / 0.35), 0.18)
 	if _flash_material == null:
-		_flash_material = StandardMaterial3D.new()
-		_flash_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		_flash_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		_flash_material.albedo_color = Color(1, 1, 1, 0)
-		for mesh in model.find_children("*", "MeshInstance3D", true, false):
-			(mesh as MeshInstance3D).material_overlay = _flash_material
+		_make_overlay()
 	if _flash_tween:
 		_flash_tween.kill()
 	_flash_material.albedo_color.a = 0.85
 	_flash_tween = create_tween()
 	_flash_tween.tween_property(_flash_material, "albedo_color:a", 0.0, 0.14)
+
+
+## The overlay on every mesh: the white hit flash (transparent until a hit), maybe with the x-ray as next pass.
+func _make_overlay(xray: Material = null) -> void:
+	_flash_material = StandardMaterial3D.new()
+	_flash_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_flash_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_flash_material.albedo_color = Color(1, 1, 1, 0)
+	if xray:
+		# The hero's visible pixels mark the stencil; the silhouette only draws where none are (not over its own
+		# arms / body where one part hides another).
+		_flash_material.stencil_mode = BaseMaterial3D.STENCIL_MODE_CUSTOM
+		_flash_material.stencil_flags = BaseMaterial3D.STENCIL_FLAG_WRITE
+		_flash_material.stencil_compare = BaseMaterial3D.STENCIL_COMPARE_ALWAYS
+		_flash_material.stencil_reference = 1
+	_flash_material.next_pass = xray
+	for mesh in model.find_children("*", "MeshInstance3D", true, false):
+		(mesh as MeshInstance3D).material_overlay = _flash_material
+
+
+## A flat silhouette in the unit's color wherever walls / cover hide it from the camera (heroes; every peer).
+func enable_xray() -> void:
+	var xray := ShaderMaterial.new()
+	xray.shader = XRAY_SHADER
+	var tint := unit_color if unit_color.a > 0.0 else Color(0.35, 0.65, 1.0)
+	xray.set_shader_parameter("color", Color(tint.r, tint.g, tint.b, 0.55))
+	xray.render_priority = 1  # after the overlay that marks the stencil
+	_make_overlay(xray)
 
 
 ## Whether a melee swing should damage this collider (hostile units / camps by default).
@@ -489,6 +541,12 @@ func _apply_melee() -> void:
 		victims = [best]
 	for victim in victims:
 		victim.take_damage(roll[0], self, true, roll[1])
+		_on_hit_dealt(victim, roll[0])
+
+
+## Virtual: a melee swing of this unit just hit `victim` for `amount` (server; e.g. life steal).
+func _on_hit_dealt(_victim: Node3D, _amount: float) -> void:
+	pass
 
 
 ## Direction of the weapon on the damage frame. AI keeps the direction chosen when its attack started;
@@ -644,7 +702,7 @@ func _apply_color() -> void:
 ## True for meshes of an item attached to a bone (weapons, shields), which keep their own colors.
 func _in_hand(node: Node) -> bool:
 	while node and node != model:
-		if node is BoneAttachment3D:
+		if node is BoneAttachment3D or node.has_meta(&"hand_item"):
 			return true
 		node = node.get_parent()
 	return false
@@ -683,6 +741,10 @@ func _punch() -> void:
 func _setup_hands() -> void:
 	var skeleton := model.find_child("Skeleton3D", true, false) as Skeleton3D
 	if skeleton == null:
+		# Rigid models (Graveyard Kit: skeleton, zombie, vampire…): the arms are plain nodes the clips turn, so
+		# the item rides the arm node in its swing grip (no holding pose without bones).
+		_right_item = _attach_rigid_item(right_hand_item, "arm-right", right_swing_offset, right_swing_rotation)
+		_left_item = _attach_rigid_item(left_hand_item, "arm-left", left_hand_offset, left_hand_rotation)
 		return
 	_right_item = _attach_item(skeleton, right_hand_item, "arm-right")
 	_left_item = _attach_item(skeleton, left_hand_item, "arm-left")
@@ -691,6 +753,21 @@ func _setup_hands() -> void:
 	if hold_left_arm:
 		_left_hold = _make_hold(skeleton, "arm-left", "holding-left")
 	_hold_arms(true)
+
+
+func _attach_rigid_item(item: PackedScene, arm_name: String, offset: Vector3, rotation_deg: Vector3) -> Node3D:
+	var arm := model.find_child(arm_name, true, false) as Node3D
+	if item == null or arm == null:
+		return null
+	var holder := Node3D.new()
+	holder.name = "HandItem"
+	holder.set_meta(&"hand_item", true)
+	arm.add_child(holder)
+	var instance := item.instantiate() as Node3D
+	instance.position = offset
+	instance.rotation_degrees = rotation_deg
+	holder.add_child(instance)
+	return instance
 
 
 func _make_hold(skeleton: Skeleton3D, bone: String, pose_anim: String) -> BonePoseOverride3D:
@@ -829,9 +906,10 @@ static func target_radius(target: Node3D) -> float:
 
 # --- AI movement --------------------------------------------------------------
 
-## Moves toward `target` and melee-attacks it once in reach. Attackers spread around the target
-## (each picks its own spot) instead of queueing behind each other. Returns the move vector.
-func engage(target: Node3D, delta: float) -> Vector3:
+## Moves toward `target` and melee-attacks it once in reach (`attack` = false: only gets there, e.g. enemies
+## whose attacks are separate components). Attackers spread around the target (each picks its own spot)
+## instead of queueing behind each other. Returns the move vector.
+func engage(target: Node3D, delta: float, attack: bool = true) -> Vector3:
 	var to := target.global_position - global_position
 	to.y = 0.0
 	var dist := to.length()
@@ -839,7 +917,8 @@ func engage(target: Node3D, delta: float) -> Vector3:
 	if dist <= reach:
 		# Face the target before swinging, otherwise the swing hits empty air.
 		face_now(to)
-		melee()
+		if attack:
+			melee()
 		return _separation * 0.5
 	if target != _slot_target:
 		# Pick a spot on the side we're coming from, with some spread.

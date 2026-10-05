@@ -4,7 +4,7 @@ class_name HitFx
 ## - Damage numbers are shown only to the player who landed the hit (`report_hit` on the server
 ##   sends them to that player's device).
 
-enum Kind { FLESH, WOOD, LEAVES, DIRT, METAL }
+enum Kind { FLESH, WOOD, LEAVES, DIRT, METAL, BATS, BONES, POISON }
 
 const NUMBER_COLOR := Color(1.0, 0.96, 0.82)
 const CRIT_COLOR := Color(1.0, 0.72, 0.15)
@@ -16,6 +16,9 @@ const BIG_SMOKE := preload("res://assets/vfx/particles/smoke_10.png")
 const COMBO_RING := preload("res://assets/vfx/particles/circle_03.png")
 const REVIVE_SPARKLE := preload("res://assets/vfx/particles/magic_04.png")
 const BLOCK_RING := preload("res://assets/vfx/particles/circle_02.png")
+## Ground telegraphs (where an enemy attack will land): a filled disc that grows inside a ring.
+const WARN_DISC := preload("res://assets/vfx/light_masks/circle_a.png")
+const WARN_RING := preload("res://assets/vfx/particles/circle_02.png")
 
 ## Set by main.gd for the running match.
 static var world: Node3D
@@ -341,6 +344,23 @@ static func burst(at: Vector3, kind: Kind, amount: int = 10, direction: Vector3 
 			particles.initial_velocity_min = 3.0
 			particles.initial_velocity_max = 5.5
 			particles.lifetime = 0.3
+		Kind.BATS:
+			ramp.set_color(0, Color(0.18, 0.08, 0.16))
+			ramp.set_color(1, Color(0.35, 0.1, 0.25, 0.0))
+			particles.gravity = Vector3(0, 2.0, 0)
+			particles.spread = 180.0
+			particles.lifetime = 0.7
+		Kind.BONES:
+			ramp.set_color(0, Color(0.95, 0.92, 0.82))
+			ramp.set_color(1, Color(0.75, 0.72, 0.62, 0.0))
+			particles.scale_amount_min = 0.8
+			particles.scale_amount_max = 1.6
+		Kind.POISON:
+			ramp.set_color(0, Color(0.55, 1.0, 0.35))
+			ramp.set_color(1, Color(0.25, 0.55, 0.15, 0.0))
+			particles.gravity = Vector3(0, 1.5, 0)
+			particles.spread = 180.0
+			particles.lifetime = 0.8
 	particles.color_ramp = ramp
 	world.add_child(particles)
 	particles.global_position = at
@@ -365,4 +385,76 @@ static func _number_height(target: Node3D) -> float:
 	var bar: Variant = target.get("health_bar_height")
 	if bar is float:
 		return bar + 0.2
-	return 3.0 if target is Camp else 1.8
+	return 1.8
+
+
+## Enemy telegraph on the ground at `at`: a ring of `radius` m with a disc that fills it over `duration`
+## seconds — when it is full, the attack lands. Every peer draws its own.
+static func ground_warning(at: Vector3, radius: float, duration: float, color: Color) -> void:
+	if not is_instance_valid(world):
+		return
+	var root := Node3D.new()
+	world.add_child(root)
+	root.global_position = Vector3(at.x, 0.05, at.z)
+	var ring := _ground_quad(WARN_RING, color, radius * 2.15)
+	root.add_child(ring)
+	var disc := _ground_quad(WARN_DISC, Color(color, color.a * 0.55), radius * 2.0)
+	disc.scale = Vector3.ONE * 0.05
+	root.add_child(disc)
+	var tween := root.create_tween()
+	tween.tween_property(disc, "scale", Vector3.ONE, maxf(duration, 0.05)).set_ease(Tween.EASE_IN)
+	tween.tween_property(ring, "transparency", 1.0, 0.15)
+	tween.parallel().tween_property(disc, "transparency", 1.0, 0.15)
+	tween.tween_callback(root.queue_free)
+
+
+## Enemy telegraph for a charge: a lane `length` m long and `width` wide from `from` along `direction`,
+## brightening for `duration` seconds.
+static func lane_warning(from: Vector3, direction: Vector3, length: float, width: float, duration: float, color: Color) -> void:
+	if not is_instance_valid(world) or direction.length_squared() < 0.0001:
+		return
+	var mesh := PlaneMesh.new()
+	mesh.size = Vector2(width, length)
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.albedo_color = Color(color, 0.0)
+	material.no_depth_test = false
+	mesh.material = material
+	var lane := MeshInstance3D.new()
+	lane.mesh = mesh
+	lane.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	world.add_child(lane)
+	var dir := Vector3(direction.x, 0.0, direction.z).normalized()
+	lane.global_position = Vector3(from.x, 0.05, from.z) + dir * length * 0.5
+	lane.rotation.y = atan2(dir.x, dir.z)
+	var tween := lane.create_tween()
+	tween.tween_property(material, "albedo_color:a", color.a, maxf(duration, 0.05) * 0.8).set_ease(Tween.EASE_IN)
+	tween.tween_interval(maxf(duration, 0.05) * 0.2)
+	tween.tween_property(material, "albedo_color:a", 0.0, 0.25)
+	tween.tween_callback(lane.queue_free)
+
+
+## A slam landing: dust ring, flying dirt and a camera shake for a player close by.
+static func shockwave(at: Vector3, radius: float) -> void:
+	flash(at + Vector3(0, 0.15, 0), COMBO_RING, Color(1.0, 0.85, 0.6, 0.9), radius * 2.0, 0.35, Vector2(0.3, 1.1))
+	for i in 10:
+		var angle := TAU * i / 10.0
+		burst(at + Vector3(cos(angle), 0.1, sin(angle)) * radius * 0.7, Kind.DIRT, 5)
+	if is_instance_valid(camera) and camera.target and camera.target.global_position.distance_to(at) < radius * 3.0:
+		camera.shake(0.25, 0.35)
+
+
+static func _ground_quad(texture: Texture2D, color: Color, size: float) -> MeshInstance3D:
+	var mesh := PlaneMesh.new()
+	mesh.size = Vector2.ONE * size
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.albedo_texture = texture
+	material.albedo_color = color
+	mesh.material = material
+	var quad := MeshInstance3D.new()
+	quad.mesh = mesh
+	quad.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return quad
