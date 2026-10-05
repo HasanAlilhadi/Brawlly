@@ -87,7 +87,9 @@ func _update(delta: float) -> void:
 
 
 func _living() -> int:
-	_alive = _alive.filter(func(minion: Enemy) -> bool: return is_instance_valid(minion) and not minion.is_dead)
+	# filter() returns an untyped Array: assign() copies it into the typed one. The parameter stays untyped
+	# (a freed minion can't be passed as an Enemy).
+	_alive.assign(_alive.filter(func(minion: Variant) -> bool: return is_instance_valid(minion) and not minion.is_dead))
 	return _alive.size()
 
 

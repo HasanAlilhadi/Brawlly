@@ -268,7 +268,8 @@ func _on_member_died(unit: Unit, slot: int) -> void:
 
 
 func _update_alive() -> void:
-	_extra = _extra.filter(func(enemy: Enemy) -> bool: return is_instance_valid(enemy) and not enemy.is_dead)
+	# filter() returns an untyped Array (assign() keeps ours typed); untyped parameter: freed members can't be Enemy.
+	_extra.assign(_extra.filter(func(enemy: Variant) -> bool: return is_instance_valid(enemy) and not enemy.is_dead))
 	var count := members().size()
 	if count != alive:
 		alive = count
