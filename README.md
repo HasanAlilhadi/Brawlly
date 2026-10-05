@@ -42,7 +42,7 @@ portrait on phones. There is no single player: host a game (alone is fine) or jo
   is calm and nobody is near; wipe a band out and it's gone for good. Fell a boss and its whole band is routed.
 - **Soldiers** are recruited from the upgrades sheet's Army tab, anywhere: 10 coins each, trained one after another
   (5 s each), then each appears right behind you. They follow and fight for you; dead soldiers never come back.
-  Army cap 10 (following + training); **Command** (Army tab) raises it by 1 per level (100 coins each) up to 15.
+  Army cap 100 (following + training); **Command** (Army tab) raises it by 10 per level (100 coins each) up to 150.
 - **Enemy types** (each its own movement, attacks and abilities, built from components):
   - **Orc Grunt** — runs in and swings. **Orc Spear Thrower** — keeps 4–7 m away, throws spears ahead of you.
   - **Orc Brute** (elite) — huge and slow, cleaves, **charges** along a red lane, **stomps** (red ring), enrages when hurt.

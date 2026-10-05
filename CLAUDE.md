@@ -238,7 +238,8 @@ by touch index so the joystick and buttons work together with multi-touch.
   Recruit (10, constant) → `Player.soldiers_training` (replicated count; a queue — one after another,
   `GameConfig.SOLDIER_TRAIN_TIME` (5 s) each) → the server spawns an `Ally` right behind the player, which follows at once.
   `army_size()` = followers + training ≤ `follower_cap`
-  (`GameConfig.BASE_FOLLOWER_CAP` 10, Command +1 per level, 100 constant, max 15). Soldiers read
+  (`GameConfig.BASE_FOLLOWER_CAP` 100, Command +10 per level, 100 constant, 5 levels: max 150; a host
+  simulating 100 soldiers spends ~13 ms a frame on them, 150 ~20 ms — measured headless). Soldiers read
   `Player.ally_damage` / `ally_health`.
 - **Warbands** (`Warband`, scenes/world/warband.gd; they replaced the camps — none left): roaming groups whose
   **size is their power**. `WorldBuilder._add_warbands()` places `band_count` (lobby "Warbands", setting
@@ -402,7 +403,7 @@ by touch index so the joystick and buttons work together with multi-touch.
   `Unit.chase_avoid_mask`: extra layers `engage()` steers around while still chasing (soldiers: enemies, so they go
   around orcs in the way). Soldiers commit to their target (`Ally._commit_target`: no switching to a closer enemy
   until it's dead or out of range) — orcs keep the sticky `choose_target` rule.
-- Soldiers follow in a compact spiral formation (`Ally._update_slot`), at most `Player.follower_cap` (10–15) per player;
+- Soldiers follow in a compact spiral formation (`Ally._update_slot`), at most `Player.follower_cap` (100–150) per player;
   archers stand in rows of five behind the hero (against its walking direction, `_heading`).
 - **Soldier AI** (`scenes/characters/ally.gd`, test `tests/ally_test.gd`): targets come from `Ally._best_enemy()` (teamwork:
   enemies whose `target` is the hero count `DEFEND_BONUS` m closer, a squadmate `GUARD_BONUS`; melee soldiers add

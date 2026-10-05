@@ -118,25 +118,26 @@ func _tick(delta: float) -> bool:
 				var d := _army_center().distance_to(player.global_position)
 				if player.followers().size() != 2 or player.soldiers_training != 0 or d > 4.0:
 					printerr("FAILED joined at 10 s: following %d training %d, %.1f m from the player" % [player.followers().size(), player.soldiers_training, d])
-				# Fill the army (cap 10) and skip the training.
+				# Fill the army (cap 100) and skip the training.
 				player.coins = 100000
 				var recruit := _def(&"recruit")
 				while player.buy_upgrade(recruit): pass
-				if player.army_size() != 10: printerr("FAILED cap 10: army %d" % player.army_size())
+				if player.army_size() != 100: printerr("FAILED cap 100: army %d" % player.army_size())
 				for i in player._training_left.size(): player._training_left[i] = 0.0
 				_next("army capped at %d (training %d)" % [player.army_size(), player.soldiers_training])
 		8:
 			if pt > 4.0:
-				var far := player.followers().filter(func(a: Node3D) -> bool: return a.global_position.distance_to(player.global_position) > 5.0).size()
-				if player.followers().size() != 10 or player.soldiers_training != 0 or far > 0:
+				# A hundred stand in a spiral about 6 m across (Ally._update_slot): all within 9 m.
+				var far := player.followers().filter(func(a: Node3D) -> bool: return a.global_position.distance_to(player.global_position) > 9.0).size()
+				if player.followers().size() != 100 or player.soldiers_training != 0 or far > 0:
 					printerr("FAILED army: following %d, training %d, far %d" % [player.followers().size(), player.soldiers_training, far])
-				# Command: +1 per level, 100 coins each (constant), up to 15.
+				# Command: +10 per level, 100 coins each (constant), up to 150.
 				var command := _def(&"command")
 				var prices := PackedInt32Array()
 				while player.can_buy(command):
 					prices.append(player.upgrade_cost(command))
 					player.buy_upgrade(command)
-				if player.follower_cap != 15 or prices != PackedInt32Array([100, 100, 100, 100, 100]):
+				if player.follower_cap != 150 or prices != PackedInt32Array([100, 100, 100, 100, 100]):
 					printerr("FAILED cap: %d, command prices %s" % [player.follower_cap, prices])
 				_next("all %d soldiers follow (far %d); Command -> cap %d (prices %s)" % [player.followers().size(), far, player.follower_cap, prices])
 		9:
