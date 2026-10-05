@@ -81,12 +81,12 @@ sheet = &"army"
 script = ExtResource("2_def")
 id = &"command"
 title = "Command"
-description = "+10 army size (up to 150)"
+description = "+5 army size (up to 50)"
 icon = ExtResource("icon_banner")
 base_cost = 100
 cost_growth = 1.0
-max_level = 5
-amount = 10.0
+max_level = 4
+amount = 5.0
 sheet = &"army"
 
 [sub_resource type="Resource" id="Upgrade_sword_damage"]

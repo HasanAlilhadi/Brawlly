@@ -238,8 +238,8 @@ by touch index so the joystick and buttons work together with multi-touch.
   Recruit (10, constant) → `Player.soldiers_training` (replicated count; a queue — one after another,
   `GameConfig.SOLDIER_TRAIN_TIME` (5 s) each) → the server spawns an `Ally` right behind the player, which follows at once.
   `army_size()` = followers + training ≤ `follower_cap`
-  (`GameConfig.BASE_FOLLOWER_CAP` 100, Command +10 per level, 100 constant, 5 levels: max 150; a host
-  simulating 100 soldiers spends ~13 ms a frame on them, 150 ~20 ms — measured headless). Soldiers read
+  (`GameConfig.BASE_FOLLOWER_CAP` 30, Command +5 per level, 100 constant, 4 levels: max 50; keep it there —
+  a host simulating 100 soldiers spent ~13 ms a frame on them, measured headless). Soldiers read
   `Player.ally_damage` / `ally_health`.
 - **Warbands** (`Warband`, scenes/world/warband.gd; they replaced the camps — none left): roaming groups whose
   **size is their power**. `WorldBuilder._add_warbands()` places `band_count` (lobby "Warbands", setting
@@ -385,7 +385,7 @@ by touch index so the joystick and buttons work together with multi-touch.
   more; speeds close enough that melee catches the Bowman; the three abilities deal about the same on a crowd.
   Base (150 hp each, regen 6/s): Swordsman 3.7 m/s, sword 72 dps (crowd ~3×), shield 150, Whirlwind 180 per enemy
   (~1080 on 6); Spearman 3.5 m/s, spear 68 dps with 2.6 m reach (pierces ~2), javelin ~38 dps, shield 200, Bull Rush
-  4 × spear damage = 168 per enemy crossed (~1000 on 6); Bowman 3.6 m/s, bow 58 dps at 12 m, no shield, knife 44 dps,
+  4 × spear damage = 168 per enemy crossed (~1000 on 6); Bowman 3.5 m/s, bow 58 dps at 12 m, no shield, knife 44 dps,
   Bow Rain ~110 per enemy on 6 (+ it keeps shooting, ~950). Damage +20% × 5 and Fire Rate +15% × 3 are the same for
   every class (maxed ×2.9 for all). Soldiers (× `Ally.BASE_POWER` 1.25 health and damage): sword 100 hp / 15 dps, spear 100 / ~13 (1.45 m reach), bow 81 / ~12 (from
   half the hero's bow range). Enemies (hp / damage, before the band's 0.8–1.3× and difficulty): Orc Grunt 80/10;
@@ -403,7 +403,7 @@ by touch index so the joystick and buttons work together with multi-touch.
   `Unit.chase_avoid_mask`: extra layers `engage()` steers around while still chasing (soldiers: enemies, so they go
   around orcs in the way). Soldiers commit to their target (`Ally._commit_target`: no switching to a closer enemy
   until it's dead or out of range) — orcs keep the sticky `choose_target` rule.
-- Soldiers follow in a compact spiral formation (`Ally._update_slot`), at most `Player.follower_cap` (100–150) per player;
+- Soldiers follow in a compact spiral formation (`Ally._update_slot`), at most `Player.follower_cap` (30–50) per player;
   archers stand in rows of five behind the hero (against its walking direction, `_heading`).
 - **Soldier AI** (`scenes/characters/ally.gd`, test `tests/ally_test.gd`): targets come from `Ally._best_enemy()` (teamwork:
   enemies whose `target` is the hero count `DEFEND_BONUS` m closer, a squadmate `GUARD_BONUS`; melee soldiers add

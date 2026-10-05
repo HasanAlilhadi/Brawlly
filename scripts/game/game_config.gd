@@ -5,8 +5,8 @@ class_name GameConfig
 ## Set by main.gd (from the match settings) before the world is built.
 static var world_half: float = 80.0
 ## Army size every player starts with (soldiers following + in training).
-## The "Command" upgrade (Army tab) raises Player.follower_cap by 10 per level (5 levels), up to 150.
-const BASE_FOLLOWER_CAP: int = 100
+## The "Command" upgrade (Army tab) raises Player.follower_cap by 5 per level (4 levels), up to 50.
+const BASE_FOLLOWER_CAP: int = 30
 ## Seconds a recruited soldier trains before it joins its player.
 const SOLDIER_TRAIN_TIME: float = 5.0
 
