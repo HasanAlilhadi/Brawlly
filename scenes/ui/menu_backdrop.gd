@@ -1,15 +1,16 @@
 extends Node3D
-## Main-menu background: a small camp diorama (house, orcs, soldiers, the archer, trees)
+## Main-menu background: a small diorama (a house, a warband of orcs and undead, soldiers, the hero, trees)
 ## with a camera slowly circling it. Characters are the real unit scenes with their AI off.
 
 const PLAYER_SCENE := preload("res://scenes/characters/player.tscn")
 const ALLY_SCENE := preload("res://scenes/characters/ally.tscn")
 const ORC_SCENES: Array[PackedScene] = [
-	preload("res://scenes/characters/enemy.tscn"),
-	preload("res://scenes/characters/enemy_swordsman.tscn"),
-	preload("res://scenes/characters/enemy_thrower.tscn"),
+	preload("res://scenes/characters/enemies/orc_grunt.tscn"),
+	preload("res://scenes/characters/enemies/skeleton_warrior.tscn"),
+	preload("res://scenes/characters/enemies/orc_thrower.tscn"),
+	preload("res://scenes/characters/enemies/zombie.tscn"),
 ]
-const GIANT_SCENE := preload("res://scenes/characters/enemy_giant.tscn")
+const GIANT_SCENE := preload("res://scenes/characters/enemies/orc_brute.tscn")
 const STRUCTURE := preload("res://assets/environment/forest/building_structure.glb")
 const ROOF := preload("res://assets/environment/forest/building_roof.glb")
 const BANNER := preload("res://assets/environment/dungeon/banner.glb")
@@ -46,7 +47,7 @@ func _ready() -> void:
 	FollowCamera3D.fit_fov_to_short_side(_camera)
 	get_viewport().size_changed.connect(func() -> void: FollowCamera3D.fit_fov_to_short_side(_camera))
 	_build_house(Vector3(0, 0, -2.2))
-	# Orcs guarding the house, soldiers facing them, the archer in front.
+	# A warband by the house, soldiers facing it, the hero in front.
 	var orc_spots := [Vector3(-2.0, 0, -0.2), Vector3(-0.7, 0, 0.3), Vector3(0.7, 0, 0.2), Vector3(2.0, 0, -0.3)]
 	for i in orc_spots.size():
 		_add_unit(ORC_SCENES[i % ORC_SCENES.size()], orc_spots[i], Vector3(0, 0, 1))

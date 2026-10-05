@@ -37,7 +37,7 @@ signal ability_changed
 ## KILL: every soldier hunts `army_target` down (then they charge where it fell).
 enum Order { FOLLOW, CHARGE, HOLD, KILL }
 
-const TARGET_GROUPS: Array[StringName] = [&"active_enemies", &"player_units", &"camps"]
+const TARGET_GROUPS: Array[StringName] = [&"active_enemies", &"player_units"]
 ## Height arrows and thrown spears fly at; main.gd reads the mouse aim on this plane, so a shot passes right
 ## under the cursor (on the ground it would land short by the camera's slant).
 const SHOT_HEIGHT: float = 0.65
@@ -143,7 +143,7 @@ const MAX_ORDER_DISTANCE: float = 25.0
 ## A kill order takes the enemy within this distance of the ordered point (the client sends the enemy's position).
 const KILL_PICK_RADIUS: float = 2.0
 ## What a kill order can target (hostile ones only).
-const KILL_GROUPS: Array[StringName] = [&"active_enemies", &"enemies", &"player_units", &"camps"]
+const KILL_GROUPS: Array[StringName] = [&"active_enemies", &"enemies", &"player_units"]
 ## Whirlwind (Swordsman ability): spins for ClassDef.ability_duration with the sword held out. Every target
 ## within WHIRLWIND_RADIUS is hit once per complete rotation for WHIRLWIND_DAMAGE × sword damage. Moves at
 ## WHIRLWIND_SPEED × running speed; no attacks or blocking meanwhile.
@@ -279,7 +279,7 @@ var army_order: int = Order.FOLLOW:
 			army_order_changed.emit(value)
 ## Where soldiers charge to / hold (valid for CHARGE and HOLD; KILL: where the target was when ordered).
 var army_point: Vector3 = Vector3.ZERO
-## Server: the enemy (unit or camp) a KILL order hunts.
+## Server: the enemy a KILL order hunts.
 var army_target: Node3D
 ## Replicated: path of `army_target` (empty unless KILL), so the owner sees a mark over it.
 var army_target_path: NodePath = NodePath()
@@ -462,6 +462,11 @@ func set_class(class_id: StringName) -> void:
 	recolor_reference_value = class_def.recolor_reference_value
 
 
+## Your own input: clips follow it at once.
+func _locomotion_settle() -> float:
+	return 0.0
+
+
 func _ready() -> void:
 	owner_peer = peer_id
 	if class_def == null:
@@ -496,6 +501,7 @@ func _ready() -> void:
 			"spear": spear, "javelin": spear}
 	_setup_bow()
 	_setup_shield()
+	enable_xray()  # visible behind walls and cover (the camera looks down at an angle)
 	if training_mode and multiplayer.is_server():
 		_grant_training_unlocks()
 	_apply_class_upgrades()
@@ -1170,7 +1176,7 @@ func attack_melee() -> void:
 	if current_weapon() == "spear":
 		melee()
 		return
-	var target := find_nearest(TARGET_GROUPS, 1.8, global_position, {&"camps": -0.8})
+	var target := find_nearest(TARGET_GROUPS, 1.8, global_position)
 	if target:
 		face_now(_flat_dir_to(target))
 	melee()
@@ -1753,7 +1759,7 @@ func shoot(direction: Vector3 = Vector3.ZERO) -> void:
 	var spear := current_weapon() == "javelin"
 	_shoot_timer = spear_cooldown if spear else shoot_cooldown
 	if direction == Vector3.ZERO:
-		var target := find_nearest(TARGET_GROUPS, aim_range, global_position, {&"camps": 3.0})
+		var target := find_nearest(TARGET_GROUPS, aim_range, global_position)
 		direction = target.global_position - global_position if target else facing()
 	# Aimed: exactly where the player aims (no snapping onto a target). `direction` may carry the distance
 	# to the aimed point (see set_aim): the shot leaves from the bow / spear and flies through that point.
@@ -2622,7 +2628,7 @@ func command_army(order: int, point: Vector3) -> void:
 	order_serial += 1
 
 
-## The hostile unit / camp closest to `point` (within `radius`), for a kill order.
+## The hostile unit closest to `point` (within `radius`), for a kill order.
 func kill_target_near(point: Vector3, radius: float = KILL_PICK_RADIUS) -> Node3D:
 	var best: Node3D = null
 	var best_dist := radius
@@ -2631,7 +2637,7 @@ func kill_target_near(point: Vector3, radius: float = KILL_PICK_RADIUS) -> Node3
 			var candidate := node as Node3D
 			if candidate == null or GameConfig.is_gone(candidate) or not GameConfig.is_hostile(self, candidate):
 				continue
-			var reach: float = Unit.target_radius(candidate) if candidate is Camp else 0.0
+			var reach: float = maxf(Unit.target_radius(candidate) - 0.4, 0.0)  # big ones: anywhere on them
 			var d := Vector2(candidate.global_position.x - point.x, candidate.global_position.z - point.z).length() - reach
 			if d < best_dist:
 				best_dist = d

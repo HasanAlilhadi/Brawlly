@@ -30,7 +30,7 @@ func _ready() -> void:
 		_check(Net.host() == OK, "host starts")
 		while Net.players.size() < 2:
 			await get_tree().process_frame
-		Net.settings.camp_count = 0
+		Net.settings.band_count = 0
 		Net.settings.events = false
 		Net.start_game(false)
 	else:

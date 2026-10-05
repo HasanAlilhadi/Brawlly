@@ -98,7 +98,7 @@ func _ally(weapon: String, at: Vector3) -> Ally:
 
 
 func _orc(at: Vector3, still: bool = true) -> Enemy:
-	var orc := NetSpawn.unit(&"enemy", at, {"scene": "res://scenes/characters/enemy.tscn", "strength": 1.0,
+	var orc := NetSpawn.unit(&"enemy", at, {"scene": "res://scenes/characters/enemies/orc_grunt.tscn", "strength": 1.0,
 			"coins": 1.0}) as Enemy
 	orc.add_to_group(&"active_enemies")
 	orc.max_health = 5000.0

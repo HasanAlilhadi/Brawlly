@@ -19,12 +19,23 @@ Run from the project folder (`G` = the Godot binary). Tests start the game norma
 # Bowman Bow Rain: placed ground area, server-authoritative falling arrows, duration and cleanup
 "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/bow_rain_test.gd
 
-# Solo: chest, tree, camp (gives no soldiers), no camp near the spawn, Vitality / potions bought anywhere, recruits (queue 10 s each, then join behind you, army cap 10 → 15 with Command), death
+# Solo: chest, tree, a warband wiped out (gives no soldiers), no warband near the spawn, Vitality / potions bought anywhere, recruits (queue 10 s each, then join behind you, army cap 10 → 15 with Command), death
 "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/solo_test.gd
 
-# AI: orcs keep their targets, the Warlord walks around a house and never gets stuck, tents for small camps,
-# point-blank arrows hit an orc / a camp wall right in front of the player
+# AI: a band next to a downed player stays awake, enemies keep their targets, the Warlord walks around a wall and never
+# gets stuck, point-blank arrows hit an orc / a brute right in front of the player
 "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/ai_test.gd
+
+# Warbands + enemy types: bands (sizes, factions, graveyards, none near the spawn, far ones paused), marching,
+# formation, one alert sends the band; every type's moves (thrower kites, brute charge / stomp / enrage, skeleton
+# flanks / reassembles, archer, zombie lunge / death burst, ghost float / phase, vampire blink / life steal,
+# necromancer summon / bolts), bosses rout their band when they fall
+"$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/enemy_test.gd
+
+# Maps + world events: Crown Ruins (layout, team bases, shrine bands, chests, trees, walls stop shots, base → hill
+# walk, scoring), the events list setting, meteor / lightning hurt, storm rain + darkness, Blood Moon, supply drop
+# (with a window and --shot=<png>: a zoomed-out look at the map)
+"$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/map_events_test.gd
 
 # Class balance bench (prints a table, no pass/fail): real DPS single / crowd / line, ability damage per use,
 # javelin / knife / dash / wave, soldier DPS, maxed upgrades, camera reach per zoom. Run it for all three classes.
@@ -60,7 +71,7 @@ Run from the project folder (`G` = the Godot binary). Tests start the game norma
 "$G" --path . res://tests/test_runner.tscn -- --test=res://tests/screenshot_test.gd --out=/tmp/shots
 "$G" --path . res://tests/test_runner.tscn -- --test=res://tests/screenshot_test.gd --out=/tmp/shots --mobile
 
-# Multiplayer (run both at once): world determinism + camp sync + a client recruits a soldier that joins it
+# Multiplayer (run both at once): world determinism + warband sync (losses, wiped out) + a client recruits a soldier that joins it
 "$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/mp_sync_host.gd &
 "$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/mp_sync_client.gd
 
@@ -72,7 +83,7 @@ Run from the project folder (`G` = the Godot binary). Tests start the game norma
 "$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/mp_revive_host.gd &
 "$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/mp_revive_client.gd
 
-# Multiplayer King of the Hill: one spawn area per team (no camps near), hill score, game over (+ back to lobby)
+# Multiplayer King of the Hill: one spawn area per team (no warbands near), hill score, game over (+ back to lobby)
 "$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/mp_modes_host.gd &
 "$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/mp_modes_client.gd
 

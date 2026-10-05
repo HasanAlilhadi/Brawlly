@@ -99,7 +99,7 @@ func _process(delta: float) -> void:
 			# Three harmless, tough orcs right next to the army: the soldiers pile in.
 			for i in 3:
 				var orc := NetSpawn.unit(&"enemy", player.global_position + Vector3(4.5, 0, i * 1.5 - 1.5), {
-					"scene": "res://scenes/characters/enemy.tscn", "strength": 1.0, "coins": 1.0}) as Enemy
+					"scene": "res://scenes/characters/enemies/orc_grunt.tscn", "strength": 1.0, "coins": 1.0}) as Enemy
 				orc.add_to_group(&"active_enemies")
 				orc.max_health = 1e6
 				orc.health = 1e6
@@ -262,7 +262,7 @@ func _process(delta: float) -> void:
 
 ## A harmless orc that stands still (physics off: it neither walks nor fights).
 func _still_orc(at: Vector3, health: float) -> Enemy:
-	var orc := NetSpawn.unit(&"enemy", at, {"scene": "res://scenes/characters/enemy.tscn", "strength": 1.0, "coins": 1.0}) as Enemy
+	var orc := NetSpawn.unit(&"enemy", at, {"scene": "res://scenes/characters/enemies/orc_grunt.tscn", "strength": 1.0, "coins": 1.0}) as Enemy
 	orc.add_to_group(&"active_enemies")
 	orc.max_health = health
 	orc.health = health

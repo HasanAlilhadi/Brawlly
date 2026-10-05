@@ -34,9 +34,9 @@ const MENU_SCENE := "res://scenes/ui/main_menu.tscn"
 enum Mode { COOP, KING_OF_THE_HILL }
 enum Difficulty { EASY, NORMAL, HARD, BRUTAL }
 
-const MODE_NAMES: PackedStringArray = ["Co-op vs Orcs", "King of the Hill"]
+const MODE_NAMES: PackedStringArray = ["Co-op vs the Horde", "King of the Hill"]
 const MODE_HINTS: PackedStringArray = [
-	"Everyone together: destroy every orc camp.",
+	"Everyone together: wipe out every warband.",
 	"Teams hold the hill in the middle to earn points.",
 ]
 const SCORE_LIMIT_LABELS: PackedStringArray = ["", "Hill seconds to win"]
@@ -94,13 +94,14 @@ func _ready() -> void:
 static func default_settings() -> Dictionary:
 	return {
 		"mode": Mode.COOP,
-		"camp_count": 24,
+		"map": "wildlands",
+		"band_count": 24,
 		"difficulty": Difficulty.NORMAL,
 		"start_coins": 0,
 		"team_count": 2,
 		"score_limit": 10,
 		"time_limit": 10,
-		"events": true,
+		"events": WorldEvents.all_ids(),
 		"training": false,
 		"seed": 0,
 	}

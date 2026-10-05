@@ -45,15 +45,15 @@ func _process(delta: float) -> void:
 			player.max_health = 5000.0; player.health = 5000.0
 			_check(player.has_ability() and player.class_def.ability == &"whirlwind" and player.xp == 0, "Swordsman has Whirlwind, no XP yet")
 			_check(not player.ability_ready(), "not ready without XP")
-			# Orcs (camps far away, so paused) brought around the hero.
+			# Enemies (their bands far away, so paused) brought around the hero.
 			for node in get_tree().get_nodes_in_group(&"enemies"):
-				if node is Enemy and not (node is Warlord) and orcs.size() < 4:
+				if node is Enemy and (node as Enemy).component(BossTrait) == null and (node as Enemy).faction == &"orc" and orcs.size() < 4:
 					orcs.append(node)
 			var all: Array = get_tree().get_nodes_in_group(&"enemies").filter(func(n: Node) -> bool: return n is Enemy)
 			all.sort_custom(func(a: Enemy, b: Enemy) -> bool: return a.max_health < b.max_health)
 			_check(all[-1].xp_drop() > all[0].xp_drop(), "stronger enemies drop more XP (%.0f hp: %d, %.0f hp: %d)" % [all[0].max_health, all[0].xp_drop(), all[-1].max_health, all[-1].xp_drop()])
 			for orc in orcs:
-				orc.process_mode = Node.PROCESS_MODE_INHERIT  # paused camps' orcs are out of physics
+				orc.process_mode = Node.PROCESS_MODE_INHERIT  # paused bands' members are out of physics
 			_orb_xp = orcs[0].xp_drop()
 			orcs[0].global_position = player.global_position + Vector3(3.0, 0, 0)
 			orcs[0].die()
@@ -73,18 +73,17 @@ func _process(delta: float) -> void:
 			player.collect(Pickup.Kind.XP, 5)
 			_check(player.xp == player.class_def.ability_xp and player.ability_ready(), "capped at %d, ready" % player.class_def.ability_xp)
 			_check(not player.can_collect(Pickup.Kind.XP), "full: leaves orbs for others")
-			# Go next to a camp so its orcs wake up, then bring three of them around the hero.
-			var camp := get_tree().get_nodes_in_group(&"camps")[0] as Camp
-			player.global_position = camp.global_position + Vector3(7.0, 0, 0)
+			# Go next to an orc band so it wakes up, then bring three of them around the hero.
+			var band := _orc_band()
+			player.global_position = band.global_position + Vector3(7.0, 0, 0)
 			player.net_position = player.global_position
 			step = 21; t = 0.5
 		21:
-			var camp := get_tree().get_nodes_in_group(&"camps")[0] as Camp
 			orcs.clear()
-			for orc in camp._squad:
-				if is_instance_valid(orc) and not orc.is_dead and orcs.size() < 3:
+			for orc in _orc_band().members():
+				if orcs.size() < 3:
 					orcs.append(orc)
-			_check(orcs.size() == 3 and orcs.all(func(o: Enemy) -> bool: return o.process_mode != Node.PROCESS_MODE_DISABLED), "camp awake (%d orcs)" % orcs.size())
+			_check(orcs.size() == 3 and orcs.all(func(o: Enemy) -> bool: return o.process_mode != Node.PROCESS_MODE_DISABLED), "band awake (%d orcs)" % orcs.size())
 			var spots := [Vector3(1.2, 0, 0), Vector3(-1.2, 0, 0), Vector3(0, 0, 1.3)]
 			_health_before.clear()
 			player.crit_chance = 0.0  # deterministic Whirlwind pulse damage
@@ -92,6 +91,7 @@ func _process(delta: float) -> void:
 				var orc := orcs[i]
 				orc.max_health = 5000.0; orc.health = 5000.0
 				orc.global_position = player.global_position + spots[i]
+				orc.set_physics_process(false)  # stand still (calm band members would walk back to their spots)
 				_health_before.append(orc.health)
 			var walk := player.move_speed
 			player.request_ability()
@@ -152,6 +152,23 @@ func _process(delta: float) -> void:
 			step = 5; t = 2.0 - 6.0
 		5:
 			_check(not player.ability_xp_locked and player.can_collect(Pickup.Kind.XP), "XP collection unlocks after %.0f s" % player.class_def.ability_xp_lockout)
-			_check(player.collect(Pickup.Kind.XP, 5) and player.xp == 5, "XP can increase again")
+			# Bands roam: a passing enemy the spin killed may have left orbs right here, and they jump in the moment
+			# XP changes. Clear them so this checks the lockout only.
+			for orb in _xp_orbs():
+				orb.get_parent().remove_child(orb)
+				orb.queue_free()
+			player.xp = 0
+			_check(player.collect(Pickup.Kind.XP, 5) and player.xp == 5, "XP can increase again (%d)" % player.xp)
 			printerr("DONE failures=%d" % failures)
 			get_tree().quit()
+
+
+## The smallest orc band with at least three members (orcs: no ghosts phasing through the Whirlwind; small:
+## no stray kills dropping XP during the checks).
+func _orc_band() -> Warband:
+	var best: Warband = null
+	for node in get_tree().get_nodes_in_group(&"warbands"):
+		var band := node as Warband
+		if band.faction == &"orc" and band.members().size() >= 3 and (best == null or band.size < best.size):
+			best = band
+	return best

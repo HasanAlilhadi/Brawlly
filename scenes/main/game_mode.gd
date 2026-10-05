@@ -25,7 +25,8 @@ var _names: Dictionary = {}  # peer -> name (kept if a player leaves mid-match)
 var _sync_timer: float = 0.0
 
 
-func setup(match_settings: Dictionary, players: Dictionary) -> void:
+## `map`: a designed map brings its own team bases.
+func setup(match_settings: Dictionary, players: Dictionary, map: MapDef = null) -> void:
 	name = "GameMode"
 	settings = match_settings
 	match_mode = settings.mode
@@ -38,8 +39,11 @@ func setup(match_settings: Dictionary, players: Dictionary) -> void:
 	var team_count: int = settings.team_count
 	if Net.is_team_mode(match_mode):
 		for team in team_count:
-			var angle: float = PI * 0.5 + TAU * team / team_count
-			team_bases.append(Vector3(cos(angle), 0.0, sin(angle)) * half * 0.62)
+			if map and map.team_bases.size() >= team_count:
+				team_bases.append(map.team_bases[team])
+			else:
+				var angle: float = PI * 0.5 + TAU * team / team_count
+				team_bases.append(Vector3(cos(angle), 0.0, sin(angle)) * half * 0.62)
 			scores[team] = 0
 	var team_slots := {}
 	for i in peers.size():

@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="MapCatalog" format=3]
+
+[ext_resource type="Script" path="res://scripts/game/map_catalog.gd" id="1_catalog"]
+[ext_resource type="Script" path="res://scripts/game/map_def.gd" id="2_def"]
+[ext_resource type="Resource" path="res://resources/data/maps/wildlands.tres" id="3_wildlands"]
+[ext_resource type="Resource" path="res://resources/data/maps/crown_ruins.tres" id="4_crown"]
+
+[resource]
+script = ExtResource("1_catalog")
+maps = Array[ExtResource("2_def")]([ExtResource("3_wildlands"), ExtResource("4_crown")])

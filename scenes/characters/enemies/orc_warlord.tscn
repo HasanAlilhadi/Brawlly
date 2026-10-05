@@ -1,0 +1,156 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scenes/characters/enemy.gd" id="1_enemy"]
+[ext_resource type="PackedScene" path="res://assets/characters/orc.glb" id="2_orc"]
+[ext_resource type="PackedScene" path="res://assets/items/arena/sword.glb" id="3_sword"]
+[ext_resource type="PackedScene" path="res://assets/items/dungeon/shield_round.glb" id="4_shield_round"]
+[ext_resource type="Script" path="res://scripts/enemies/chase_movement.gd" id="5_chase_movement"]
+[ext_resource type="Script" path="res://scripts/enemies/summon_ability.gd" id="6_summon_ability"]
+[ext_resource type="PackedScene" path="res://scenes/characters/enemies/orc_grunt.tscn" id="7_orc_grunt"]
+[ext_resource type="PackedScene" path="res://scenes/characters/enemies/orc_thrower.tscn" id="8_orc_thrower"]
+[ext_resource type="Script" path="res://scripts/enemies/stomp_ability.gd" id="9_stomp_ability"]
+[ext_resource type="Script" path="res://scripts/enemies/charge_ability.gd" id="10_charge_ability"]
+[ext_resource type="Script" path="res://scripts/enemies/melee_attack.gd" id="11_melee_attack"]
+[ext_resource type="Script" path="res://scripts/enemies/enrage_trait.gd" id="12_enrage_trait"]
+[ext_resource type="Script" path="res://scripts/enemies/recolor_trait.gd" id="13_recolor_trait"]
+[ext_resource type="Script" path="res://scripts/enemies/boss_trait.gd" id="14_boss_trait"]
+[ext_resource type="Texture2D" path="res://assets/ui/icons/portraits/warlord.png" id="15_warlord"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
+radius = 0.7
+height = 2.3
+
+[sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_sync"]
+properties/0/path = NodePath(".:net_position")
+properties/0/spawn = true
+properties/0/replication_mode = 1
+properties/1/path = NodePath(".:net_yaw")
+properties/1/spawn = true
+properties/1/replication_mode = 1
+properties/2/path = NodePath(".:health")
+properties/2/spawn = true
+properties/2/replication_mode = 2
+properties/3/path = NodePath(".:max_health")
+properties/3/spawn = true
+properties/3/replication_mode = 2
+properties/4/path = NodePath(".:anim_state")
+properties/4/spawn = true
+properties/4/replication_mode = 2
+properties/5/path = NodePath(".:action_token")
+properties/5/spawn = true
+properties/5/replication_mode = 2
+properties/6/path = NodePath(".:is_dead")
+properties/6/spawn = true
+properties/6/replication_mode = 2
+properties/7/path = NodePath(".:alert_seq")
+properties/7/spawn = true
+properties/7/replication_mode = 2
+
+[node name="OrcWarlord" type="CharacterBody3D"]
+collision_layer = 4
+collision_mask = 31
+motion_mode = 1
+script = ExtResource("1_enemy")
+enemy_name = "Orc Warlord"
+faction = &"orc"
+max_health = 1800
+move_speed = 2.3
+melee_damage = 36
+melee_range = 2.5
+melee_cooldown = 1.7
+melee_mask = 15
+melee_cleave = true
+knockback_taken = 0.05
+radius = 0.8
+anim_speed = 0.75
+right_hand_item = ExtResource("3_sword")
+left_hand_item = ExtResource("4_shield_round")
+health_bar_color = Color(0.85, 0.12, 0.1, 1)
+health_bar_height = 3.3
+health_bar_width = 1.8
+health_bar_hide_delay = 0
+steer_lookahead = 2.2
+separation_radius = 1.6
+aggro_range = 9
+provoked_leash = 1000
+provoked_sight_range = 14
+health_drop_chance = 1
+health_drop_amount = 60
+coin_drop_min = 30
+coin_drop_max = 40
+xp_value = 45
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.15, 0)
+shape = SubResource("CapsuleShape3D_body")
+
+[node name="Model" parent="." instance=ExtResource("2_orc")]
+transform = Transform3D(2.9, 0, 0, 0, 2.9, 0, 0, 0, 2.9, 0, 0, 0)
+
+[node name="Sync" type="MultiplayerSynchronizer" parent="."]
+replication_interval = 0.05
+delta_interval = 0.05
+replication_config = SubResource("SceneReplicationConfig_sync")
+
+[node name="Movement" type="Node" parent="."]
+script = ExtResource("5_chase_movement")
+shoulders_through = true
+
+[node name="Rally" type="Node" parent="."]
+script = ExtResource("6_summon_ability")
+priority = 5
+only_at_thresholds = true
+health_thresholds = PackedFloat32Array(0.5)
+count = 3
+max_alive = 3
+spread = 3
+minions = Array[PackedScene]([ExtResource("7_orc_grunt"), ExtResource("8_orc_thrower")])
+windup = 0.8
+shout = "To me, warband!"
+animation = ""
+mark_color = Color(1, 0.4, 0.2, 0.6)
+
+[node name="Stomp" type="Node" parent="."]
+script = ExtResource("9_stomp_ability")
+priority = 4
+cooldown = 7
+max_range = 5
+radius = 4
+damage = 22
+crowded_cooldown = 4.5
+first_use_delay = 3
+
+[node name="Charge" type="Node" parent="."]
+script = ExtResource("10_charge_ability")
+priority = 3
+cooldown = 9
+min_range = 5
+max_range = 13
+damage = 30
+speed_multiplier = 2.6
+dash_time = 1.2
+shout = "RAAAGH!"
+lane_width = 2
+first_use_delay = 2
+
+[node name="Melee" type="Node" parent="."]
+script = ExtResource("11_melee_attack")
+
+[node name="Enrage" type="Node" parent="."]
+script = ExtResource("12_enrage_trait")
+below_share = 0.25
+
+[node name="Skin" type="Node" parent="."]
+script = ExtResource("13_recolor_trait")
+color = Color(0.55, 0.08, 0.08, 1)
+key_hue = 0.42
+hue_range = 0.06
+min_saturation = 0.2
+reference_value = 0.7
+
+[node name="Boss" type="Node" parent="."]
+script = ExtResource("14_boss_trait")
+title = "Orc Warlord"
+marker_icon = ExtResource("15_warlord")
+portrait = true
+bounty_coins = 120

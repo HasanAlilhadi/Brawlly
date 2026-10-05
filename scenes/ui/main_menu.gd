@@ -64,8 +64,8 @@ func _start_training() -> void:
 	_leaving = true
 	Net.open_offline_lobby()
 	Net.settings.training = true
-	Net.settings.camp_count = 0
-	Net.settings.events = false
+	Net.settings.band_count = 0
+	Net.settings.events = []
 	Net.start_game(false)
 
 

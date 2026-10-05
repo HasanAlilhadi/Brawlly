@@ -68,12 +68,13 @@ const TOUCH: Array = [
 const TIPS: Array = [
 	["star_coin", "Upgrades", "T opens the upgrades: your class's damage, fire rate and unlocks (shield, throw, dash, knife), Vitality and potions", []],
 	["health", "Revive", "Stand next to a downed teammate for 3 seconds", []],
-	["tent", "Destroy the camps", "A camp's surviving orcs fall with it and drop their loot", []],
+	["skull", "Warbands", "Enemies roam in bands — the bigger the band, the stronger. Only big ones show on the minimap", []],
+	["exclamation", "Read the ground", "A red ring or lane is an attack about to land: step out of it", []],
 	["flag", "Orders come first", "Soldiers drop any fight to follow, charge or hold the moment you say so", []],
 	["user_group", "Soldiers", "Army tab: recruit soldiers (50 coins, they join you 10 s later) · army 10, Command raises it to 15", []],
 	["star_coin", "Treasure goblin", "Every hit spills coins — catch it before it escapes", []],
-	["boss", "Orc Warlord", "Bring it down and its warband is routed", []],
-	["skull", "Revive or finish", "Orcs leave downed archers alone, enemy players don't", []],
+	["boss", "Bosses", "Orc Warlords and Vampire Lords lead the biggest bands — fell one and its band is routed", []],
+	["heart_break", "Revive or finish", "Enemies leave downed heroes alone, enemy players don't", []],
 ]
 const TABS: Array = [["Keyboard & mouse", KEYBOARD], ["Gamepad", GAMEPAD], ["Touch", TOUCH], ["Tips", TIPS]]
 

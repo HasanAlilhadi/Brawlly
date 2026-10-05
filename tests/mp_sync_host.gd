@@ -11,25 +11,31 @@ func _process(delta: float) -> void:
 	match phase:
 		0:
 			if Net.players.size() >= 2:
-				Net.set_setting("camp_count", 8); Net.start_game(); phase = 1; pt = 0
+				Net.set_setting("band_count", 8); Net.start_game(); phase = 1; pt = 0
 		1:
-			var camps := get_tree().get_nodes_in_group(&"camps")
+			var bands := get_tree().get_nodes_in_group(&"warbands")
 			if get_tree().get_nodes_in_group(&"players").size() >= 2 and pt > 3:
-				camps.sort_custom(func(a, b): return a.name < b.name)
+				bands.sort_custom(func(a, b): return a.name < b.name)
 				var sig := ""
-				for c in camps: sig += "%s@%d,%d " % [c.name, int(c.global_position.x), int(c.global_position.z)]
-				_log("camps: " + sig)
+				for c in bands: sig += "%s@%d,%d/%d " % [c.name, int(c._origin.x), int(c._origin.z), c.size]
+				_log("warbands: " + sig)
 				_log("trees=%d chests=%d seed=%d" % [get_tree().get_nodes_in_group(&"choppable").size(), get_tree().current_scene.get_node("World").get_children().filter(func(n): return n is Chest).size(), Net.settings.seed])
 				var host_player: Player = get_tree().get_nodes_in_group(&"players").filter(func(p): return p.peer_id == 1)[0]
-				camps[0].take_damage(camps[0].health * 0.5, host_player)
+				var members: Array[Enemy] = bands[0].members()
+				for i in maxi(1, members.size() / 2):
+					members[i].routed = true  # no skeletons getting back up
+					members[i].take_damage(1e6, host_player)
+				_log("killed %d of %s, %d left" % [maxi(1, members.size() / 2), bands[0].name, bands[0].alive])
 				phase = 2; pt = 0
 		2:
 			if pt > 1.5:
-				var camps := get_tree().get_nodes_in_group(&"camps")
-				camps.sort_custom(func(a, b): return a.name < b.name)
+				var bands := get_tree().get_nodes_in_group(&"warbands")
+				bands.sort_custom(func(a, b): return a.name < b.name)
 				var host_player: Player = get_tree().get_nodes_in_group(&"players").filter(func(p): return p.peer_id == 1)[0]
-				camps[0].take_damage(1e6, host_player)
-				_log("destroyed %s (is_dead=%s)" % [camps[0].name, camps[0].is_dead])
+				for enemy in bands[0].members():
+					enemy.routed = true
+					enemy.take_damage(1e6, host_player)
+				_log("wiped out %s (is_dead=%s)" % [bands[0].name, bands[0].is_dead])
 				phase = 3; pt = 0
 		3:
 			# Soldiers over the network: the client recruits one (anywhere), it trains here and joins the client.

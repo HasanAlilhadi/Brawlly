@@ -1,11 +1,14 @@
 [gd_scene format=3]
 
-[ext_resource type="Script" path="res://scenes/characters/enemy.gd" id="1_script"]
-[ext_resource type="PackedScene" path="res://assets/characters/orc.glb" id="2_model"]
+[ext_resource type="Script" path="res://scenes/characters/enemy.gd" id="1_enemy"]
+[ext_resource type="PackedScene" path="res://assets/characters/orc.glb" id="2_orc"]
+[ext_resource type="PackedScene" path="res://assets/items/arena/sword.glb" id="3_sword"]
+[ext_resource type="Script" path="res://scripts/enemies/chase_movement.gd" id="4_chase_movement"]
+[ext_resource type="Script" path="res://scripts/enemies/melee_attack.gd" id="5_melee_attack"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
-radius = 0.55
-height = 1.9
+radius = 0.27
+height = 1
 
 [sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_sync"]
 properties/0/path = NodePath(".:net_position")
@@ -33,42 +36,38 @@ properties/7/path = NodePath(".:alert_seq")
 properties/7/spawn = true
 properties/7/replication_mode = 2
 
-[node name="OrcGiant" type="CharacterBody3D"]
+[node name="OrcGrunt" type="CharacterBody3D"]
 collision_layer = 4
 collision_mask = 31
 motion_mode = 1
-script = ExtResource("1_script")
-max_health = 500.0
-move_speed = 2.1
-melee_damage = 26.0
-melee_range = 1.9
-melee_cooldown = 1.8
+script = ExtResource("1_enemy")
+enemy_name = "Orc Grunt"
+faction = &"orc"
+max_health = 80
+move_speed = 2.9
+melee_damage = 10
+melee_range = 1.15
+melee_cooldown = 1
 melee_mask = 15
-melee_anims = PackedStringArray("attack-melee-right", "attack-melee-left")
-melee_cleave = true
-knockback_taken = 0.15
-radius = 0.6
-anim_speed = 0.7
-hold_right_arm = false
-health_bar_color = Color(0.75, 0.1, 0.1, 1)
-health_bar_height = 2.45
-health_bar_width = 1.3
-steer_lookahead = 1.8
-separation_radius = 1.3
-aggro_range = 7.5
-health_drop_chance = 0.8
-health_drop_amount = 35
-coin_drop_min = 15
-coin_drop_max = 20
+right_hand_item = ExtResource("3_sword")
+right_hand_rotation = Vector3(0, 0, 180)
+right_swing_rotation = Vector3(0, 0, -90)
+health_bar_color = Color(0.9, 0.22, 0.2, 1)
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.95, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
 shape = SubResource("CapsuleShape3D_body")
 
-[node name="Model" parent="." instance=ExtResource("2_model")]
-transform = Transform3D(2.4, 0, 0, 0, 2.4, 0, 0, 0, 2.4, 0, 0, 0)
+[node name="Model" parent="." instance=ExtResource("2_orc")]
+transform = Transform3D(1.25, 0, 0, 0, 1.25, 0, 0, 0, 1.25, 0, 0, 0)
 
 [node name="Sync" type="MultiplayerSynchronizer" parent="."]
 replication_interval = 0.05
 delta_interval = 0.05
 replication_config = SubResource("SceneReplicationConfig_sync")
+
+[node name="Movement" type="Node" parent="."]
+script = ExtResource("4_chase_movement")
+
+[node name="Melee" type="Node" parent="."]
+script = ExtResource("5_melee_attack")

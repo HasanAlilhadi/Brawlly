@@ -2,36 +2,38 @@ class_name Minimap
 extends Control
 ## Whole-world map. Shows only what the local player's side may know:
 ## - objectives: the King of the Hill zone (holder's color, pulses while contested)
-## - camps as tent badges (red = active, bigger = more orcs; grey + cross = destroyed)
+## - large warbands only (at least Warband.LARGE_SIZE alive): a red badge (skull = undead, axe = orcs) that
+##   grows with the band, a pulsing ring when a boss leads it. Smaller bands never show — scout for them.
 ## - friends only: teammates as arrows pointing where they face (their player colors; you are white) and
 ##   friendly soldiers as dots. Hostile players and their soldiers are never drawn (versus modes).
 ## - everything in the "tracked" group (treasure goblin, Warlord, downed teammates, pings): a round badge
 ##   with the `marker_icon` meta (Texture2D) when set, else a diamond, in its `marker_color`. Bosses pulse.
 ## The map turns with the camera (`FollowCamera3D.view_yaw()`), so up on the map is always up on screen.
 
-const TENT_ICON := preload("res://assets/ui/icons/game/tent.svg")
+const SKULL_ICON := preload("res://assets/ui/icons/game/skull.svg")
+const AXE_ICON := preload("res://assets/ui/icons/game/axe.svg")
 const CROWN_ICON := preload("res://assets/ui/icons/game/crown.svg")
 const OUTLINE := Color(0, 0, 0, 0.7)
 
 @export var background: Color = Color(0.16, 0.3, 0.14, 0.85)
 @export var grid_color: Color = Color(1, 1, 1, 0.07)
-@export var camp_color: Color = Color(0.85, 0.22, 0.18)
-@export var ruin_color: Color = Color(0.42, 0.42, 0.4)
+@export var band_color: Color = Color(0.85, 0.22, 0.18)
+@export var undead_color: Color = Color(0.55, 0.3, 0.75)
 @export var ally_color: Color = Color(0.35, 0.65, 1.0)
 @export var player_color: Color = Color.WHITE
 
 var _player: Node3D
-var _camps: Array[Camp] = []
+var _bands: Array[Warband] = []
 var _redraw_timer: float = 0.0
 var _time: float = 0.0
 ## Camera turn the map is drawn for (radians).
 var _view_yaw: float = 0.0
 
 
-func setup(player: Node3D, camps: Array[Camp]) -> void:
+func setup(player: Node3D, bands: Array[Warband]) -> void:
 	clip_contents = true  # mid-turn the rotated world square pokes out of the frame
 	_player = player
-	_camps = camps
+	_bands = bands
 	queue_redraw()
 
 
@@ -56,9 +58,9 @@ func _draw() -> void:
 		draw_line(_to_map(Vector3(f, 0, -half)), _to_map(Vector3(f, 0, half)), grid_color, 1.0)
 		draw_line(_to_map(Vector3(-half, 0, f)), _to_map(Vector3(half, 0, f)), grid_color, 1.0)
 	_draw_hill(k)
-	for camp in _camps:
-		if is_instance_valid(camp):
-			_draw_camp(camp, k)
+	for band in _bands:
+		if is_instance_valid(band) and not band.is_dead and band.alive >= Warband.LARGE_SIZE:
+			_draw_band(band, k)
 	for ally in get_tree().get_nodes_in_group(&"allies"):
 		if not ally.is_inside_tree() or not _is_friend(ally):
 			continue
@@ -111,19 +113,17 @@ func _draw_hill(k: float) -> void:
 	_draw_icon(at, radius * 1.1, CROWN_ICON, Color(color, 0.95))
 
 
-# --- Camps / posts -----------------------------------------------------------------
+# --- Warbands ---------------------------------------------------------------------
 
-## A tent badge: bigger = bigger squad, so players can plan their route; ruins are small, grey and crossed.
-func _draw_camp(camp: Camp, k: float) -> void:
-	var at := _to_map(camp.global_position)
-	if camp.is_dead:
-		var half := 2.8 * k
-		_draw_badge(at, half, ruin_color, TENT_ICON, Color(1, 1, 1, 0.45))
-		var cross := Color(0, 0, 0, 0.6)
-		draw_line(at + Vector2(-half, -half) * 0.7, at + Vector2(half, half) * 0.7, cross, 1.5 * k)
-		draw_line(at + Vector2(half, -half) * 0.7, at + Vector2(-half, half) * 0.7, cross, 1.5 * k)
-		return
-	_draw_badge(at, (3.2 + clampf(camp.squad_size / 5.0, 0.0, 2.8)) * k, camp_color, TENT_ICON)
+## A large band: bigger badge = more of them, so players can plan their route; a boss leads it: a ring pulses.
+func _draw_band(band: Warband, k: float) -> void:
+	var at := _to_map(band.global_position)
+	var radius := (3.6 + clampf((band.alive - Warband.LARGE_SIZE) / 5.0, 0.0, 2.6)) * k
+	var color := undead_color if band.faction == &"undead" else band_color
+	if band.has_boss:
+		var pulse := fmod(_time * 0.8, 1.0)
+		draw_arc(at, radius * (1.15 + pulse * 0.7), 0.0, TAU, 28, Color(color, 0.85 * (1.0 - pulse)), 1.6 * k)
+	_draw_badge(at, radius, color, SKULL_ICON if band.faction == &"undead" else AXE_ICON)
 
 
 # --- Tracked ------------------------------------------------------------------------

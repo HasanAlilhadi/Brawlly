@@ -1,7 +1,7 @@
 extends Node
 ## Host Game (main menu → Host Game): the server's options before it opens — server name, max players,
 ## password and whether it is listed in other players' server browser — then Create Lobby (`Net.host()`).
-## The match settings (mode, camps, difficulty, …) are picked in the lobby. The last options are remembered
+## The match settings (mode, warbands, difficulty, …) are picked in the lobby. The last options are remembered
 ## (never the password).
 
 const LOBBY_SCENE := "res://scenes/ui/lobby.tscn"

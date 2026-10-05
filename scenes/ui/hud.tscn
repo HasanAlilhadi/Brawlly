@@ -6,7 +6,7 @@
 [ext_resource type="Script" path="res://scenes/ui/minimap.gd" id="4_minimap"]
 [ext_resource type="Texture2D" path="res://assets/ui/icons/potion.png" id="5_potion"]
 [ext_resource type="Texture2D" path="res://assets/ui/icons/soldier.png" id="7_soldier"]
-[ext_resource type="Texture2D" path="res://assets/ui/icons/camp.png" id="8_camp"]
+[ext_resource type="Texture2D" path="res://assets/ui/icons/orc.png" id="8_bands"]
 [ext_resource type="Texture2D" path="res://assets/ui/icons/bow.png" id="9_bow"]
 [ext_resource type="Texture2D" path="res://assets/ui/icons/sword.png" id="10_sword"]
 [ext_resource type="Script" path="res://scripts/components/touch_aim_stick.gd" id="11_aim"]
@@ -213,15 +213,15 @@ theme_override_constants/outline_size = 5
 theme_override_font_sizes/font_size = 19
 text = "0"
 
-[node name="CampsIcon" type="TextureRect" parent="Root/Stats/Row"]
+[node name="BandsIcon" type="TextureRect" parent="Root/Stats/Row"]
 custom_minimum_size = Vector2(26, 26)
 layout_mode = 2
 mouse_filter = 2
-texture = ExtResource("8_camp")
+texture = ExtResource("8_bands")
 expand_mode = 1
 stretch_mode = 5
 
-[node name="CampsLabel" type="Label" parent="Root/Stats/Row"]
+[node name="BandsLabel" type="Label" parent="Root/Stats/Row"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_type_variation = &"LabelLight"
@@ -338,7 +338,7 @@ horizontal_alignment = 1
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 28
-text = "Every orc camp has fallen."
+text = "Every warband has been wiped out."
 horizontal_alignment = 1
 autowrap_mode = 3
 

@@ -1,0 +1,39 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scenes/combat/arrow_projectile.gd" id="1_script"]
+[ext_resource type="Texture2D" path="res://assets/vfx/particles/magic_02.png" id="2_core"]
+[ext_resource type="Texture2D" path="res://assets/vfx/particles/light_01.png" id="3_glow"]
+
+[sub_resource type="StandardMaterial3D" id="Material_core"]
+transparency = 1
+blend_mode = 1
+shading_mode = 0
+vertex_color_use_as_albedo = true
+albedo_texture = ExtResource("2_core")
+billboard_mode = 1
+
+[sub_resource type="StandardMaterial3D" id="Material_glow"]
+transparency = 1
+blend_mode = 1
+shading_mode = 0
+vertex_color_use_as_albedo = true
+albedo_texture = ExtResource("3_glow")
+billboard_mode = 1
+
+[node name="BoltProjectile" type="Node3D"]
+script = ExtResource("1_script")
+speed = 8.5
+lifetime = 1.5
+hit_mask = 11
+
+[node name="Glow" type="Sprite3D" parent="."]
+material_override = SubResource("Material_glow")
+modulate = Color(0.55, 0.2, 1, 0.8)
+pixel_size = 0.0028
+texture = ExtResource("3_glow")
+
+[node name="Core" type="Sprite3D" parent="."]
+material_override = SubResource("Material_core")
+modulate = Color(0.75, 0.35, 1, 1)
+pixel_size = 0.0014
+texture = ExtResource("2_core")

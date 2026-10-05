@@ -4,7 +4,7 @@ extends Node
 ##       --test=res://tests/bull_rush_test.gd --class=spearman
 
 const TARGET_SCENE := preload("res://scenes/training/training_target.tscn")
-const ORC_SCENE := "res://scenes/characters/enemy.tscn"
+const ORC_SCENE := "res://scenes/characters/enemies/orc_grunt.tscn"
 
 var t := 0.0
 var step := 0

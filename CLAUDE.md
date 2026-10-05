@@ -108,8 +108,8 @@ by touch index so the joystick and buttons work together with multi-touch.
   `Hud._apply_design()` stacks the HUD into a left column (stats, square buttons) and a right column (minimap,
   stats, army orders); buttons have fixed sizes (`BUTTON`, `BUTTON_WIDE`). New HUD elements join a column.
   Touch sticks are hidden unless `Platform.touch_mode`.
-- Groups: `player`, `friendly` (player + soldiers), `allies` (soldiers), `enemies` (orcs), `enemy_team` (orcs + live camps),
-  `camps`, `choppable` (trees). Physics layers are in `GameConfig` (world, player, enemies, allies).
+- Groups: `player`, `friendly` (player + soldiers), `allies` (soldiers), `enemies` (orcs and undead), `warbands`,
+  `bosses`, `choppable` (trees). Physics layers are in `GameConfig` (world, player, enemies, allies).
 - UI uses the project theme `resources/themes/rpg_theme.tres` (built by `tools/build_rpg_theme.gd` from the Kenney RPG UI
   pack). Style new UI with its type variations instead of per-node overrides; labels on dark wood use `LabelLight`.
   Variations: `PanelBrown` (wood title ribbons), `PanelInset` (list rows), `PanelLight` (cards), `ButtonBeige`,
@@ -169,7 +169,7 @@ by touch index so the joystick and buttons work together with multi-touch.
   only the server applies projectile damage.
   New ability = ClassDef fields + a branch in `_update_ability` / `_apply_ability`. Test: `tests/ability_test.gd`.
 - **VFX**: `HitFx.flash(at, texture, color, size, …)` pops a billboard sprite from `assets/vfx/particles/` (Kenney Particle Pack;
-  additive, or `additive = false` for smoke). Used for hit sparks, death / camp smoke, combo ring, revive sparkle. Ground
+  additive, or `additive = false` for smoke). Used for hit sparks, death smoke, combo ring, revive sparkle. Enemy telegraphs: `HitFx.ground_warning()` (a disc filling a ring: when full, the attack lands), `lane_warning()` (a charge), `shockwave()`. Ground
   decals use `assets/vfx/light_masks/` (revive range ring). Touch controls are skinned from `assets/ui/touch/` (set in `hud.gd`).
 - **Combo hits**: `Enemy.take_damage` — a player hit within `combo_window` (1 s) of a teammate's hit on the same orc deals
   `combo_damage_multiplier` (1.5×) and pops "COMBO!" for everyone (`HitFx.report_combo` → `main._net_combo`). Soldiers don't count.
@@ -199,28 +199,73 @@ by touch index so the joystick and buttons work together with multi-touch.
   resources in `resources/data/upgrade_catalog.tres` (effects by `id` in `Player._apply_upgrade` /
   `_apply_class_upgrades`), all sold on the upgrades sheet; `Player.can_buy()` (also checked on the server) only
   needs coins, a living hero and a useful, not maxed item.
-- **Spawn areas**: `WorldBuilder` keeps `SPAWN_SAFE_RADIUS` (14 m) around every spawn point free of trees / camps /
-  chests / scatter, no camp within `spawn_camp_distance` (24 m), and puts one Uncommon starter chest at
+- **Spawn areas**: `WorldBuilder` keeps `SPAWN_SAFE_RADIUS` (14 m) around every spawn point free of trees / warbands /
+  chests / scatter, no warband starts or marches within `spawn_band_distance` (24 m), and puts one Uncommon starter chest at
   `spawn + STARTER_CHEST_OFFSET` (the same for every spawn). King of the Hill has one spawn area per team
   (`GameMode.world_spawn_points()` = `team_bases`).
-- **Soldiers come only from recruiting** (the upgrades sheet's Army tab; camps and the Warlord's warband
-  are routed — they `die()` and drop loot).
+- **Soldiers come only from recruiting** (the upgrades sheet's Army tab; a band whose boss falls is routed —
+  they `die()` and drop loot).
   Recruit (50, constant) → `Player.soldiers_training` (replicated count; a queue — one after another,
   `GameConfig.SOLDIER_TRAIN_TIME` each) → the server spawns an `Ally` right behind the player, which follows at once.
   `army_size()` = followers + training ≤ `follower_cap`
   (`GameConfig.BASE_FOLLOWER_CAP` 10, Command +1 per level, 100 constant, max 15). Soldiers read
   `Player.ally_damage` / `ally_health`.
-- Squads come from `EnemyRoster` (`resources/data/orc_roster.tres`: filler + RosterEntry share/min_squad/max_count/
-  inner_ring). New enemy type = new scene + roster entry. Camps scale orc stats and coins by `Camp.tier` (0..1).
-- Targeting uses group `active_enemies` (orcs of awake camps only) — keep it that way for performance with many camps.
-  World size/camp count: `GameConfig.world_half` (set from main's exports) — never hard-code the world size.
-- Orc types are scenes using the same `enemy.gd` with different exports (thrower = `projectile_scene` set;
-  giant = `melee_cleave`, `anim_speed` < 1, big `radius`). `Camp._squad_composition()` decides the mix.
-  Melee hits one target unless `melee_cleave`. Thrown spears reuse `arrow_projectile.gd` with a different `hit_mask`.
+- **Warbands** (`Warband`, scenes/world/warband.gd; they replaced the camps — none left): roaming groups whose
+  **size is their power**. `WorldBuilder._add_warbands()` places `band_count` (lobby "Warbands", setting
+  `band_count`) of them: 3 members near the spawns up to 24 far away (`_band_size_at`), `tier` = size share → stats
+  0.8–1.3× (× difficulty); the undead around graveyards (one marches out of each graveyard gate), orcs elsewhere.
+  What a band is made of: `EnemyRoster` (`resources/data/orc_warband.tres`, `undead_warband.tres`: `filler` +
+  RosterEntry share / min_squad / max_count / `leader` (bosses, 18+) / `rear` (ranged)) → `Warband._compose()`
+  (runs on every peer, so `has_boss` is known everywhere). Formation (`_formation()`, +Z = marching direction):
+  leader in the middle, melee in a blob, ranged in rows behind. The band (a Node3D: its position is the
+  anchor) walks between open waypoints of its `territory` (prefers a clear path, `_path_clear`), rests, goes on;
+  members `follow_point()` their slot at the band's walking pace, carrying the band's velocity (`Enemy.drift`:
+  they walk along with it, no stop-go at the slot). One member spots or is hit by a foe →
+  `band.alert()` → everyone hunts (FIGHT; `_coordinate()` each second: at most `MAX_ON_ONE` plain melee members on
+  one foe, the rest take the next foe near; those on one foe get evenly spaced `_slot_angle`s around it —
+  they surround it); 2.5 s after the fight it regroups where they stand. Members stuck
+  behind something for 4 s → regroup + another waypoint. Fallen members respawn one by one only while the band
+  is calm and unseen; all dead → `defeated` (co-op is won when every band is). A boss's death routs its band
+  (`BossTrait` → `Warband.rout()`). Event bands (`replicated` = false, server only): `quarry` (marches on a
+  player), `leader_scene`, `reinforce_interval`, `strength_override`, `track_leader` — the Warlord event.
+  Clients get position / alive via `_net_state` (0.5 s) and the defeat by RPC. **Nothing floats over a band**;
+  only bands with ≥ `Warband.LARGE_SIZE` (10) alive show on the minimap.
+- **Enemies are built by composition** (`Enemy`, scenes/characters/enemy.gd + child components from
+  `scripts/enemies/`; every scene in `scenes/characters/enemies/`): one `EnemyMovement` (ChaseMovement
+  [`shoulders_through`], KiteMovement, FlankMovement, ShambleMovement, FloatMovement, StalkMovement), `EnemyAction`s
+  tried by `priority` each frame — attacks (MeleeAttack: the Unit melee_* exports; ProjectileAttack: `projectile`
+  kind spear / enemy_arrow / bolt / blood_bolt, lead, volley) and abilities (ChargeAbility, StompAbility,
+  BlinkAbility, SummonAbility [cooldown and/or `health_thresholds`], PhaseAbility) — and traits (LifeStealTrait,
+  ReassembleTrait, DeathBurstTrait, EnrageTrait, BossTrait, RecolorTrait). Hooks (`EnemyComponent`): `server_tick`,
+  `blocks_hit`, `blocks_attacks`, `on_damaged`, `on_hit_dealt`, `prevents_death`, `on_died`, `on_death_visuals`
+  (every peer), `show_fx` (every peer, sent with `enemy.fx(self, event, at, value)`); `enemy.shout(text)` for a
+  battle cry. Damage scales with `power()` (spawn "strength"). Collapsed skeletons are `is_downed` (AI ignores
+  them, a hit finishes them). `prefers_weak` (skeleton warriors, vampires): they pick the most wounded foe near
+  (`find_weakest`). KiteMovement steps sideways to a spot with a clear line of fire when the shot is blocked. Graveyard Kit models are rigid (no Skeleton3D): hand items ride the `arm-right` node
+  in the swing grip (`Unit._attach_rigid_item`), no holding poses. Types: Orc Grunt (melee), Orc Spear Thrower
+  (kites, spears), Orc Brute (elite: charge, stomp, enrage), Skeleton Warrior (flanks, reassembles once),
+  Skeleton Archer (kites, arrows), Zombie (shambles, lunges, bursts on death), Ghost (floats through walls, phases
+  through hits), Vampire (elite: stalks, blinks behind you, life steal), Necromancer (elite: kites, bolts, raises
+  skeletons), and the bosses Orc Warlord (charge, stomp, rally at half health, enrage) and Vampire Lord (stalks,
+  blinks, blood-bolt volleys, raises the dead at 66 / 33 %, life steal, enrage). **New enemy type** = a scene in
+  scenes/characters/enemies/ (Unit exports + components; copy one) + a RosterEntry. **New behavior** = a component
+  in scripts/enemies/. Test: `tests/enemy_test.gd`.
+- Targeting uses group `active_enemies` (members of awake bands only) — keep it that way for performance.
+  World size: `GameConfig.world_half` (from the band count) — never hard-code the world size.
+- **Graveyards** (`WorldBuilder._add_graveyards()`, one per ~6 bands, 1..5): Graveyard Kit pieces (`GRAVEYARD_SCALE`
+  1.5) — iron fence square (gate gap +Z, one fallen gap), gravestone rows with mounds / pumpkins / candles, a crypt
+  between obelisks, lightposts at the gate, crooked pines outside, a dark earth disc; solid pieces get box collision
+  (`_graveyard_piece(solid = true)`, at least `HIT_HEIGHT` tall).
 - **Downed** (`GameConfig.downed_enabled`: every online match): `Player.die()` turns into `_go_down()`
   (`is_downed`, crawl speed, out of `player_units`). `GameConfig.is_gone()` treats downed units as gone, so AI and
   aim assist skip them. Revive = teammate within `Player.REVIVE_RANGE` for `REVIVE_TIME`. Only hostile
   player-owned damage finishes a downed player. Signals `went_down` / `revived` → main.gd (announce, Help ping).
+- **Animation clips** (Unit `_play_locomotion`): idle / walk / sprint only switch once the new clip has been wanted
+  for `_locomotion_settle()` (0.18 s; players 0) — AI hovering at a threshold never flickers. Health set while
+  spawning isn't a hit (`_spawned`): no squash (it used to leave units below 100 hp at the wrong size).
+- **X-ray**: heroes (`Unit.enable_xray()`, from Player._ready) show a flat silhouette in their color where walls /
+  cover hide them from the angled camera (`assets/shaders/xray_silhouette.gdshader`, the next pass of the hit-flash
+  overlay; the overlay writes stencil 1 so the silhouette never tints the hero's own body).
 - **Shields** (`ClassDef.shield` / `shield_health` / `shield_center`; Swordsman round 150, Spearman rectangle 200, on the
   left arm; owned only after the "shield" class upgrade, `Player.owns_shield()`): `block` action (right mouse / LT / `Hud.shield_button`) → `set_input(..., block)` / `net_input` →
   `Player.shield_up` (replicated with `shield_health`). Up: `Player._shield_blocks` soaks every hit from within
@@ -249,11 +294,30 @@ by touch index so the joystick and buttons work together with multi-touch.
   Deaths drop `COINS_MIN`..`COINS_MAX` (3..8) coins and a health potion `HEALTH_DROP_CHANCE` (20%). Far from every
   hero (`SLEEP_RANGE`) they stand still. **Herds** (`AnimalHerd`, scenes/world/animal_herd.gd, group `herds`):
   `WorldBuilder._add_herds()` places `herd_count` (16) of them, species in turn, away from spawns (wild pigs twice
-  as far) and camps; main starts them with the camps; a wiped-out herd comes back `RESPAWN_TIME` later when no
+  as far) and warbands; main starts them with the warbands; a wiped-out herd comes back `RESPAWN_TIME` later when no
   hero is within `RESPAWN_CLEAR`. New species = a `SPECIES` row + `AnimalHerd.SIZES`.
-- **World events** (`WorldEvents`, setting `events`): `spawn_goblin()` / `spawn_warlord()` (server; tests call them
-  directly). `TreasureGoblin` (NetSpawn kind `goblin`, orc team, flees), `Warlord` (extends `Enemy`, warband orcs
-  have `Enemy.warlord` set and follow via `follow_point()`, its warband is routed when it falls).
+- **Maps** (`MapDef` in `resources/data/maps/`, listed in `map_catalog.tres`; lobby "Map", setting `map`, filtered
+  by mode, `MapCatalog.default_for(mode)` on a mode change): **Wildlands** (procedural, every mode) and **Crown
+  Ruins** (King of the Hill). A designed map = `layout` scene built by `tools/build_map_<id>.gd` (`-s`, from
+  `KitProps.place()` kit pieces with box collision; editable in the editor, rebuild to regenerate) with a `Markers`
+  node: `TeamBase_<n>`, `Band_<x>` (metas size / faction / territory), `Chest_<x>` (rarity), `Tree_<x>`, `Herd_<x>` (species; every map has animals), `Hill`;
+  `WorldBuilder._build_layout()` fills them; MapDef also holds `world_half`, `team_bases` (GameMode uses them),
+  `wave_entries`, `ground_color`. Units always stand at y = 0: maps make "height" with walls and cover, no ramps.
+  Crown Ruins design rules (keep them when editing): rotational symmetry (any team count is fair), the hill =
+  arena with rim columns + center statue, inner ring with 4 wide lane doors + 4 narrow flank gaps, bases with a
+  front cover wall and two side exits, shrines (Rare chest + undead band) on the diagonals, groves (trees, rocks,
+  Common chests) as flank routes; base → hill ≈ 11 s. Test: `tests/map_events_test.gd`.
+- **World events** (`WorldEvents`, setting `events` = a list of ids, one lobby toggle each; `WorldEvents.EVENTS`
+  rows [id, name, hint, icon]; old true / false still read by `ids_from_setting`): goblin, warlord, waves,
+  meteors (`start_meteor_shower()` / `drop_meteor()`: ring → impact hurts every unit, star shards), storm
+  (`start_storm()` / `strike_lightning()`: rain + darkness + lightning), blood_moon (`start_blood_moon()`:
+  `GameConfig.blood_moon` → enemies `BLOOD_MOON_SPEED` / `_DAMAGE`, ×2 loot), supply_drop (`drop_supplies()`: a
+  Legendary `SupplyDrop_<n>` chest made on every peer by RPC, by the hill in KotH, tracked). Visuals: `Weather`
+  (scenes/main/weather.gd, every peer: light blends, rain particles, bolts, meteors, scorch marks, parachute
+  crate). New event = an EVENTS row + its timer in `_process` + a `start_*` function. `spawn_goblin()` /
+  `spawn_warlord()` (server; tests call them directly). `TreasureGoblin` (NetSpawn kind `goblin`, orc team, flees); the Orc Warlord event = a server-only
+  `Warband` (`warlord_band`, its leader `warlord` = orc_warlord.tscn, tracked on the minimap) that marches on a player
+  and grows on the way; routed when the Warlord falls. Waves: `WAVE_TYPES` rows join wave by wave.
 - **Army orders**: `Player.army_order` / `army_point` (replicated), `command_army()` / `net_command` RPC; `Ally`
   anchors its formation to the point for CHARGE / HOLD. Orders are always obeyed: every order bumps
   `Player.order_serial` (server) and each soldier (`Ally._obey`, checked every frame) drops its target and walks to
@@ -266,7 +330,8 @@ by touch index so the joystick and buttons work together with multi-touch.
 - **Stats & awards**: report events with `MatchStats.add(peer, &"stat")` (server; kills / deaths / soldiers lost
   come from `Unit.die()`, damage from `HitFx.report_hit`). New award = a row in `MatchStats.AWARDS`.
 - **Minimap** (`scenes/ui/minimap.gd`): shows only friends (players / soldiers not `GameConfig.is_hostile` to you),
-  camps as tent badges, the hill (group `hill`, holder color). Tracked
+  large warbands (≥ 10 alive: skull = undead, axe = orcs, a pulsing ring when a boss leads it; small ones never
+  show), the hill (group `hill`, holder color). Tracked
   nodes can set meta `marker_icon` (Texture2D, drawn in a round badge) + `marker_portrait` (a face). Faces are rendered
   with `tools/render_portrait.gd` into `assets/ui/icons/portraits/` (Warlord).
 - **Pings**: `main._ping()` → server `_on_ping()` (rate-limited) → teammates' `PingMarker`. Things that should get a
@@ -279,7 +344,10 @@ by touch index so the joystick and buttons work together with multi-touch.
   4 × spear damage = 168 per enemy crossed (~1000 on 6); Bowman 3.6 m/s, bow 58 dps at 12 m, no shield, knife 44 dps,
   Bow Rain ~110 per enemy on 6 (+ it keeps shooting, ~950). Damage +20% × 5 and Fire Rate +15% × 3 are the same for
   every class (maxed ×2.9 for all). Soldiers: sword 80 hp / 12 dps, spear 80 / ~10.5 (1.45 m reach), bow 65 / ~9.6 (from
-  half the hero's bow range). Orcs (before camp tier 0.75–1.35×): spearman 80/10; swordsman 95/11; thrower 55hp,
+  half the hero's bow range). Enemies (hp / damage, before the band's 0.8–1.3× and difficulty): Orc Grunt 80/10;
+  Thrower 55, spear 10; Brute 420/24 cleave (stomp 26, charge 28); Skeleton Warrior 60/9 (gets up once at 50%);
+  Skeleton Archer 45, arrow 9; Zombie 130/14 (lunge 16, burst 16); Ghost 50/9; Vampire 170/15 (60% life steal);
+  Necromancer 90, bolt 12; Vampire Lord 1400/30; Orc Warlord 1800/36.
   spear 10; giant 500/26.
 - Use `GameConfig.is_gone(node)` for target checks (handles freed nodes).
 - AI targeting is sticky: pick targets with `Unit.choose_target(current, candidate, keep_range)` (keeps the current
@@ -304,36 +372,41 @@ by touch index so the joystick and buttons work together with multi-touch.
   server records `Player.trail` (a point every 0.8 m); a soldier whose straight way to its slot is blocked
   (`_clear_walk`) walks to the newest trail point it can reach (`_trail_point`), so it follows the hero around
   walls and buildings that local steering alone can't get out of. Speed: exactly two, run (`move_speed`) and walk (`walk_share` × it, walk clip, the last `walk_distance` m to
-  the slot) — `_get_move_input` snaps every move to one of them; no catch-up / charge boost.
-- Far-away camps pause their orcs (`Camp.activation_range`; downed players still count as near, only dead ones don't) — keep this for mobile performance. Orcs that are
-  provoked or walking home (`Enemy.is_busy()`) stay awake. Damage calls `Unit._on_damaged(attacker)`; orcs forward it
-  to `Camp.alert(attacker)`, which provokes the whole squad (tuning in `enemy.gd` → "Provoked" exports).
+  the slot) — `_get_move_input` snaps every move to one of them; no catch-up / charge boost. Exception: following
+  a hero who is moving, a soldier near its slot keeps pace (`_match_pace`: the hero's speed + a little per m behind,
+  never past its own run) — otherwise it flips run / walk at the slot's edge and stutters behind.
+- Far-away bands pause their members (`Warband.activation_range`; downed players still count as near, only dead ones
+  don't) — keep this for mobile performance; a paused band keeps walking and moves its members along
+  (`_snap_members`, no simulation). Members that are provoked or walking back (`Enemy.is_busy()`) stay awake. Damage
+  calls `Unit._on_damaged(attacker)`; enemies forward it to `Warband.alert(attacker)`, which provokes the whole band
+  (tuning in `enemy.gd` → "Provoked" exports).
 
 ## Multiplayer architecture (read before changing gameplay code)
 
 - **Server-authoritative.** The host (or the offline test peer, `OfflineMultiplayerPeer`, id 1) runs ALL gameplay: AI, damage,
-  pickups, camps, scoring. Guard gameplay with `multiplayer.is_server()`; clients only display.
+  pickups, warbands, scoring. Guard gameplay with `multiplayer.is_server()`; clients only display.
 - **Spawning**: never `add_child` gameplay objects directly. Use `NetSpawn.unit(kind, pos, extra)`,
   `NetSpawn.pickup()`, `NetSpawn.projectile()` (server only); `main.gd` spawn functions build them on every peer.
   Freeing a spawned node on the server removes it everywhere — clients must never free units/items themselves.
 - **Replication**: each unit scene has a `Sync` MultiplayerSynchronizer (ON_CHANGE) listing replicated props
-  (net_position, net_yaw, health, max_health, anim_state, action_token, is_dead + player stats / orc alert_seq).
+  (net_position, net_yaw, health, max_health, anim_state, action_token, is_dead + player stats / enemy alert_seq).
   New replicated state → add a property with a setter for client visuals AND add it to the scene's Sync config.
-  Paused orcs aren't replicated until their camp wakes (saves bandwidth).
+  Paused enemies aren't replicated until their band wakes (saves bandwidth). One-shot enemy effects go through
+  `Enemy.fx()` / `shout()` RPCs (no replicated state per component).
   `net_position` / `net_yaw` use REPLICATION_MODE_ALWAYS (unreliable, 20 Hz) — never make continuous values
   ON_CHANGE (reliable → stutter on Wi-Fi packet loss). Keep frequently-changing values quantized (regen heals whole points).
 - **Client prediction**: on clients the local Player moves immediately (`Unit._predict`, `enable_prediction()`,
   fed by `main.gd` via `predict_input`) and only corrects real drift from the server position.
-- **Static world** (trees, chests, camps, hill) is built identically on every peer from `Net.settings.seed`
+- **Static world** (trees, chests, graveyards, warbands, hill) is built identically on every peer from `Net.settings.seed`
   with deterministic names; state changes go through RPCs on those nodes (`_net_*` methods, `call_local`).
 - **Colors are per device, relative to the local player** (nobody picks one): `Net.color_of(peer)` (you blue,
   teammates green, enemies red), `Net.team_color(team)` / `Net.team_label(team)` ("Your team" green; enemy teams red /
   yellow / purple). Unit colors are computed in `main._spawn_unit` on every peer from `owner_peer` — never send a
   color in spawn data for players / soldiers. Server-made text (announcements, match over) names teams with
   `{team:N}` / `{label:N}` tokens that `Net.localize()` resolves on each device.
-- **Teams**: `team_id` on units/camps/projectiles (`GameConfig.ORC_TEAM` = -1 for orcs, `ANIMAL_TEAM` = -2). Hostility =
+- **Teams**: `team_id` on units/projectiles (`GameConfig.ORC_TEAM` = -1 for every enemy, `ANIMAL_TEAM` = -2). Hostility =
   `GameConfig.is_hostile(a, b)`; groups: `players`, `allies`, `player_units` (players+allies), `enemies`,
-  `active_enemies`, `camps`, `units`, `animals`, `herds`. `owner_peer` = controlling player (kill/camp credit).
+  `active_enemies`, `warbands`, `units`, `animals`, `herds`. `owner_peer` = controlling player (kill / band credit).
 - **Input**: `main.gd` reads HUD/keyboard and calls `Player.set_input/attack_melee/shoot` on the server, or the
   `Player.net_*` RPCs from clients (validated by sender). Purchases: `Player.request_buy()`.
 - **Match flow**: menu → lobby (`Net.host()` / `join()`; tests: `open_offline_lobby()`) → `Net.start_game()` loads main on

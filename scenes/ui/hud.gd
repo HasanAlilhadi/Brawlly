@@ -1,8 +1,8 @@
 class_name Hud
 extends CanvasLayer
-## On-screen UI: health, coins, allies, camps left, minimap, touch controls and the end screen.
+## On-screen UI: health, coins, allies, warbands left, minimap, touch controls and the end screen.
 ## Touch controls only show in `Platform.touch_mode` (phones, or a touchscreen on desktop).
-## Also: off-screen arrows (goblin, Warlord, downed teammates, pings), the Warlord's health bar, army
+## Also: off-screen arrows (goblin, bosses, downed teammates, pings), the nearest boss's health bar, army
 ## order buttons, a ping button (online), the "You're down" / revive messages and the match awards.
 
 signal restart_requested
@@ -16,7 +16,7 @@ signal dash_requested
 
 const ARMY_ORDERS: PackedStringArray = ["Follow", "Charge", "Hold", "Kill"]
 const ARMY_KEYS: PackedStringArray = ["1", "2", "3", "4"]
-## The Warlord's bar shows while it is this close to you.
+## A boss's bar shows while it is this close to you.
 const BOSS_BAR_RANGE: float = 40.0
 const DOWNED_PANEL_WIDTH: float = 380.0
 ## Above the upgrades tab on the bottom edge ("You're down" card).
@@ -41,7 +41,7 @@ const UPGRADES_ICON := preload("res://assets/ui/icons/game/star_coin.svg")
 @onready var bow_stick: TouchAimStick = %BowStick
 @onready var health_bar: ProgressBar = %HealthBar
 @onready var allies_label: Label = %AlliesLabel
-@onready var camps_label: Label = %CampsLabel
+@onready var bands_label: Label = %BandsLabel
 @onready var _stats_panel: PanelContainer = $Root/Stats
 @onready var _info_row: HBoxContainer = $Root/TopLeft/Rows/InfoRow
 @onready var _minimap_frame: PanelContainer = $Root/MinimapFrame
@@ -68,6 +68,7 @@ var _ended: bool = false
 var markers: OffscreenMarkers
 var _boss_panel: Control
 var _boss_bar: ProgressBar
+var _boss_name: Label
 var _army_row: VBoxContainer
 var _army_buttons: Array[Button] = []
 var _kill_picking: bool = false
@@ -132,7 +133,7 @@ func _show_touch_controls(enabled: bool) -> void:
 	_update_weapon_controls()
 
 
-func setup(player: Player, camps: Array[Camp]) -> void:
+func setup(player: Player, bands: Array[Warband]) -> void:
 	_player = player
 	player.weapon_changed.connect(func(_weapon: String) -> void: _update_weapon_controls())
 	player.shield_changed.connect(_update_weapon_controls)
@@ -146,17 +147,18 @@ func setup(player: Player, camps: Array[Camp]) -> void:
 	player.soldier_ready.connect(func() -> void: show_toast("A soldier joined you"))
 	_on_coins_changed(player.coins)
 	_on_health_changed(player.health, player.max_health)
-	minimap.setup(player, camps)
+	minimap.setup(player, bands)
 	markers.origin = player
 	player.army_order_changed.connect(_on_army_order_changed)
 	_on_army_order_changed(player.army_order)
 
 
-func set_camps(left: int, total: int) -> void:
-	camps_label.text = "%d/%d" % [left, total]
+## Warbands left to wipe out (co-op is won when none are).
+func set_bands(left: int, total: int) -> void:
+	bands_label.text = "%d/%d" % [left, total]
 
 
-## Training keeps only combat information; economy, camps, army commands and the empty minimap add noise.
+## Training keeps only combat information; economy, warbands, army commands and the empty minimap add noise.
 func set_training_mode(enabled: bool) -> void:
 	_stats_panel.visible = not enabled
 	_info_row.visible = not enabled
@@ -312,7 +314,7 @@ func _build_extras() -> void:
 	root.add_child(markers)
 	root.move_child(markers, 1)
 
-	# Warlord health (top center, under the score line).
+	# The nearest boss's health (top center, under the score line).
 	_boss_panel = PanelContainer.new()
 	_boss_panel.theme_type_variation = &"PanelCompact"
 	_boss_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -325,9 +327,9 @@ func _build_extras() -> void:
 	boss_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	boss_box.add_theme_constant_override("separation", 2)
 	_boss_panel.add_child(boss_box)
-	var boss_name := _small_label("Orc Warlord", 20)
-	boss_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	boss_box.add_child(boss_name)
+	_boss_name = _small_label("Boss", 20)
+	_boss_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	boss_box.add_child(_boss_name)
 	_boss_bar = ProgressBar.new()
 	_boss_bar.custom_minimum_size = Vector2(0, 16)
 	_boss_bar.show_percentage = false
@@ -544,11 +546,15 @@ func set_kill_picking(on: bool) -> void:
 
 func _update_boss_bar() -> void:
 	var boss: Unit = null
+	var best := BOSS_BAR_RANGE
 	for node in get_tree().get_nodes_in_group(&"bosses"):
-		if not (node as Unit).is_dead and (node as Node3D).global_position.distance_to(_player.global_position) < BOSS_BAR_RANGE:
+		var distance := (node as Node3D).global_position.distance_to(_player.global_position)
+		if not (node as Unit).is_dead and distance < best:
+			best = distance
 			boss = node
 	_boss_panel.visible = boss != null
 	if boss:
+		_boss_name.text = boss.get_meta(&"marker_label", "Boss")
 		_boss_bar.max_value = boss.max_health
 		_boss_bar.value = boss.health
 
@@ -844,7 +850,7 @@ func _apply_design() -> void:
 	var stats := $Root/Stats as Control
 	stats.reparent(right, false)
 	stats.custom_minimum_size = Vector2(HudStyle.COLUMN_WIDTH, 0)
-	for label: Label in [allies_label, camps_label]:
+	for label: Label in [allies_label, bands_label]:
 		label.add_theme_font_size_override("font_size", HudStyle.FONT_BODY)
 	_size_icons(stats, HudStyle.ICON_SMALL)
 	_army_row.reparent(right, false)
