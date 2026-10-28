@@ -13,6 +13,7 @@ const SCORE_LIMITS := [
 	Vector3i(0, 0, 0),       # co-op: not used
 	Vector3i(30, 300, 120),  # king of the hill: seconds held
 	Vector3i(0, 0, 0),       # last stand: not used (ten circles)
+	Vector3i(100, 1000, 400),  # conquest: points from held territories
 ]
 const PLAYERS_WIDTH: float = 700.0
 const SLOT_HEIGHT: float = 70.0
@@ -279,7 +280,7 @@ func _refresh_summary(settings: Dictionary) -> void:
 	_summary_row("Starting coins", str(settings.start_coins))
 	if Net.is_team_mode(match_mode):
 		_summary_row("Teams", str(settings.team_count))
-	if match_mode == Net.Mode.KING_OF_THE_HILL:
+	if match_mode == Net.Mode.KING_OF_THE_HILL or match_mode == Net.Mode.CONQUEST:
 		_summary_row(Net.SCORE_LIMIT_LABELS[match_mode], str(settings.score_limit))
 		_summary_row("Time limit", "%d min" % settings.time_limit)
 
@@ -478,14 +479,15 @@ func _refresh() -> void:
 			var limits: Vector3i = SCORE_LIMITS[match_mode]
 			slider.min_value = maxi(limits.x, 1)
 			slider.max_value = maxi(limits.y, 1)
-			slider.step = 10 if match_mode == Net.Mode.KING_OF_THE_HILL else 1
+			slider.step = 10 if match_mode == Net.Mode.KING_OF_THE_HILL or match_mode == Net.Mode.CONQUEST else 1
 			(entry.label as Label).text = Net.SCORE_LIMIT_LABELS[match_mode]
 		slider.value = settings.get(key, slider.min_value)
 		(entry.value as Label).text = str(int(slider.value))
 	(_sliders.band_count.row as Control).visible = current_map.layout == null  # designed maps place their own
-	(_sliders.team_count.row as Control).visible = team_mode
-	(_sliders.score_limit.row as Control).visible = match_mode == Net.Mode.KING_OF_THE_HILL
-	(_sliders.time_limit.row as Control).visible = match_mode == Net.Mode.KING_OF_THE_HILL
+	var scored := match_mode == Net.Mode.KING_OF_THE_HILL or match_mode == Net.Mode.CONQUEST
+	(_sliders.team_count.row as Control).visible = team_mode and match_mode != Net.Mode.CONQUEST  # always three
+	(_sliders.score_limit.row as Control).visible = scored
+	(_sliders.time_limit.row as Control).visible = scored
 
 	# Bottom row
 	var host := Net.is_host()

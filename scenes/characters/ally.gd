@@ -41,6 +41,10 @@ const STAB_REACH: float = 0.55
 ## (an arrow for the bow).
 ## Every soldier's health and damage × this (on top of the weapon's stats and the Soldier Damage / Health upgrades).
 const BASE_POWER: float = 1.25
+## Conquest upkeep: an archer out of arrows fights with this share of its arrow damage up close.
+const BOW_MELEE_SHARE: float = 0.5
+## Weapon wear per hit dealt (durability runs 0..100; at 0 the weapon is broken).
+const WEAR_PER_HIT: float = 1.0
 const WEAPON_STATS: Dictionary = {
 	"sword": {},
 	"spear": {"damage": 11.5, "range": 1.45, "cooldown": 1.1},
@@ -66,6 +70,13 @@ var _match_pace: float = -1.0
 @export var regroup_arrive: float = 2.5
 ## Archers shoot from up to this far (from the target's surface); set from `archer_range()` on every think.
 var shoot_range: float = 6.0
+## Conquest upkeep (set by LogisticsManager on the server; the defaults change nothing in other modes):
+## speed and damage multipliers (starving, broken weapon), weapon durability 0..100 (-1 = never wears) and
+## arrows left (-1 = endless quiver; 0 = the archer fights up close).
+var upkeep_speed: float = 1.0
+var upkeep_damage: float = 1.0
+var durability: float = -1.0
+var ammo: int = -1
 
 ## The weapon it fights with (from the spawn data, every peer, before entering the tree).
 var weapon: String = "sword"
@@ -129,6 +140,26 @@ func _apply_weapon_stats() -> void:
 
 func is_archer() -> bool:
 	return weapon == "bow"
+
+
+## An archer with arrows left (Conquest: an empty quiver means melee until resupplied).
+func shoots() -> bool:
+	return is_archer() and ammo != 0
+
+
+func _roll_melee_damage() -> Array:
+	var damage := melee_damage * upkeep_damage * (BOW_MELEE_SHARE if is_archer() else 1.0)
+	return [damage, false]
+
+
+func _on_hit_dealt(_victim: Node3D, _amount: float) -> void:
+	_wear()
+
+
+## Conquest: every hit dealt wears the weapon down (nothing when durability is off).
+func _wear() -> void:
+	if durability > 0.0:
+		durability = maxf(durability - WEAR_PER_HIT, 0.0)
 
 
 ## How far archers shoot: half their hero's bow range.
@@ -240,10 +271,10 @@ func _get_move_input(delta: float) -> Vector3:
 	if strength < 0.15:
 		return Vector3.ZERO
 	if _match_pace > 0.0:
-		return move / strength * _match_pace  # marching with a moving hero: one steady run
-	if not is_archer() and not GameConfig.is_gone(target):
-		return move / strength  # going for an enemy: always the run (no walk / run flicker at its edge)
-	return move / strength * (1.0 if strength >= 0.75 else walk_share)
+		return move / strength * _match_pace * upkeep_speed  # marching with a moving hero: one steady run
+	if not shoots() and not GameConfig.is_gone(target):
+		return move / strength * upkeep_speed  # going for an enemy: always the run (no walk / run flicker at its edge)
+	return move / strength * (1.0 if strength >= 0.75 else walk_share) * upkeep_speed
 
 
 ## The move this frame (any length up to 1); `_get_move_input` turns it into a run or a walk.
@@ -257,7 +288,7 @@ func _desired_move(delta: float) -> Vector3:
 		_think()
 
 	if not GameConfig.is_gone(target):
-		return _shoot_at(delta) if is_archer() else engage(target, delta)
+		return _shoot_at(delta) if shoots() else engage(target, delta)
 	var order := _order()
 	if order == Player.Order.FOLLOW and GameConfig.is_gone(leader):
 		return Vector3.ZERO
@@ -367,7 +398,7 @@ func _trail_point(slot: Vector3) -> Vector3:
 
 
 func _release_arrow() -> void:
-	if is_dead or GameConfig.is_gone(target):
+	if is_dead or GameConfig.is_gone(target) or ammo == 0:
 		return
 	var from := global_position + Vector3(0, 0.55, 0)
 	var aim := target.global_position
@@ -379,7 +410,10 @@ func _release_arrow() -> void:
 		return
 	direction = direction.normalized()
 	face_now(direction)
-	NetSpawn.projectile(&"arrow", from + direction * 0.4, direction, melee_damage, self)
+	if ammo > 0:
+		ammo -= 1
+	_wear()
+	NetSpawn.projectile(&"arrow", from + direction * 0.4, direction, melee_damage * upkeep_damage, self)
 
 
 func _walk_to(point: Vector3, delta: float) -> Vector3:
@@ -426,7 +460,7 @@ func _think() -> void:
 		return
 	var unit_target := target if is_instance_valid(target) and target is Unit else null
 	# Archers stand behind the hero: they look out from the hero, as far as they shoot and a bit more.
-	var candidate := _best_enemy(leader.global_position, shoot_range + 3.0) if is_archer() \
+	var candidate := _best_enemy(leader.global_position, shoot_range + 3.0) if shoots() \
 			else _best_enemy(global_position, sight)
 	target = _commit_target(unit_target, candidate, sight + 2.5)
 	if target == null:

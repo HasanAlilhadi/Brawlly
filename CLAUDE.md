@@ -119,11 +119,26 @@ by touch index so the joystick and buttons work together with multi-touch.
   when adding more). Input prompts: `UiKit.prompt("keyboard/w" | "mouse/left" | "xbox/rt" | "touch/tap")` from
   `assets/ui/prompts/` (Kenney Input Prompts, Double size; copy more from pre-assets when needed). Cursors: gauntlet in
   menus (Project Settings), gold sword in matches (main.gd).
-- **Modes** (`Net.Mode`): `COOP`, `KING_OF_THE_HILL` (the only team mode, `Net.is_team_mode()`) and `LAST_STAND`
+- **Modes** (`Net.Mode`): `COOP`, `KING_OF_THE_HILL` and `CONQUEST` (the team modes, `Net.is_team_mode()`), `LAST_STAND`
   (co-op, `Net.is_coop_mode()`: everyone team 0); rules in `GameMode` (`scenes/main/game_mode.gd`). Deathmatch,
   Team Deathmatch and Capture the Flag were removed (in git history before 2026-10-04) and may come back; a new
   mode = a `Net.Mode` value + MODE_NAMES / MODE_HINTS / SCORE_LIMIT_LABELS + `lobby.gd` SCORE_LIMITS + its branches
   in `GameMode` (bump `Net.GAME_ID`: older builds can't show it).
+- **Conquest** (`ConquestMode` extends GameMode, `scenes/modes/conquest/`; main.gd creates it only for this mode,
+  GameMode itself is untouched; test `tests/conquest_test.gd`): always 3 factions (`ConquestMode.FACTIONS`, forced in
+  `setup()` and `Net.set_setting`). `_plan_territories()` (from the seed, every peer) = a Citadel per faction base,
+  a City between every two bases + one in the middle, 6 Outposts, 9 Villages; built as `TerritoryNode`s
+  (`Territory_<n>`, group `territories`; kind rows in `TerritoryNode.INFO`). States: INFESTED (server spawns
+  guards from `WorldEvents.WAVE_TYPES` rows once heroes exist; all dead → NEUTRAL), NEUTRAL / OWNED (one faction's
+  standing units in the ring, none of the owner's, the gate broken → progress → captured, `_net_state`). Cities and
+  Citadels have a `TerritoryGate` (group `breakable`; own faction can't hurt it, non-`siege` attackers deal
+  `HAND_SHARE`). `LogisticsManager` (server tick every 5 s, `_net_stock` to all): income + score per held place,
+  soldiers eat food (short → `Ally.upkeep_speed` + health drain), weapons wear per hit (`Ally.durability`, 0 →
+  `upkeep_damage`), archers spend `Ally.ammo` (0 → weak melee, `Ally.shoots()`); repair / refill only within a
+  supply point's range (group `conquest_supply`: `team_id` + `supply_range()`; caravans will join it). The Ally
+  upkeep fields default to neutral (-1 / 1.0), so other modes are unchanged. Win: every Citadel, score limit, or
+  time. HUD: `score_text()` adds the faction stockpile. Planned next: recruits / army cap from places, caravans,
+  marching soldiers to a territory, siege engines, walls.
 - **Last Stand** (`GameMode`, test `tests/last_stand_test.gd` + `--defeat`, online `tests/last_stand_mp_test.gd`):
   a procedural world is `main.LAST_STAND_WORLD_SCALE` (1.15×) bigger; `GameMode._plan_circles()` plans `CIRCLE_COUNT`
   (10) circles from the seed (every peer knows them; WorldBuilder keeps `world_clear_radius()` around each and puts

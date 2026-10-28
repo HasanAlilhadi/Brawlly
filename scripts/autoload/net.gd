@@ -15,7 +15,7 @@ signal left_game(reason: String)
 ## The host started the match: every lobby shows a countdown of `seconds`.
 signal countdown_started(seconds: int)
 
-const GAME_ID := "brawlly-lan-v4"
+const GAME_ID := "brawlly-lan-v5"
 const PORT: int = 24565
 const DISCOVERY_PORT: int = 24566
 const MAX_PLAYERS: int = 8
@@ -31,16 +31,17 @@ const GAME_SCENE := "res://scenes/main/main.tscn"
 const LOBBY_SCENE := "res://scenes/ui/lobby.tscn"
 const MENU_SCENE := "res://scenes/ui/main_menu.tscn"
 
-enum Mode { COOP, KING_OF_THE_HILL, LAST_STAND }
+enum Mode { COOP, KING_OF_THE_HILL, LAST_STAND, CONQUEST }
 enum Difficulty { EASY, NORMAL, HARD, BRUTAL }
 
-const MODE_NAMES: PackedStringArray = ["Co-op vs the Horde", "King of the Hill", "Last Stand"]
+const MODE_NAMES: PackedStringArray = ["Co-op vs the Horde", "King of the Hill", "Last Stand", "Conquest"]
 const MODE_HINTS: PackedStringArray = [
 	"Everyone together: wipe out every warband.",
 	"Teams hold the hill in the middle to earn points.",
 	"Everyone together: hold ten circles for a minute each while the horde grows stronger. The fallen stay down.",
+	"Three factions: free villages, outposts and cities from the monsters, then take them from each other. Feed and supply your army.",
 ]
-const SCORE_LIMIT_LABELS: PackedStringArray = ["", "Hill seconds to win", ""]
+const SCORE_LIMIT_LABELS: PackedStringArray = ["", "Hill seconds to win", "", "Conquest points to win"]
 const DIFFICULTY_NAMES: PackedStringArray = ["Easy", "Normal", "Hard", "Brutal"]
 const DIFFICULTY_STRENGTH: Array[float] = [0.7, 1.0, 1.3, 1.65]
 const DIFFICULTY_RESPAWN: Array[float] = [1.5, 1.0, 0.8, 0.6]
@@ -127,7 +128,7 @@ func mode() -> int:
 
 
 static func is_team_mode(match_mode: int) -> bool:
-	return match_mode == Mode.KING_OF_THE_HILL
+	return match_mode == Mode.KING_OF_THE_HILL or match_mode == Mode.CONQUEST
 
 
 ## Everyone on one team against the orcs (Co-op vs Orcs, Last Stand).
@@ -383,6 +384,8 @@ func set_setting(key: String, value: Variant) -> void:
 	if not is_host() or game_in_progress:
 		return
 	settings[key] = value
+	if mode() == Mode.CONQUEST:
+		settings.team_count = ConquestMode.FACTIONS  # always three factions
 	if key == "mode" or key == "team_count":
 		_balance_teams()
 	_broadcast_lobby()

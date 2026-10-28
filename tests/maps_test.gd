@@ -5,7 +5,7 @@ extends Node
 ## a circle's middle or a gold vein; the hero spawns and plays for a moment.
 ##   "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/maps_test.gd
 
-const MODES: Array[int] = [Net.Mode.COOP, Net.Mode.KING_OF_THE_HILL, Net.Mode.LAST_STAND]
+const MODES: Array[int] = [Net.Mode.COOP, Net.Mode.KING_OF_THE_HILL, Net.Mode.LAST_STAND, Net.Mode.CONQUEST]
 
 var t := 0.0
 var pt := 0.0
@@ -137,5 +137,7 @@ func _inspect(main: Node3D) -> void:
 	match Net.settings.mode:
 		Net.Mode.KING_OF_THE_HILL:
 			_check(get_tree().get_first_node_in_group(&"hill") != null, "  the hill")
+		Net.Mode.CONQUEST:
+			_check(get_tree().get_nodes_in_group(&"territories").size() == (mode as ConquestMode).territories.size() 					and (mode as ConquestMode).territories.size() > 3, "  the territories")
 		Net.Mode.LAST_STAND:
 			_check(get_tree().get_first_node_in_group(&"hold_circles") != null and mode.circles.size() == GameMode.CIRCLE_COUNT, "  the circles")

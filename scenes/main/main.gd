@@ -135,7 +135,8 @@ func _ready() -> void:
 	HitFx.main = self
 	HitFx.camera = camera
 
-	game_mode = GameMode.new()
+	# Conquest runs its own rules on top of GameMode; every other mode uses GameMode as it is.
+	game_mode = ConquestMode.new() if settings.mode == Net.Mode.CONQUEST else GameMode.new()
 	game_mode.setup(settings, Net.players, map)
 	add_child(game_mode)
 	match_stats = MatchStats.new()
