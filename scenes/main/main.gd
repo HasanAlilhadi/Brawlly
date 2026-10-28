@@ -283,6 +283,8 @@ func _spawn_unit(data: Dictionary) -> Node:
 			animal.set_species(data.get("species", "pig"))
 			animal.home = data.get("home", data.pos)
 			unit = animal
+		&"caravan":
+			unit = CaravanUnit.create(data)  # Conquest supply caravan
 		&"goblin":
 			unit = GOBLIN_SCENE.instantiate() as TreasureGoblin
 			unit.max_health *= data.get("health_scale", 1.0)

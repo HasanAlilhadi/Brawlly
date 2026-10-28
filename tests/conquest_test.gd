@@ -16,6 +16,10 @@ var mode: ConquestMode
 var village: TerritoryNode
 var archer: Ally
 var score_before := 0
+var field := Vector3.ZERO
+var homebound: CaravanUnit
+var homebound_cargo := 0
+var home_food := 0
 
 
 func _ready() -> void:
@@ -50,6 +54,13 @@ func _put(at: Vector3) -> void:
 func _done() -> void:
 	_log("done: %d failure(s)" % failures)
 	get_tree().quit(1 if failures > 0 else 0)
+
+
+func _live_caravan() -> CaravanUnit:
+	for node in get_tree().get_nodes_in_group(&"caravans"):
+		if not (node as CaravanUnit).is_dead:
+			return node
+	return null
 
 
 func _process(delta: float) -> void:
@@ -150,6 +161,72 @@ func _process(delta: float) -> void:
 			_check(player.soldiers_training == training_before + recruits, "held places train free recruits (%d)" % (player.soldiers_training - training_before))
 			_next()
 		5:
+			# Phase 3: the army marches out beyond every supply point → a caravan is sent after it.
+			if pt < 0.2:
+				return
+			field = mode.territories[2].position + Vector3(14.0, 0.0, 0.0)
+			_put(field)
+			for ally in player.followers():
+				(ally as Ally).global_position = field + Vector3(randf_range(-2.0, 2.0), 0.0, randf_range(-2.0, 2.0))
+			_check(not mode.logistics.is_supplied(archer, 0), "the army is out of supply range")
+			var stock := mode.logistics.stock_of(0)
+			var food_before: int = stock[&"food"]
+			mode.logistics.tick()
+			var caravans := get_tree().get_nodes_in_group(&"caravans")
+			_check(caravans.size() == 1, "a caravan is sent after the cut-off army (%d)" % caravans.size())
+			if caravans.is_empty():
+				_done()
+				return
+			var caravan := caravans[0] as CaravanUnit
+			_check(caravan.owner_peer == player.peer_id and caravan.team_id == 0 and caravan.cargo_left() > 0, "it follows our hero with cargo %s" % str(caravan.cargo))
+			_check(stock[&"food"] < food_before + 20, "its cargo came out of the stockpile")
+			# By the army: soldiers eat, repair and refill from its cargo.
+			caravan.global_position = field
+			archer.global_position = field
+			archer.durability = 0.0
+			archer.ammo = 0
+			var cargo_before: Dictionary = caravan.cargo.duplicate()
+			mode.logistics.tick()
+			_check(mode.logistics.is_supplied(archer, 0), "the caravan is a supply point")
+			_check(archer.durability == LogisticsManager.FULL_DURABILITY and archer.ammo == LogisticsManager.QUIVER, "soldiers repaired and resupplied in the field")
+			_check(caravan.cargo[&"equipment"] < cargo_before[&"equipment"] and caravan.cargo[&"ammo"] < cargo_before[&"ammo"] and caravan.cargo[&"food"] < cargo_before[&"food"], "from the caravan's cargo %s → %s" % [str(cargo_before), str(caravan.cargo)])
+			_check(get_tree().get_nodes_in_group(&"caravans").size() == 1, "one caravan per hero")
+			# Ambushed by a rival faction: its cargo is theirs.
+			Net.players[2] = {"name": "Rival", "team": 1, "class": &"swordsman", "ready": false}
+			var rival_food: int = mode.logistics.stock_of(1)[&"food"]
+			var loot: int = caravan.cargo[&"food"]
+			caravan.last_attacker_peer = 2
+			caravan.die()
+			_check(mode.logistics.stock_of(1)[&"food"] == mini(rival_food + loot, LogisticsManager.STOCK_CAP), "a rival faction loots the cargo (+%d food)" % loot)
+			Net.players.erase(2)
+			# Destroyed by monsters: the cargo is lost.
+			mode.logistics.tick()
+			var second := _live_caravan()
+			_check(second != null, "another caravan is sent")
+			if second:
+				var stocks := [mode.logistics.stock_of(0)[&"food"], mode.logistics.stock_of(1)[&"food"]]
+				second.last_attacker_peer = 0
+				second.die()
+				_check([mode.logistics.stock_of(0)[&"food"], mode.logistics.stock_of(1)[&"food"]] == stocks, "monsters destroy the cargo")
+			# No hero to follow: it walks home and hands back what is left.
+			mode.logistics.tick()
+			homebound = _live_caravan()
+			_check(homebound != null, "a third caravan is sent")
+			if homebound:
+				homebound_cargo = homebound.cargo[&"food"]
+				home_food = mode.logistics.stock_of(0)[&"food"]
+				homebound.owner_peer = 99
+			_next()
+		6:
+			if is_instance_valid(homebound) and not homebound.is_dead and pt < 60.0:
+				return
+			_check(not is_instance_valid(homebound) or homebound.is_dead, "a caravan with nobody to follow goes home (%.1fs)" % pt)
+			_check(mode.logistics.stock_of(0)[&"food"] == mini(home_food + homebound_cargo, LogisticsManager.STOCK_CAP), "and hands back its cargo (+%d food)" % homebound_cargo)
+			_put(mode.territories[0].position)
+			_next()
+		7:
+			_next()
+		8:
 			var citadel := mode.territories[1]
 			var own_gate := mode.territories[0].gate
 			own_gate.take_damage(500.0, player)
@@ -158,7 +235,7 @@ func _process(delta: float) -> void:
 			_check(is_equal_approx(citadel.gate.health, citadel.gate.max_health - 100.0 * TerritoryGate.HAND_SHARE), "a hero only chips the gate (%.0f)" % citadel.gate.health)
 			_put(citadel.position)
 			_next()
-		6:
+		9:
 			_put(mode.territories[1].position)
 			if pt < 3.0:
 				return
@@ -168,7 +245,7 @@ func _process(delta: float) -> void:
 				gate.take_damage(gate.max_health / TerritoryGate.HAND_SHARE + 1.0, player)
 			_check(mode.territories[1].gate.is_broken(), "gate broken")
 			_next()
-		7:
+		10:
 			var target := mode.territories[1] if mode.territories[1].owner_team != 0 else mode.territories[2]
 			_put(target.position)
 			if mode.is_over or pt > 60.0:

@@ -166,8 +166,8 @@ func _teams_inside() -> Dictionary:
 	var r := radius()
 	for node in get_tree().get_nodes_in_group(&"player_units"):
 		var unit := node as Unit
-		if GameConfig.is_gone(unit) or unit.team_id < 0:
-			continue
+		if GameConfig.is_gone(unit) or unit.team_id < 0 or unit.is_in_group(&"caravans"):
+			continue  # pack animals don't take or hold places
 		var offset := unit.global_position - global_position
 		offset.y = 0.0
 		if offset.length() < r:

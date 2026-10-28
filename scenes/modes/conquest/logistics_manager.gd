@@ -3,7 +3,8 @@ extends Node
 ## Conquest: every faction's stockpile (food, equipment, ammo) and the army upkeep, one tick every TICK seconds.
 ## Server: owned territories pay their income in (`TerritoryNode.income`), every soldier eats, worn weapons are
 ## repaired and quivers refilled for soldiers inside a supply point's range (group `conquest_supply`: owned
-## territories now, caravans later), then the effects are set on the soldiers (Ally.upkeep_speed / upkeep_damage /
+## territories draw on the stockpile, CaravanUnits on their own cargo; `_dispatch` sends a caravan to a hero
+## whose soldiers are cut off), then the effects are set on the soldiers (Ally.upkeep_speed / upkeep_damage /
 ## durability / ammo — they stay neutral in every other mode). Held places also raise every hero's army cap
 ## (`TerritoryNode.INFO.cap`, at most CAP_BONUS_MAX), train free recruits for the faction's heroes and spend
 ## equipment rebuilding their gates. Every peer gets the stockpiles via `_net_stock`.
@@ -35,6 +36,10 @@ const RECRUIT_EVERY: int = 6
 ## Gate rebuilding while nobody else stands in the ring: health per equipment, equipment per gate per tick.
 const GATE_REPAIR_PER_EQUIPMENT: float = 50.0
 const GATE_REPAIR_PARTS: int = 4
+## A caravan goes out when at least this many of a hero's soldiers are beyond every supply point, and only with
+## at least this much cargo in all.
+const DISPATCH_MIN: int = 3
+const DISPATCH_MIN_CARGO: int = 10
 
 var mode: ConquestMode
 ## team -> {food, equipment, ammo, starving: bool, soldiers: int, food_need: int, income: Dictionary,
@@ -49,6 +54,7 @@ var _cap_given: Dictionary = {}
 
 func _ready() -> void:
 	name = "Logistics"
+	add_to_group(&"logistics")
 	for team in ConquestMode.FACTIONS:
 		stock[team] = {&"food": START_STOCK, &"equipment": START_STOCK, &"ammo": START_STOCK,
 				&"starving": false, &"soldiers": 0, &"food_need": 0, &"income": {}, &"cap_bonus": 0, &"recruits": 0}
@@ -97,6 +103,7 @@ func tick() -> void:
 			entry[key] = mini(int(entry[key]) + int(income[key]), STOCK_CAP)
 		entry[&"income"] = income
 		_upkeep(team, entry)
+		_dispatch(team, entry)
 		_repair_gates(held, entry)
 		entry[&"cap_bonus"] = mini(cap, CAP_BONUS_MAX)
 		_give_cap(team, entry[&"cap_bonus"])
@@ -166,8 +173,15 @@ func _upkeep(team: int, entry: Dictionary) -> void:
 		if ally and not GameConfig.is_gone(ally) and ally.team_id == team:
 			soldiers.append(ally)
 	entry[&"soldiers"] = soldiers.size()
-	entry[&"food_need"] = soldiers.size() * FOOD_PER_SOLDIER
-	var food_need := soldiers.size() * FOOD_PER_SOLDIER
+	# Soldiers by a caravan with food eat from its cargo; everyone else from the stockpile.
+	var food_need := 0
+	for ally in soldiers:
+		var caravan := _caravan_near(ally, team)
+		if caravan and int(caravan.cargo.get(&"food", 0)) >= FOOD_PER_SOLDIER:
+			caravan.cargo[&"food"] = int(caravan.cargo[&"food"]) - FOOD_PER_SOLDIER
+		else:
+			food_need += FOOD_PER_SOLDIER
+	entry[&"food_need"] = food_need
 	var starving := int(entry[&"food"]) < food_need
 	entry[&"food"] = maxi(int(entry[&"food"]) - food_need, 0)
 	entry[&"starving"] = starving and food_need > 0
@@ -176,9 +190,12 @@ func _upkeep(team: int, entry: Dictionary) -> void:
 			ally.durability = FULL_DURABILITY  # joins the upkeep: from now on the weapon wears
 		if ally.is_archer() and ally.ammo < 0:
 			ally.ammo = QUIVER
-		if is_supplied(ally, team):
-			_repair(ally, entry)
-			_refill(ally, entry)
+		var source := supply_source(ally, team)
+		if source:
+			# An owned territory draws on the stockpile, a caravan on its own cargo.
+			var supplies: Dictionary = (source as CaravanUnit).cargo if source is CaravanUnit else entry
+			_repair(ally, supplies)
+			_refill(ally, supplies)
 		ally.upkeep_speed = STARVE_SPEED if starving else 1.0
 		ally.upkeep_damage = BROKEN_DAMAGE if ally.durability <= 0.0 else 1.0
 		if starving and ally.health > ally.max_health * STARVE_FLOOR:
@@ -188,7 +205,7 @@ func _upkeep(team: int, entry: Dictionary) -> void:
 
 func _repair(ally: Ally, entry: Dictionary) -> void:
 	var missing := FULL_DURABILITY - ally.durability
-	var parts := mini(ceili(missing / REPAIR_PER_EQUIPMENT), int(entry[&"equipment"]))
+	var parts := mini(ceili(missing / REPAIR_PER_EQUIPMENT), int(entry.get(&"equipment", 0)))
 	if parts <= 0:
 		return
 	entry[&"equipment"] = int(entry[&"equipment"]) - parts
@@ -198,15 +215,22 @@ func _repair(ally: Ally, entry: Dictionary) -> void:
 func _refill(ally: Ally, entry: Dictionary) -> void:
 	if not ally.is_archer():
 		return
-	var bundles := mini(ceili(float(QUIVER - ally.ammo) / ARROWS_PER_AMMO), int(entry[&"ammo"]))
+	var bundles := mini(ceili(float(QUIVER - ally.ammo) / ARROWS_PER_AMMO), int(entry.get(&"ammo", 0)))
 	if bundles <= 0:
 		return
 	entry[&"ammo"] = int(entry[&"ammo"]) - bundles
 	ally.ammo = mini(ally.ammo + bundles * ARROWS_PER_AMMO, QUIVER)
 
 
-## Within range of one of its faction's supply points (an owned territory; later a caravan).
+## Within range of one of its faction's supply points (an owned territory or a caravan).
 func is_supplied(unit: Node3D, team: int) -> bool:
+	return supply_source(unit, team) != null
+
+
+## The supply point `unit` draws on: an owned territory in range first (the stockpile), else a caravan with
+## cargo left, else null.
+func supply_source(unit: Node3D, team: int) -> Node3D:
+	var caravan: Node3D = null
 	for node in get_tree().get_nodes_in_group(&"conquest_supply"):
 		var point := node as Node3D
 		if point == null or int(point.get("team_id")) != team:
@@ -214,9 +238,71 @@ func is_supplied(unit: Node3D, team: int) -> bool:
 		var reach: float = point.call("supply_range")
 		var offset := point.global_position - unit.global_position
 		offset.y = 0.0
-		if reach > 0.0 and offset.length() <= reach:
-			return true
-	return false
+		if reach <= 0.0 or offset.length() > reach:
+			continue
+		if not point is CaravanUnit:
+			return point
+		if caravan == null and (point as CaravanUnit).cargo_left() > 0:
+			caravan = point
+	return caravan
+
+
+func _caravan_near(unit: Node3D, team: int) -> CaravanUnit:
+	var source := supply_source(unit, team)
+	return source as CaravanUnit
+
+
+## Server: supplies come back to a faction's stockpile (a caravan home again, or loot from a rival's).
+func store(team: int, supplies: Dictionary) -> void:
+	if not stock.has(team):
+		return
+	for key in KEYS:
+		stock[team][key] = mini(int(stock[team][key]) + int(supplies.get(key, 0)), STOCK_CAP)
+
+
+## A hero whose soldiers march beyond every supply point (DISPATCH_MIN of them) and has no caravan yet gets one
+## from the nearest held territory, loaded from the stockpile (CaravanUnit.CARGO at most of each).
+func _dispatch(team: int, entry: Dictionary) -> void:
+	for player in _heroes(team):
+		if player.is_dead or _caravan_of(player) != null:
+			continue
+		var cut_off := 0
+		for ally in player.followers():
+			if not is_supplied(ally, team):
+				cut_off += 1
+		if cut_off < DISPATCH_MIN:
+			continue
+		var from := _nearest_held(team, player.global_position)
+		if from == null:
+			continue
+		var cargo := {}
+		var total := 0
+		for key in KEYS:
+			cargo[key] = mini(int(CaravanUnit.CARGO[key]), int(entry[key]))
+			total += int(cargo[key])
+		if total < DISPATCH_MIN_CARGO:
+			continue
+		for key in KEYS:
+			entry[key] = int(entry[key]) - int(cargo[key])
+		var at := GameConfig.clamp_to_world(from.global_position + Vector3(0.0, 0.0, from.radius() * 0.5))
+		NetSpawn.unit(&"caravan", at, {"team": team, "owner": player.peer_id, "cargo": cargo})
+
+
+func _caravan_of(player: Player) -> CaravanUnit:
+	for node in get_tree().get_nodes_in_group(&"caravans"):
+		var caravan := node as CaravanUnit
+		if caravan.owner_peer == player.peer_id and not caravan.is_dead:
+			return caravan
+	return null
+
+
+func _nearest_held(team: int, near: Vector3) -> TerritoryNode:
+	var best: TerritoryNode = null
+	for territory in mode.territories:
+		if territory.state == TerritoryNode.State.OWNED and territory.owner_team == team and (best == null or
+				territory.global_position.distance_to(near) < best.global_position.distance_to(near)):
+			best = territory
+	return best
 
 
 @rpc("authority", "call_local", "reliable")
