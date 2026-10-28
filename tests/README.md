@@ -4,8 +4,10 @@ Run from the project folder (`G` = the Godot binary). Tests start the game norma
 `test_runner.tscn` and print results with a `HOST` / `CLIENT` / `[time]` prefix. Excluded from exports.
 
 ```bash
-# Conquest: territories, liberation, capture, logistics upkeep, gates, citadel victory
+# Conquest: territories, liberation, capture, logistics upkeep, caravans, march order, walls, siege, citadel victory
 "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/conquest_test.gd
+# Conquest screenshots (window): HUD stock line, walls + siege engines at an enemy gate, Army tab
+"$G" --path . res://tests/test_runner.tscn -- --test=res://tests/conquest_shots_test.gd --out=/tmp/shots
 # Menus: presses the real buttons (Host Game → Create Lobby → Leave, Find Game → Back, Host Game → Create Lobby → Start; no Play button)
 # Every test plays a Swordsman unless --class=<swordsman|spearman|bowman> (test_runner.gd)
 # Host/client pairs: add --port=<N> to both (e.g. 24575) when a game is already running on this PC (it holds 24565),

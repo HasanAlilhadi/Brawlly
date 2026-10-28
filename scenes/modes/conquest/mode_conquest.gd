@@ -107,8 +107,6 @@ func world_clear_radius() -> float:
 
 func build_objectives(world: Node3D) -> void:
 	super.build_objectives(world)
-	if multiplayer.is_server():
-		_bake_navigation(world)  # before the gatehouses exist: they break and come back, the mesh doesn't
 	for i in _plan.size():
 		var planned: Dictionary = _plan[i]
 		var territory := TerritoryNode.new()
@@ -121,6 +119,15 @@ func build_objectives(world: Node3D) -> void:
 			territory.start_owned(planned.owner)
 		world.add_child(territory)
 		territories.append(territory)
+	if multiplayer.is_server():
+		# With the walls, without the gatehouses (they open, break and come back; the mesh doesn't).
+		for territory in territories:
+			if territory.gate:
+				territory.gate.hide_from_navigation(true)
+		_bake_navigation(world)
+		for territory in territories:
+			if territory.gate:
+				territory.gate.hide_from_navigation(false)
 	logistics = LogisticsManager.new()
 	logistics.mode = self
 	add_child(logistics)
@@ -197,7 +204,7 @@ func on_territory_captured(territory: TerritoryNode, previous: int) -> void:
 		finish("{team:%d} wins!" % holder, "Every Citadel flies their banner.")
 
 
-## Score line plus this device's faction stockpile with income and upkeep per tick
+## Score line plus, on a second line, this device's faction stockpile with income and upkeep per tick
 ## ("Food 40 (+10 -13)  Equip 12 (+6)  Ammo 33 (+4)  Army +7", "STARVING" when short).
 func score_text(tokens: bool = false) -> String:
 	var text := super.score_text(tokens)
@@ -207,7 +214,7 @@ func score_text(tokens: bool = false) -> String:
 	if mine.is_empty():
 		return text
 	var income: Dictionary = mine[&"income"]
-	text += "   Food %d (+%d -%d)  Equip %d (+%d)  Ammo %d (+%d)" % [mine[&"food"], income.get(&"food", 0),
+	text += "\nFood %d (+%d -%d)  Equip %d (+%d)  Ammo %d (+%d)" % [mine[&"food"], income.get(&"food", 0),
 			mine[&"food_need"], mine[&"equipment"], income.get(&"equipment", 0), mine[&"ammo"], income.get(&"ammo", 0)]
 	if mine[&"cap_bonus"] > 0:
 		text += "  Army +%d" % mine[&"cap_bonus"]

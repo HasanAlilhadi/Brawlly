@@ -25,6 +25,8 @@ extends Resource
 @export var classes: Array[StringName] = []
 ## Owning any of these upgrades locks this one (a pick-one choice, e.g. Knock Back or Wave).
 @export var excludes: Array[StringName] = []
+## Only sold in these match modes (Net.Mode values; empty = every mode), e.g. the Conquest siege engines.
+@export var modes: Array[int] = []
 ## Control that uses it, shown on its card ("C", "E", "RMB").
 @export var key_hint: String = ""
 

@@ -31,8 +31,13 @@ const DECAY: float = 0.5
 const GATE_RESTORE: float = 0.5
 const MONSTER_COLOR := Color(0.55, 0.12, 0.12)
 const NEUTRAL_COLOR := Color(0.9, 0.9, 0.9)
-## The gatehouse stands off the middle: heroes spawn / respawn in the middle of a Citadel.
-const GATE_OFFSET := Vector3(0.0, 0.0, -5.0)
+## Walled places (the ones with a gate): a ring of WALL_SEGMENTS straight wall pieces at radius() around the
+## middle; one piece, facing the middle of the map, is the gatehouse. Heights alternate so neighbouring tops are
+## never coplanar (no z-fighting where the pieces cross at the corners).
+const WALL_SEGMENTS: int = 14
+const WALL_THICKNESS: float = 0.7
+const WALL_HEIGHTS: Array[float] = [2.6, 2.8]
+const WALL_COLOR := Color(0.58, 0.53, 0.46)
 
 var kind: Kind = Kind.VILLAGE
 var state: State = State.INFESTED
@@ -79,14 +84,59 @@ func _ready() -> void:
 		set_meta(&"marker_label", display_name)
 	_build_visuals()
 	if info().gate > 0.0:
-		gate = TerritoryGate.new()
-		gate.name = "Gate"
-		gate.territory = self
-		gate.max_health = info().gate
-		gate.health = gate.max_health
-		gate.position = GATE_OFFSET
-		add_child(gate)
+		_build_walls()
 	_apply_look()
+
+
+## The wall ring and its gatehouse (every peer, the same: static collision on the world layer).
+func _build_walls() -> void:
+	var holder := Node3D.new()
+	holder.name = "Walls"
+	# The gate (local +Z) faces the middle of the map; the middle City's faces +Z.
+	var inward := -position
+	holder.rotation.y = atan2(inward.x, inward.z) if inward.length() > 0.1 else 0.0
+	add_child(holder)
+	var body := StaticBody3D.new()
+	body.name = "Wall"
+	body.add_to_group(&"conquest_walls")
+	body.collision_layer = GameConfig.LAYER_WORLD
+	body.collision_mask = 0
+	holder.add_child(body)
+	var r := radius()
+	var chord := 2.0 * r * sin(PI / WALL_SEGMENTS)
+	var material := StandardMaterial3D.new()
+	material.albedo_color = WALL_COLOR
+	for i in WALL_SEGMENTS:
+		var angle := TAU * i / WALL_SEGMENTS
+		var at := Vector3(sin(angle), 0.0, cos(angle)) * r
+		if i == 0:
+			gate = TerritoryGate.new()
+			gate.name = "Gate"
+			gate.territory = self
+			gate.max_health = info().gate
+			gate.health = gate.max_health
+			gate.size = Vector3(chord, TerritoryGate.HEIGHT, WALL_THICKNESS + 0.3)
+			gate.position = at
+			gate.rotation.y = angle
+			holder.add_child(gate)
+			continue
+		var height: float = WALL_HEIGHTS[i % 2]
+		var size := Vector3(chord + WALL_THICKNESS, height, WALL_THICKNESS)  # long enough to close the corners
+		var shape := BoxShape3D.new()
+		shape.size = size
+		var collision := CollisionShape3D.new()
+		collision.shape = shape
+		collision.position = at + Vector3(0.0, height * 0.5, 0.0)
+		collision.rotation.y = angle
+		body.add_child(collision)
+		var box := BoxMesh.new()
+		box.size = size
+		box.material = material
+		var mesh := MeshInstance3D.new()
+		mesh.mesh = box
+		mesh.position = collision.position
+		mesh.rotation.y = angle
+		holder.add_child(mesh)
 
 
 ## Every peer, before the tree: a citadel starts as its faction's, everything else infested.

@@ -89,6 +89,30 @@ max_level = 4
 amount = 5.0
 sheet = &"army"
 
+[sub_resource type="Resource" id="Upgrade_siege_ram"]
+script = ExtResource("2_def")
+id = &"siege_ram"
+title = "Battering Ram"
+description = "Rolls up to enemy gates and smashes them (one at a time)"
+icon = ExtResource("glyph_expand")
+base_cost = 120
+cost_growth = 1.0
+max_level = 0
+sheet = &"army"
+modes = Array[int]([3])
+
+[sub_resource type="Resource" id="Upgrade_siege_catapult"]
+script = ExtResource("2_def")
+id = &"siege_catapult"
+title = "Catapult"
+description = "Hurls boulders at enemy gates from outside the walls (one at a time)"
+icon = ExtResource("glyph_target")
+base_cost = 180
+cost_growth = 1.0
+max_level = 0
+sheet = &"army"
+modes = Array[int]([3])
+
 [sub_resource type="Resource" id="Upgrade_sword_damage"]
 script = ExtResource("2_def")
 id = &"sword_damage"
@@ -256,4 +280,4 @@ key_hint = "RMB"
 
 [resource]
 script = ExtResource("1_catalog")
-upgrades = Array[ExtResource("2_def")]([SubResource("Upgrade_vitality"), SubResource("Upgrade_potion"), SubResource("Upgrade_recruit"), SubResource("Upgrade_soldier_damage"), SubResource("Upgrade_soldier_health"), SubResource("Upgrade_command"), SubResource("Upgrade_sword_damage"), SubResource("Upgrade_sword_rate"), SubResource("Upgrade_sword_knockback"), SubResource("Upgrade_sword_wave"), SubResource("Upgrade_sword_dash"), SubResource("Upgrade_spear_damage"), SubResource("Upgrade_spear_rate"), SubResource("Upgrade_spear_throw"), SubResource("Upgrade_bow_damage"), SubResource("Upgrade_bow_rate"), SubResource("Upgrade_bow_range"), SubResource("Upgrade_bow_pierce"), SubResource("Upgrade_shield"), SubResource("Upgrade_knife")])
+upgrades = Array[ExtResource("2_def")]([SubResource("Upgrade_vitality"), SubResource("Upgrade_potion"), SubResource("Upgrade_recruit"), SubResource("Upgrade_soldier_damage"), SubResource("Upgrade_soldier_health"), SubResource("Upgrade_command"), SubResource("Upgrade_siege_ram"), SubResource("Upgrade_siege_catapult"), SubResource("Upgrade_sword_damage"), SubResource("Upgrade_sword_rate"), SubResource("Upgrade_sword_knockback"), SubResource("Upgrade_sword_wave"), SubResource("Upgrade_sword_dash"), SubResource("Upgrade_spear_damage"), SubResource("Upgrade_spear_rate"), SubResource("Upgrade_spear_throw"), SubResource("Upgrade_bow_damage"), SubResource("Upgrade_bow_rate"), SubResource("Upgrade_bow_range"), SubResource("Upgrade_bow_pierce"), SubResource("Upgrade_shield"), SubResource("Upgrade_knife")])

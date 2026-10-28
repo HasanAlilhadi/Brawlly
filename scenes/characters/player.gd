@@ -2320,7 +2320,7 @@ func is_upgrade_locked(def: UpgradeDef) -> bool:
 func sheet_items(tab: StringName) -> Array[UpgradeDef]:
 	var result: Array[UpgradeDef] = []
 	for def in CATALOG.upgrades:
-		if def.sheet == tab:
+		if def.sheet == tab and (def.modes.is_empty() or def.modes.has(Net.mode())):
 			result.append(def)
 	return result
 
@@ -2345,6 +2345,10 @@ func is_upgrade_useful(def: UpgradeDef) -> bool:
 			return health < max_health
 		&"recruit":
 			return army_size() < follower_cap
+		&"siege_ram", &"siege_catapult":
+			return SiegeEngine.count_for(get_tree(), peer_id, _siege_kind(def.id)) == 0  # one of each
+	if not def.modes.is_empty() and not def.modes.has(Net.mode()):
+		return false
 	if def.is_class_upgrade():
 		return class_def != null and def.classes.has(class_def.id) and not is_upgrade_locked(def)
 	return true
@@ -2394,6 +2398,10 @@ func _apply_upgrade(def: UpgradeDef) -> void:
 				(ally as Ally).refresh_army_bonus()
 		&"command":
 			follower_cap += int(def.amount)
+		&"siege_ram", &"siege_catapult":
+			# Conquest: the engine rolls out right behind the hero and is theirs.
+			var at := GameConfig.clamp_to_world(global_position - facing() * 2.5)
+			NetSpawn.unit(&"siege", at, {"engine": _siege_kind(def.id), "team": team_id, "owner": peer_id})
 		&"recruit":
 			for i in int(def.amount):
 				soldiers_training += 1
@@ -2645,6 +2653,11 @@ static func march_point(tree: SceneTree, point: Vector3) -> Vector3:
 		if best == Vector3.INF or spot.distance_to(point) < best.distance_to(point):
 			best = spot
 	return best
+
+
+## "ram" / "catapult" for a siege upgrade id.
+static func _siege_kind(id: StringName) -> String:
+	return String(id).trim_prefix("siege_")
 
 
 ## The hostile unit closest to `point` (within `radius`), for a kill order.

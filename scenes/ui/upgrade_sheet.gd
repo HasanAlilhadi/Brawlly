@@ -16,6 +16,7 @@ const COIN_ICON := preload("res://assets/ui/icons/coin.png")
 const KEY_PROMPTS := {"C": "keyboard/c", "E": "keyboard/e", "RMB": "mouse/right"}
 const SLIDE_TIME: float = 0.32
 const RECRUIT := &"recruit"
+const SIEGE: Array[StringName] = [&"siege_ram", &"siege_catapult"]
 
 var is_open: bool = false
 var _player: Player
@@ -307,8 +308,11 @@ func _refresh() -> void:
 		var level := _player.upgrade_level(def.id)
 		var level_label: Label = card.level
 		var button: Button = card.button
+		var siege := SIEGE.has(def.id)  # Conquest engines: one of each in the field at a time
 		if def.id == RECRUIT:
 			level_label.text = "Army %d / %d" % [_player.army_size(), _player.follower_cap]
+		elif siege:
+			level_label.text = "In the field" if not _player.is_upgrade_useful(def) else "Siege engine"
 		elif def.is_consumable():
 			level_label.text = "Health %d / %d" % [ceili(_player.health), ceili(_player.max_health)]
 		elif def.max_level > 1:
@@ -326,6 +330,9 @@ func _refresh() -> void:
 			button.disabled = true
 		elif def.id == RECRUIT and not _player.is_upgrade_useful(def):
 			button.text = "Army full"
+			button.disabled = true
+		elif siege and not _player.is_upgrade_useful(def):
+			button.text = "In the field"
 			button.disabled = true
 		elif def.is_consumable() and not _player.is_upgrade_useful(def):
 			button.text = "Full health"

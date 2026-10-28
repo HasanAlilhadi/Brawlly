@@ -285,6 +285,8 @@ func _spawn_unit(data: Dictionary) -> Node:
 			unit = animal
 		&"caravan":
 			unit = CaravanUnit.create(data)  # Conquest supply caravan
+		&"siege":
+			unit = SiegeEngine.create(data)  # Conquest battering ram / catapult
 		&"goblin":
 			unit = GOBLIN_SCENE.instantiate() as TreasureGoblin
 			unit.max_health *= data.get("health_scale", 1.0)

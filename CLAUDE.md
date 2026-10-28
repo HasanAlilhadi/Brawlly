@@ -131,8 +131,17 @@ by touch index so the joystick and buttons work together with multi-touch.
   (`Territory_<n>`, group `territories`; kind rows in `TerritoryNode.INFO`). States: INFESTED (server spawns
   guards from `WorldEvents.WAVE_TYPES` rows once heroes exist; all dead → NEUTRAL), NEUTRAL / OWNED (one faction's
   standing units in the ring, none of the owner's, the gate broken → progress → captured, `_net_state`). Cities and
-  Citadels have a `TerritoryGate` (group `breakable`; own faction can't hurt it, non-`siege` attackers deal
-  `HAND_SHARE`). `LogisticsManager` (server tick every 5 s, `_net_stock` to all): income + score per held place,
+  Citadels are walled (`TerritoryNode._build_walls`: `WALL_SEGMENTS` box pieces at `radius()`, group
+  `conquest_walls`, alternating heights so crossing tops never z-fight); the piece facing the map's middle is a
+  `TerritoryGate` (group `breakable`; own faction can't hurt it, non-`siege` attackers deal `HAND_SHARE`). The gate
+  is solid (`shut`, replicated by `_net_shut`) only while the place is held and the gate stands, and opens for the
+  holder's units near it while no foe is within `FOE_RANGE`. The navigation mesh is baked with the walls and without
+  the gates (`hide_from_navigation`). **Siege engines** (`SiegeEngine` extends Unit, `siege_engine.tscn`, NetSpawn
+  kind `siege` with "engine" ram / catapult; primitive placeholder models): bought on the Army tab (`siege_ram`
+  120, `siege_catapult` 180; `UpgradeDef.modes` = [Conquest] hides them in other modes; one of each in the field,
+  `SiegeEngine.count_for`). Group `siege` (full gate damage) + `player_units` (targets). They trail their hero;
+  within `seek` of an enemy gate the ram rolls up and rams it (`_net_ram`), the catapult stops in `reach` and lobs a
+  boulder (`_net_boulder`, damage on landing + splash on hostile units). `LogisticsManager` (server tick every 5 s, `_net_stock` to all): income + score per held place,
   soldiers eat food (short → `Ally.upkeep_speed` + health drain), weapons wear per hit (`Ally.durability`, 0 →
   `upkeep_damage`), archers spend `Ally.ammo` (0 → weak melee, `Ally.shoots()`); repair / refill only within a
   supply point's range (group `conquest_supply`: `team_id` + `supply_range()`; `LogisticsManager.supply_source()`:
@@ -149,7 +158,8 @@ by touch index so the joystick and buttons work together with multi-touch.
   `follower_cap` as a change only, at most `CAP_BONUS_MAX` 20), free recruits every `RECRUIT_EVERY` ticks
   (`soldiers_training` of the hero with the smallest army and room), and rebuild their gates from equipment
   while uncontested (`TerritoryGate.repair`). HUD: `score_text()` adds the stockpile with income / upkeep per
-  tick and the cap bonus. Soldiers march to a territory with the MARCH order (see Army orders). Planned next: siege engines, walls.
+  tick and the cap bonus. Soldiers march to a territory with the MARCH order (see Army orders). The HUD score panel grows with
+  its text (no trimming): Conquest's stock is its second line. Screenshots: `tests/conquest_shots_test.gd`.
 - **Last Stand** (`GameMode`, test `tests/last_stand_test.gd` + `--defeat`, online `tests/last_stand_mp_test.gd`):
   a procedural world is `main.LAST_STAND_WORLD_SCALE` (1.15×) bigger; `GameMode._plan_circles()` plans `CIRCLE_COUNT`
   (10) circles from the seed (every peer knows them; WorldBuilder keeps `world_clear_radius()` around each and puts

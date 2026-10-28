@@ -23,6 +23,8 @@ var homebound_cargo := 0
 var home_food := 0
 var patrol_from := Vector3.ZERO
 var marched := false
+var siege_step := 0
+var gate_before := 0.0
 
 
 func _ready() -> void:
@@ -57,6 +59,13 @@ func _put(at: Vector3) -> void:
 func _done() -> void:
 	_log("done: %d failure(s)" % failures)
 	get_tree().quit(1 if failures > 0 else 0)
+
+
+func _def(id: StringName) -> UpgradeDef:
+	for def in Player.CATALOG.upgrades:
+		if def.id == id:
+			return def
+	return null
 
 
 func _live_caravan() -> CaravanUnit:
@@ -257,6 +266,45 @@ func _process(delta: float) -> void:
 			player.command_army(Player.Order.FOLLOW, player.global_position)
 			_next()
 		9:
+			# Phase 5: walls and siege engines, on the Yellow citadel's gate.
+			var target_gate := mode.territories[2].gate
+			var outside := target_gate.global_position + target_gate.global_basis.z.normalized() * 16.0
+			outside.y = 0.0
+			if siege_step == 0:
+				var walls := get_tree().get_nodes_in_group(&"conquest_walls").size()
+				_check(walls == 4 + 3, "every City and Citadel has walls (%d)" % walls)
+				_check(target_gate.shut and target_gate.collision_layer != 0, "an enemy gate is shut")
+				var home_gate := mode.territories[0].gate
+				_put(home_gate.global_position - home_gate.global_basis.z.normalized() * 2.0)  # just inside our Citadel
+				siege_step = 1
+				return
+			if siege_step == 1:
+				if pt < 1.0:
+					return
+				_check(not mode.territories[0].gate.shut, "our own gate opens for us")
+				_put(outside)
+				player.coins = 1000
+				var catapult_def := _def(&"siege_catapult")
+				_check(player.sheet_items(&"army").has(catapult_def), "siege engines are sold on the Army tab in Conquest")
+				_check(player.buy_upgrade(catapult_def), "buy a catapult")
+				_check(not player.buy_upgrade(catapult_def), "only one catapult at a time")
+				gate_before = target_gate.health
+				siege_step = 2
+				pt = 0.0
+				return
+			_put(outside)
+			if siege_step == 2:
+				if target_gate.health >= gate_before and pt < 30.0:
+					return
+				_check(is_equal_approx(gate_before - target_gate.health, SiegeEngine.ENGINES["catapult"].damage), "a boulder hits the gate at full force (%.0f)" % (gate_before - target_gate.health))
+				_check(player.buy_upgrade(_def(&"siege_ram")), "buy a battering ram")
+				siege_step = 3
+				pt = 0.0
+				return
+			if not target_gate.is_broken() and pt < 60.0:
+				return
+			_check(target_gate.is_broken(), "the ram and catapult break the Citadel gate (%.0fs)" % pt)
+			_check(not target_gate.shut and target_gate.collision_layer == 0, "a broken gate lets everyone through")
 			_next()
 		10:
 			var citadel := mode.territories[1]

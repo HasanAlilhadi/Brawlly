@@ -964,6 +964,8 @@ func _apply_design() -> void:
 
 	toast_label.add_theme_font_size_override("font_size", HudStyle.FONT_BODY)
 	score_label.add_theme_font_size_override("font_size", HudStyle.FONT_BODY)
+	# The panel grows with its text (Conquest adds a second line with the faction's supplies) instead of cutting it.
+	score_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 	respawn_label.add_theme_font_size_override("font_size", HudStyle.FONT_HEADLINE)
 	_revive_label.add_theme_font_size_override("font_size", HudStyle.FONT_TITLE)
 	_weapon_bar.offset_right = -HudStyle.MARGIN
