@@ -149,7 +149,7 @@ by touch index so the joystick and buttons work together with multi-touch.
   `follower_cap` as a change only, at most `CAP_BONUS_MAX` 20), free recruits every `RECRUIT_EVERY` ticks
   (`soldiers_training` of the hero with the smallest army and room), and rebuild their gates from equipment
   while uncontested (`TerritoryGate.repair`). HUD: `score_text()` adds the stockpile with income / upkeep per
-  tick and the cap bonus. Planned next: marching soldiers to a territory, siege engines, walls.
+  tick and the cap bonus. Soldiers march to a territory with the MARCH order (see Army orders). Planned next: siege engines, walls.
 - **Last Stand** (`GameMode`, test `tests/last_stand_test.gd` + `--defeat`, online `tests/last_stand_mp_test.gd`):
   a procedural world is `main.LAST_STAND_WORLD_SCALE` (1.15×) bigger; `GameMode._plan_circles()` plans `CIRCLE_COUNT`
   (10) circles from the seed (every peer knows them; WorldBuilder keeps `world_clear_radius()` around each and puts
@@ -396,6 +396,12 @@ by touch index so the joystick and buttons work together with multi-touch.
   (`army_target`, replicated as `army_target_path` for the red mark in main.gd); everyone hunts it, and once it's
   gone the order becomes CHARGE where it fell; no enemy at the point → plain CHARGE. The mouse pick is on screen
   (`main._kill_pick`, models stand up); the HUD Kill button with a mouse waits for the next world click (`_kill_picking`).
+  MARCH (Conquest only: key 5 `army_march` / HUD March, no gamepad button yet): `Player.march_point()` = the
+  territory nearest the cursor, any distance (no territories → main ignores the key). Soldiers get a
+  NavigationAgent3D on their first march (`Ally._think_march` / `_march_move`; straight line while there is no
+  path), fight only within `aggro_range` on the way, then patrol a `PATROL_RADIUS` ring and guard `MARCH_GUARD`.
+  The navigation mesh is baked by `ConquestMode._bake_navigation()` (server, async, before the gatehouses; static
+  colliders on world / fence layers + a double-sided ground quad — a one-sided one left the ground unwalkable).
 - **Showcase** (`scenes/showcase/showcase.tscn`, run with F6): a world (dev only) to fly around (`FlyCamera3D`) with one station per demo. A demo = a scene extending `ShowcaseDemo` (title, description, camera view, area) instanced under `Demos`; they're laid out in a row, keys 1–9 fly to them. Demos so far: `demos/speed_race` (class running speeds). Put new demonstrations here.
 - **Stats & awards**: report events with `MatchStats.add(peer, &"stat")` (server; kills / deaths / soldiers lost
   come from `Unit.die()`, damage from `HitFx.report_hit`). New award = a row in `MatchStats.AWARDS`.

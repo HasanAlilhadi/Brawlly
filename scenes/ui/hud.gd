@@ -14,8 +14,8 @@ signal weapon_switch_requested
 signal ability_requested
 signal dash_requested
 
-const ARMY_ORDERS: PackedStringArray = ["Follow", "Charge", "Hold", "Kill"]
-const ARMY_KEYS: PackedStringArray = ["1", "2", "3", "4"]
+const ARMY_ORDERS: PackedStringArray = ["Follow", "Charge", "Hold", "Kill", "March"]
+const ARMY_KEYS: PackedStringArray = ["1", "2", "3", "4", "5"]
 ## A boss's bar shows while it is this close to you.
 const BOSS_BAR_RANGE: float = 40.0
 const DOWNED_PANEL_WIDTH: float = 380.0
@@ -357,6 +357,8 @@ func _build_extras() -> void:
 	_army_row.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	_army_row.add_theme_constant_override("separation", 4)
 	for order in ARMY_ORDERS.size():
+		if order == Player.Order.MARCH and Net.mode() != Net.Mode.CONQUEST:
+			continue  # only Conquest has territories to march to (the last button: indices stay the orders)
 		var button := Button.new()
 		button.text = ARMY_ORDERS[order]
 		button.theme_type_variation = &"ButtonBeige"
@@ -367,7 +369,9 @@ func _build_extras() -> void:
 		if not Platform.mobile_layout:
 			button.tooltip_text = "%s (%s)" % [ARMY_ORDERS[order], ARMY_KEYS[order]]
 			# Key prompt (1 / 2 / 3 / 4) at the left of the label.
-			button.icon = load("res://assets/ui/prompts/keyboard/%s.png" % ARMY_KEYS[order])
+			var prompt := "res://assets/ui/prompts/keyboard/%s.png" % ARMY_KEYS[order]
+			if ResourceLoader.exists(prompt):  # no "5" prompt copied yet: the tooltip names the key
+				button.icon = load(prompt)
 			for state in ["icon_normal_color", "icon_hover_color", "icon_pressed_color", "icon_hover_pressed_color", "icon_focus_color"]:
 				button.add_theme_color_override(state, UiKit.PROMPT_INK)  # same dark key cap as UiKit.prompt
 			button.add_theme_constant_override("h_separation", 6)

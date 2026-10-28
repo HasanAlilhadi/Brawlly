@@ -70,6 +70,15 @@ var _match_pace: float = -1.0
 @export var regroup_arrive: float = 2.5
 ## Archers shoot from up to this far (from the target's surface); set from `archer_range()` on every think.
 var shoot_range: float = 6.0
+## MARCH (Conquest): arrived this close to the territory, soldiers patrol a ring of PATROL_RADIUS around it
+## (turning PATROL_TURN rad/s) and fight what comes within MARCH_GUARD of it; on the way they only fight what
+## comes within aggro_range. The path comes from a NavigationAgent3D made on the first march order (none before).
+const MARCH_ARRIVE: float = 10.0
+const MARCH_GUARD: float = 12.0
+const PATROL_RADIUS: float = 5.0
+const PATROL_TURN: float = 0.15
+var _nav: NavigationAgent3D
+var _patrol_angle: float = 0.0
 ## Conquest upkeep (set by LogisticsManager on the server; the defaults change nothing in other modes):
 ## speed and damage multipliers (starving, broken weapon), weapon durability 0..100 (-1 = never wears) and
 ## arrows left (-1 = endless quiver; 0 = the archer fights up close).
@@ -290,6 +299,8 @@ func _desired_move(delta: float) -> Vector3:
 	if not GameConfig.is_gone(target):
 		return _shoot_at(delta) if shoots() else engage(target, delta)
 	var order := _order()
+	if order == Player.Order.MARCH:
+		return _march_move(delta)
 	if order == Player.Order.FOLLOW and GameConfig.is_gone(leader):
 		return Vector3.ZERO
 	var slot := _slot_point()
@@ -438,6 +449,9 @@ func _think() -> void:
 	if order == Player.Order.KILL:
 		_think_kill()
 		return
+	if order == Player.Order.MARCH:
+		_think_march()
+		return
 	if _regroup > 0.0:
 		# Carrying out an order: go to the new spot, ignore fights on the way.
 		_update_slot()
@@ -539,13 +553,56 @@ func _obey() -> void:
 	_order_serial = leader.order_serial
 	target = null
 	_target_lock = 0.0
-	_regroup = 0.0 if leader.army_order == Player.Order.KILL else regroup_time
+	_regroup = 0.0 if leader.army_order == Player.Order.KILL or leader.army_order == Player.Order.MARCH else regroup_time
+	_patrol_angle = randf() * TAU  # MARCH: each soldier its own spot on the ring
 
 
 ## Where this soldier stands in the formation: around the player (FOLLOW) or the ordered point.
 func _slot_point() -> Vector3:
 	var anchor := leader.global_position if _order() == Player.Order.FOLLOW else leader.army_point
 	return anchor + _slot_offset
+
+
+## MARCH: the path to this soldier's spot on the patrol ring (the ring turns once they are there), and who to
+## fight: near itself on the way, anything near the territory once arrived.
+func _think_march() -> void:
+	_regroup = 0.0  # a long walk: no "ignore every fight" window, aggro_range keeps them on the road
+	if _nav == null:
+		_nav = NavigationAgent3D.new()
+		_nav.radius = radius
+		_nav.path_desired_distance = 1.0
+		_nav.target_desired_distance = 0.8
+		add_child(_nav)
+	var point := leader.army_point
+	var arrived := _flat(point - global_position).length() < MARCH_ARRIVE
+	if arrived:
+		_patrol_angle += PATROL_TURN * 0.3
+	_slot_offset = Vector3(cos(_patrol_angle), 0.0, sin(_patrol_angle)) * PATROL_RADIUS
+	_nav.target_position = point + _slot_offset
+	var guard := MARCH_GUARD if arrived else aggro_range
+	var candidate := _best_enemy(point if arrived else global_position, guard)
+	target = _commit_target(target if is_instance_valid(target) and target is Unit else null, candidate, guard + 4.0)
+	if target and not arrived and _flat(target.global_position - global_position).length() > guard + 4.0:
+		target = null  # keep marching
+
+
+## MARCH: along the navigation path to the patrol spot (straight at it while there is no path: no navigation
+## mesh, or it is still baking).
+func _march_move(delta: float) -> Vector3:
+	var goal := leader.army_point + _slot_offset
+	var to_goal := _flat(goal - global_position)
+	if to_goal.length() < 0.6:
+		return _separation * 0.5
+	var step := to_goal
+	if _nav:
+		var next := _flat(_nav.get_next_path_position() - global_position)
+		if next.length() > 0.05:
+			step = next
+	return steer(step.normalized() * (1.0 if to_goal.length() > walk_distance else 0.5), delta)
+
+
+static func _flat(v: Vector3) -> Vector3:
+	return Vector3(v.x, 0.0, v.z)
 
 
 ## KILL: everyone on the ordered target, no leash, no switching (the player turns the order into a

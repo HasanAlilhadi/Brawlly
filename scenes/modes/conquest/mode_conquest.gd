@@ -25,9 +25,16 @@ const PLACE_NAMES: PackedStringArray = ["Ashford", "Brightwater", "Coldharbor", 
 		"Valewood", "Westmarch", "Yarrowby"]
 const CITADEL_NAMES: PackedStringArray = ["Highkeep", "Sunspire", "Wolfcrag"]
 
+## Navigation mesh voxels (the map's cell size must match).
+const NAV_CELL: float = 0.5
+const NAV_CELL_HEIGHT: float = 0.25
+
 ## Every territory, in plan order (every peer, after build_objectives).
 var territories: Array[TerritoryNode] = []
 var logistics: LogisticsManager
+## Server: the baked world for marching soldiers (navigation_ready once the bake thread is done).
+var navigation: NavigationRegion3D
+var navigation_ready: bool = false
 
 ## [{kind, pos, owner, name}] from the seed (setup); build_objectives turns it into nodes.
 var _plan: Array[Dictionary] = []
@@ -100,6 +107,8 @@ func world_clear_radius() -> float:
 
 func build_objectives(world: Node3D) -> void:
 	super.build_objectives(world)
+	if multiplayer.is_server():
+		_bake_navigation(world)  # before the gatehouses exist: they break and come back, the mesh doesn't
 	for i in _plan.size():
 		var planned: Dictionary = _plan[i]
 		var territory := TerritoryNode.new()
@@ -116,6 +125,40 @@ func build_objectives(world: Node3D) -> void:
 	logistics.mode = self
 	add_child(logistics)
 	logistics.stock_changed.connect(func() -> void: scores_changed.emit())  # the HUD line shows the stock
+
+
+## Server: a navigation mesh of the whole world (ground minus trees, rocks, walls and fences) for soldiers on a
+## MARCH order (Ally._think_march). Parsed now, baked on a thread; soldiers walk straight until it is ready.
+func _bake_navigation(world: Node3D) -> void:
+	var half := GameConfig.world_half
+	var mesh := NavigationMesh.new()
+	mesh.cell_size = NAV_CELL
+	mesh.cell_height = NAV_CELL_HEIGHT
+	mesh.agent_radius = 0.5
+	mesh.agent_height = 1.5
+	mesh.agent_max_climb = 0.25
+	mesh.geometry_parsed_geometry_type = NavigationMesh.PARSED_GEOMETRY_STATIC_COLLIDERS
+	mesh.geometry_collision_mask = GameConfig.LAYER_WORLD | GameConfig.LAYER_FENCE
+	mesh.filter_baking_aabb = AABB(Vector3(-half, -1.0, -half), Vector3(half * 2.0, 4.0, half * 2.0))
+	var source := NavigationMeshSourceGeometryData3D.new()
+	NavigationServer3D.parse_source_geometry_data(mesh, source, world)
+	# The ground, whatever the map's own ground is made of: units always stand at y = 0.
+	var a := Vector3(-half, 0.0, -half)
+	var b := Vector3(half, 0.0, -half)
+	var c := Vector3(half, 0.0, half)
+	var d := Vector3(-half, 0.0, half)
+	# Both windings: whichever one the baker reads as facing up makes the ground walkable.
+	source.add_faces(PackedVector3Array([a, c, b, a, d, c, a, b, c, a, c, d]), Transform3D.IDENTITY)
+	var map := world.get_world_3d().navigation_map
+	NavigationServer3D.map_set_cell_size(map, NAV_CELL)
+	NavigationServer3D.map_set_cell_height(map, NAV_CELL_HEIGHT)
+	navigation = NavigationRegion3D.new()
+	navigation.name = "Navigation"
+	world.add_child(navigation)
+	NavigationServer3D.bake_from_source_geometry_data_async(mesh, source, func() -> void:
+		if is_instance_valid(navigation):
+			navigation.navigation_mesh = mesh
+			navigation_ready = true)
 
 
 func uses_time_limit() -> bool:

@@ -35,7 +35,8 @@ signal shield_changed
 signal ability_changed
 
 ## KILL: every soldier hunts `army_target` down (then they charge where it fell).
-enum Order { FOLLOW, CHARGE, HOLD, KILL }
+## MARCH (Conquest): the soldiers walk to a territory on their own (navigation mesh) and patrol it.
+enum Order { FOLLOW, CHARGE, HOLD, KILL, MARCH }
 
 const TARGET_GROUPS: Array[StringName] = [&"active_enemies", &"player_units"]
 ## Height arrows and thrown spears fly at; main.gd reads the mouse aim on this plane, so a shot passes right
@@ -2608,15 +2609,22 @@ func _build_downed_visuals() -> void:
 
 ## FOLLOW: formation around the player. CHARGE: run to `point` and fight everything there.
 ## HOLD: guard `point`. KILL: hunt the enemy at `point` (none there → CHARGE `point`).
+## MARCH: go to the territory nearest `point`, however far (none on the map → CHARGE `point`).
 ## Every order is obeyed at once: soldiers drop their fight and go (see Ally._obey).
 func command_army(order: int, point: Vector3) -> void:
 	if is_dead:
 		return
-	order = clampi(order, Order.FOLLOW, Order.KILL)
+	order = clampi(order, Order.FOLLOW, Order.MARCH)
 	var offset := point - global_position
 	offset.y = 0.0
 	army_point = GameConfig.clamp_to_world(global_position + offset.limit_length(MAX_ORDER_DISTANCE))
 	army_target = null
+	if order == Order.MARCH:
+		var territory := march_point(get_tree(), point)
+		if territory == Vector3.INF:
+			order = Order.CHARGE
+		else:
+			army_point = territory
 	if order == Order.KILL:
 		army_target = kill_target_near(point)
 		if army_target:
@@ -2626,6 +2634,17 @@ func command_army(order: int, point: Vector3) -> void:
 	army_target_path = army_target.get_path() if army_target else NodePath()
 	army_order = order
 	order_serial += 1
+
+
+## MARCH: the middle of the territory (group `territories`, Conquest) nearest `point`; INF when there are none.
+## Every peer can ask (the HUD marks where the soldiers are going).
+static func march_point(tree: SceneTree, point: Vector3) -> Vector3:
+	var best := Vector3.INF
+	for node in tree.get_nodes_in_group(&"territories"):
+		var spot := (node as Node3D).global_position
+		if best == Vector3.INF or spot.distance_to(point) < best.distance_to(point):
+			best = spot
+	return best
 
 
 ## The hostile unit closest to `point` (within `radius`), for a kill order.

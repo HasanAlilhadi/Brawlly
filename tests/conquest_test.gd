@@ -3,7 +3,8 @@ extends Node
 ## village's guards liberates it, standing in it raises our banner; the logistics tick pays income + points, feeds
 ## soldiers (starving slows them), wears / repairs weapons and refills quivers only within supply range; an enemy
 ## citadel's gate shrugs off our own side, takes HAND_SHARE from a hero, and once broken the citadel can be taken;
-## holding every citadel wins.
+## holding every citadel wins. Caravans follow cut-off armies, supply them, get looted or go home; MARCH sends the
+## army to a far territory along the navigation mesh, where it patrols.
 ##   "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/conquest_test.gd
 
 var t := 0.0
@@ -20,6 +21,8 @@ var field := Vector3.ZERO
 var homebound: CaravanUnit
 var homebound_cargo := 0
 var home_food := 0
+var patrol_from := Vector3.ZERO
+var marched := false
 
 
 func _ready() -> void:
@@ -225,8 +228,37 @@ func _process(delta: float) -> void:
 			_put(mode.territories[0].position)
 			_next()
 		7:
+			# Phase 4: MARCH sends the army to a territory however far, along the navigation mesh, to patrol it.
+			var city := mode.territories[3]
+			if not marched:
+				marched = true
+				_check(mode.navigation_ready, "the navigation mesh is baked")
+				var far := city.position.distance_to(player.followers()[0].global_position)
+				_check(far > Player.MAX_ORDER_DISTANCE, "the army is far from the City (%.0f m)" % far)
+				player.command_army(Player.Order.MARCH, city.position + Vector3(3.0, 0.0, 2.0))
+				_check(player.army_order == Player.Order.MARCH and player.army_point.is_equal_approx(city.position), "MARCH targets the territory nearest the point")
+				return
+			var soldiers := player.followers()
+			var there := soldiers.filter(func(a: Node) -> bool:
+					return Ally._flat((a as Node3D).global_position - city.position).length() < Ally.MARCH_ARRIVE + 1.0)
+			if there.size() < soldiers.size() * 0.8 and pt < 90.0:
+				return
+			_check(there.size() >= soldiers.size() * 0.8, "the army reaches the City (%d / %d in %.0fs)" % [there.size(), soldiers.size(), pt])
+			var pathed := soldiers.any(func(a: Node) -> bool: return (a as Ally)._nav != null)
+			_check(pathed, "soldiers walk by the navigation agent")
+			patrol_from = (soldiers[0] as Node3D).global_position
 			_next()
 		8:
+			if pt < 6.0:
+				return
+			var soldier := player.followers()[0] as Node3D
+			_check(soldier.global_position.distance_to(patrol_from) > 0.5, "they patrol the ring (moved %.1f m)" % soldier.global_position.distance_to(patrol_from))
+			_check(Ally._flat(soldier.global_position - mode.territories[3].position).length() < Ally.MARCH_ARRIVE + 1.0, "and stay at the City")
+			player.command_army(Player.Order.FOLLOW, player.global_position)
+			_next()
+		9:
+			_next()
+		10:
 			var citadel := mode.territories[1]
 			var own_gate := mode.territories[0].gate
 			own_gate.take_damage(500.0, player)
@@ -235,7 +267,7 @@ func _process(delta: float) -> void:
 			_check(is_equal_approx(citadel.gate.health, citadel.gate.max_health - 100.0 * TerritoryGate.HAND_SHARE), "a hero only chips the gate (%.0f)" % citadel.gate.health)
 			_put(citadel.position)
 			_next()
-		9:
+		11:
 			_put(mode.territories[1].position)
 			if pt < 3.0:
 				return
@@ -245,7 +277,7 @@ func _process(delta: float) -> void:
 				gate.take_damage(gate.max_health / TerritoryGate.HAND_SHARE + 1.0, player)
 			_check(mode.territories[1].gate.is_broken(), "gate broken")
 			_next()
-		10:
+		12:
 			var target := mode.territories[1] if mode.territories[1].owner_team != 0 else mode.territories[2]
 			_put(target.position)
 			if mode.is_over or pt > 60.0:

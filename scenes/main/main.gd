@@ -44,8 +44,8 @@ const PING_COLORS: Array[Color] = [Color(0.45, 0.8, 1.0), Color(1.0, 0.35, 0.3),
 const PING_COOLDOWN: float = 0.7
 ## Clients send held-button actions at most this often (the server enforces cooldowns anyway).
 const ACTION_SEND_INTERVAL: float = 0.15
-const ARMY_ACTIONS: Array[StringName] = [&"army_follow", &"army_charge", &"army_hold", &"army_kill"]
-const ARMY_SHOUTS: PackedStringArray = ["Follow me!", "Charge!", "Hold here!", "Kill!"]
+const ARMY_ACTIONS: Array[StringName] = [&"army_follow", &"army_charge", &"army_hold", &"army_kill", &"army_march"]
+const ARMY_SHOUTS: PackedStringArray = ["Follow me!", "Charge!", "Hold here!", "Kill!", "March!"]
 ## Kill order with the mouse: an enemy counts as clicked this close to the cursor (px at 1080 p).
 const KILL_PICK_PIXELS: float = 70.0
 ## Kill order without a cursor (gamepad / touch): the enemy nearest this far ahead, within this radius.
@@ -908,6 +908,10 @@ func _command_army(order: int, point: Vector3 = Vector3.INF) -> void:
 	var from_cursor := point != Vector3.INF
 	if point == Vector3.INF:
 		point = _ahead_point(ORDER_AHEAD)
+	if order == Player.Order.MARCH:
+		point = Player.march_point(get_tree(), point)  # the territory nearest the cursor (Conquest)
+		if point == Vector3.INF:
+			return  # no territories in this mode
 	if order == Player.Order.KILL:
 		var prey := _kill_pick() if from_cursor and not Platform.mobile_layout else \
 				local_player.kill_target_near(_ahead_point(KILL_AHEAD), KILL_AHEAD_RADIUS)
@@ -921,7 +925,7 @@ func _command_army(order: int, point: Vector3 = Vector3.INF) -> void:
 		local_player.net_command.rpc_id(1, order, point)
 	var shout: String = ARMY_SHOUTS[order]
 	FloatingText3D.spawn(world, local_player.global_position + Vector3(0, 2.1, 0), shout, Color(1.0, 0.95, 0.8), 52)
-	if order == Player.Order.CHARGE or order == Player.Order.HOLD:
+	if order == Player.Order.CHARGE or order == Player.Order.HOLD or order == Player.Order.MARCH:
 		PingMarker.spawn(world, point, shout, local_player.unit_color if local_player.unit_color.a > 0.0 else Color.WHITE,
 				local_player.display_name)
 

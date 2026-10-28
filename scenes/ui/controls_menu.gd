@@ -29,6 +29,7 @@ const KEYBOARD: Array = [
 	["flag", "Soldiers: charge", "They run to the cursor and fight there", [["keyboard/2"]]],
 	["shield", "Soldiers: hold", "They guard the spot under the cursor", [["keyboard/3"]]],
 	["target", "Soldiers: kill", "They hunt the enemy under the cursor (none there: charge) · or click Kill, then the enemy", [["keyboard/4"]]],
+	["flag", "Soldiers: march", "Conquest: they walk to the territory nearest the cursor and patrol it", [["5"]]],
 	["location", "Ping", "Attack! · Loot! · Here! for your team", [["G"], ["mouse/scroll"]]],
 	["heart", "Call for help", "", [["keyboard/h"]]],
 	["exclamation", "Interact", "Training Field: play as another hero, spawn a practice orc", [["F"]]],
@@ -61,7 +62,7 @@ const TOUCH: Array = [
 	["cursor_move", "Dash Attack", "Swordsman: the button left of the shield button", [["touch/tap"]]],
 	["star_coin", "Upgrades", "The button next to pause", [["touch/tap"]]],
 	["star_coin", "Special ability", "The button above the shield button, lit once charged by 10 XP", [["touch/tap"]]],
-	["user_group", "Soldier orders", "The buttons under your soldier count", [["Follow"], ["Charge"], ["Hold"], ["Kill"]]],
+	["user_group", "Soldier orders", "The buttons under your soldier count", [["Follow"], ["Charge"], ["Hold"], ["Kill"], ["March"]]],
 	["location", "Ping", "Online games", [["!"]]],
 	["pause", "Pause", "", [["II"]]],
 ]
