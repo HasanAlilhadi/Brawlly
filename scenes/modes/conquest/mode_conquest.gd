@@ -154,7 +154,8 @@ func on_territory_captured(territory: TerritoryNode, previous: int) -> void:
 		finish("{team:%d} wins!" % holder, "Every Citadel flies their banner.")
 
 
-## Score line plus this device's faction stockpile ("Food 40  Equip 12  Ammo 33", "STARVING" when short).
+## Score line plus this device's faction stockpile with income and upkeep per tick
+## ("Food 40 (+10 -13)  Equip 12 (+6)  Ammo 33 (+4)  Army +7", "STARVING" when short).
 func score_text(tokens: bool = false) -> String:
 	var text := super.score_text(tokens)
 	if tokens or logistics == null:
@@ -162,7 +163,11 @@ func score_text(tokens: bool = false) -> String:
 	var mine := logistics.stock_of(Net.team_of(Net.my_id()))
 	if mine.is_empty():
 		return text
-	text += "   Food %d  Equip %d  Ammo %d" % [mine[&"food"], mine[&"equipment"], mine[&"ammo"]]
+	var income: Dictionary = mine[&"income"]
+	text += "   Food %d (+%d -%d)  Equip %d (+%d)  Ammo %d (+%d)" % [mine[&"food"], income.get(&"food", 0),
+			mine[&"food_need"], mine[&"equipment"], income.get(&"equipment", 0), mine[&"ammo"], income.get(&"ammo", 0)]
+	if mine[&"cap_bonus"] > 0:
+		text += "  Army +%d" % mine[&"cap_bonus"]
 	if mine[&"starving"]:
 		text += "  STARVING"
 	return text

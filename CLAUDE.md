@@ -137,8 +137,11 @@ by touch index so the joystick and buttons work together with multi-touch.
   `upkeep_damage`), archers spend `Ally.ammo` (0 → weak melee, `Ally.shoots()`); repair / refill only within a
   supply point's range (group `conquest_supply`: `team_id` + `supply_range()`; caravans will join it). The Ally
   upkeep fields default to neutral (-1 / 1.0), so other modes are unchanged. Win: every Citadel, score limit, or
-  time. HUD: `score_text()` adds the faction stockpile. Planned next: recruits / army cap from places, caravans,
-  marching soldiers to a territory, siege engines, walls.
+  time. Held places also give every hero of the faction army cap (`INFO.cap`, added to the replicated
+  `follower_cap` as a change only, at most `CAP_BONUS_MAX` 20), free recruits every `RECRUIT_EVERY` ticks
+  (`soldiers_training` of the hero with the smallest army and room), and rebuild their gates from equipment
+  while uncontested (`TerritoryGate.repair`). HUD: `score_text()` adds the stockpile with income / upkeep per
+  tick and the cap bonus. Planned next: caravans, marching soldiers to a territory, siege engines, walls.
 - **Last Stand** (`GameMode`, test `tests/last_stand_test.gd` + `--defeat`, online `tests/last_stand_mp_test.gd`):
   a procedural world is `main.LAST_STAND_WORLD_SCALE` (1.15×) bigger; `GameMode._plan_circles()` plans `CIRCLE_COUNT`
   (10) circles from the seed (every peer knows them; WorldBuilder keeps `world_clear_radius()` around each and puts

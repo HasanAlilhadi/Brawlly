@@ -22,6 +22,7 @@ func _ready() -> void:
 	Net.open_offline_lobby()
 	Net.settings.mode = Net.Mode.CONQUEST
 	Net.settings.seed = 777
+	Net.settings.score_limit = 1000  # the citadels decide this test, not the score
 	Net.settings.events = []
 	get_tree().change_scene_to_file("res://scenes/main/main.tscn")
 
@@ -109,6 +110,7 @@ func _process(delta: float) -> void:
 		4:
 			if pt < 0.3:
 				return
+			mode.logistics._timer = 1000.0  # only the test's own ticks from here on
 			var stock := mode.logistics.stock_of(0)
 			stock[&"food"] = 0
 			score_before = mode.scores.get(0, 0)
@@ -129,6 +131,23 @@ func _process(delta: float) -> void:
 			archer.global_position = village.position
 			mode.logistics.tick()
 			_check(archer.ammo == LogisticsManager.QUIVER and archer.durability == LogisticsManager.FULL_DURABILITY and archer.upkeep_damage == 1.0, "in supply range: quiver refilled, weapon repaired")
+			# Phase 2: a held City raises the army cap, trains free recruits and rebuilds its gate.
+			var city := mode.territories[3]
+			city._captured_by(0)
+			var cap_before := player.follower_cap
+			var gate_before := city.gate.health
+			mode.logistics.tick()
+			var city_cap: int = TerritoryNode.INFO[TerritoryNode.Kind.CITY].cap
+			_check(player.follower_cap == cap_before + city_cap, "a City raises the army cap (%d → %d)" % [cap_before, player.follower_cap])
+			_check(city.gate.health > gate_before, "equipment rebuilds the City gate (%.0f → %.0f)" % [gate_before, city.gate.health])
+			mode.logistics.tick()
+			_check(player.follower_cap == cap_before + city_cap, "the cap bonus is given once")
+			var training_before := player.soldiers_training
+			mode.logistics.tick()
+			while mode.logistics._ticks % LogisticsManager.RECRUIT_EVERY != 0:
+				mode.logistics.tick()
+			var recruits := 1 + 1 + 2  # citadel + village + city
+			_check(player.soldiers_training == training_before + recruits, "held places train free recruits (%d)" % (player.soldiers_training - training_before))
 			_next()
 		5:
 			var citadel := mode.territories[1]

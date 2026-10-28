@@ -70,6 +70,16 @@ func restore(share: float) -> void:
 	_net_health.rpc(health)
 
 
+## Server: rebuild by `amount` (up to full); returns what it took.
+func repair(amount: float) -> float:
+	var added := minf(amount, max_health - health)
+	if added <= 0.0:
+		return 0.0
+	health += added
+	_net_health.rpc(health)
+	return added
+
+
 @rpc("authority", "call_local", "reliable")
 func _net_health(value: float) -> void:
 	health = value

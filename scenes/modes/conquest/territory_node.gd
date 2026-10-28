@@ -12,17 +12,18 @@ enum Kind { VILLAGE, OUTPOST, CITY, CITADEL }
 enum State { INFESTED, NEUTRAL, OWNED }
 
 ## Per kind: ring radius, guard count and the WorldEvents.WAVE_TYPES rows they come from, seconds to capture,
-## gate health (0 = no gate), points per logistics tick, income per tick and the supply range.
+## gate health (0 = no gate), points per logistics tick, income per tick, the supply range, army cap for every
+## hero of the holder (`cap`) and recruits it trains for the holder every LogisticsManager.RECRUIT_EVERY ticks.
 const INFO: Dictionary = {
 	Kind.VILLAGE: {"name": "Village", "radius": 6.0, "guards": 3, "rows": 1, "capture": 8.0, "gate": 0.0,
-			"points": 1, "food": 6, "equipment": 0, "ammo": 1, "supply": 16.0},
+			"points": 1, "food": 6, "equipment": 0, "ammo": 1, "supply": 16.0, "cap": 0, "recruits": 1},
 	Kind.OUTPOST: {"name": "Outpost", "radius": 7.0, "guards": 5, "rows": 2, "capture": 10.0, "gate": 0.0,
-			"points": 2, "food": 1, "equipment": 3, "ammo": 4, "supply": 20.0},
+			"points": 2, "food": 1, "equipment": 3, "ammo": 4, "supply": 20.0, "cap": 2, "recruits": 0},
 	Kind.CITY: {"name": "City", "radius": 9.0, "guards": 8, "rows": 4, "capture": 15.0, "gate": 1200.0,
-			"points": 4, "food": 4, "equipment": 4, "ammo": 4, "supply": 26.0},
+			"points": 4, "food": 4, "equipment": 4, "ammo": 4, "supply": 26.0, "cap": 5, "recruits": 2},
 	# A faction's home: minimal baseline income, so a bigger army needs conquered production.
 	Kind.CITADEL: {"name": "Citadel", "radius": 10.0, "guards": 0, "rows": 0, "capture": 20.0, "gate": 2000.0,
-			"points": 3, "food": 4, "equipment": 2, "ammo": 3, "supply": 30.0},
+			"points": 3, "food": 4, "equipment": 2, "ammo": 3, "supply": 30.0, "cap": 0, "recruits": 1},
 }
 ## Capture progress drains this much faster than it builds when nobody is taking the place.
 const DECAY: float = 0.5
@@ -150,6 +151,13 @@ func _update_capture(delta: float) -> bool:
 		if progress <= 0.0:
 			capturer = -1
 	return capturer != before_capturer or (progress == 0.0) != (before == 0.0)
+
+
+## A faction other than the holder has someone standing in the ring (no gate repairs then).
+func contested() -> bool:
+	var inside := _teams_inside()
+	inside.erase(owner_team)
+	return not inside.is_empty()
 
 
 ## Factions with a standing hero or soldier inside the ring (team -> count).
