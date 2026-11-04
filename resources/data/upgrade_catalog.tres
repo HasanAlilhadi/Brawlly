@@ -12,12 +12,112 @@
 [ext_resource type="Texture2D" uid="uid://d1leu55trgc8d" path="res://assets/ui/icons/game/heart.svg" id="glyph_heart"]
 [ext_resource type="Texture2D" uid="uid://mkqs2cj2l4b8" path="res://assets/ui/icons/game/rotate_right.svg" id="glyph_rotate_right"]
 [ext_resource type="Texture2D" uid="uid://bt7fvpkd557ys" path="res://assets/ui/icons/game/shield.svg" id="glyph_shield"]
-[ext_resource type="Texture2D" uid="uid://drvr60mshoqi" path="res://assets/ui/icons/game/spear.svg" id="glyph_spear"]
+[ext_resource type="Texture2D" path="res://assets/ui/icons/game/medical_kit.svg" id="glyph_medical_kit"]
 [ext_resource type="Texture2D" uid="uid://cuny4r1sbx63f" path="res://assets/ui/icons/game/target.svg" id="glyph_target"]
 [ext_resource type="Texture2D" uid="uid://cij7p2003q5jv" path="res://assets/ui/icons/banner.png" id="icon_banner"]
 [ext_resource type="Texture2D" uid="uid://c8jbhlg8oj0es" path="res://assets/ui/icons/potion.png" id="icon_potion"]
 [ext_resource type="Texture2D" uid="uid://87gmfgn5duiw" path="res://assets/ui/icons/shield.png" id="icon_shield"]
 [ext_resource type="Texture2D" uid="uid://nlolsqkgsmsa" path="res://assets/ui/icons/soldier.png" id="icon_soldier"]
+
+[sub_resource type="Resource" id="Upgrade_arm_sword"]
+script = ExtResource("2_def")
+id = &"arm_sword"
+title = "Sword"
+description = "Swings through crowds; shield and dash upgrades. Your level and weapon upgrades start over"
+icon = ExtResource("glyph_broadsword")
+base_cost = 30
+cost_growth = 1.0
+max_level = 0
+amount = 0.0
+sheet = &"weapon"
+modes = Array[int]([3])
+
+[sub_resource type="Resource" id="Upgrade_arm_bow"]
+script = ExtResource("2_def")
+id = &"arm_bow"
+title = "Bow"
+description = "Arrows from range; range, pierce and knife upgrades. Your level and weapon upgrades start over"
+icon = ExtResource("glyph_bow")
+base_cost = 30
+cost_growth = 1.0
+max_level = 0
+amount = 0.0
+sheet = &"weapon"
+modes = Array[int]([3])
+
+[sub_resource type="Resource" id="Upgrade_arm_wizard"]
+script = ExtResource("2_def")
+id = &"arm_wizard"
+title = "Wizard Staff"
+description = "Magic bolts from range. Your level and weapon upgrades start over"
+icon = ExtResource("glyph_ghost")
+base_cost = 45
+cost_growth = 1.0
+max_level = 0
+amount = 0.0
+sheet = &"weapon"
+modes = Array[int]([3])
+
+[sub_resource type="Resource" id="Upgrade_arm_healer"]
+script = ExtResource("2_def")
+id = &"arm_healer"
+title = "Healer Staff"
+description = "Heals the friend nearest your aim, a weak bolt when nobody is hurt. Level and weapon upgrades start over"
+icon = ExtResource("glyph_medical_kit")
+base_cost = 45
+cost_growth = 1.0
+max_level = 0
+amount = 0.0
+sheet = &"weapon"
+modes = Array[int]([3])
+
+[sub_resource type="Resource" id="Upgrade_staff_damage"]
+script = ExtResource("2_def")
+id = &"staff_damage"
+title = "Increase Damage"
+description = "+20% magic bolt damage"
+icon = ExtResource("glyph_ghost")
+base_cost = 40
+cost_growth = 1.5
+max_level = 5
+amount = 0.2
+classes = Array[StringName]([&"wizard"])
+
+[sub_resource type="Resource" id="Upgrade_staff_rate"]
+script = ExtResource("2_def")
+id = &"staff_rate"
+title = "Fire Rate"
+description = "+15% casting speed"
+icon = ExtResource("glyph_rotate_right")
+base_cost = 60
+cost_growth = 1.6
+max_level = 3
+amount = 0.15
+classes = Array[StringName]([&"wizard"])
+
+[sub_resource type="Resource" id="Upgrade_heal_power"]
+script = ExtResource("2_def")
+id = &"heal_power"
+title = "Stronger Healing"
+description = "+20% healing (and bolt damage)"
+icon = ExtResource("glyph_medical_kit")
+base_cost = 40
+cost_growth = 1.5
+max_level = 5
+amount = 0.2
+classes = Array[StringName]([&"healer"])
+
+[sub_resource type="Resource" id="Upgrade_heal_rate"]
+script = ExtResource("2_def")
+id = &"heal_rate"
+title = "Casting Speed"
+description = "+15% casting speed"
+icon = ExtResource("glyph_rotate_right")
+base_cost = 60
+cost_growth = 1.6
+max_level = 3
+amount = 0.15
+classes = Array[StringName]([&"healer"])
 
 [sub_resource type="Resource" id="Upgrade_vitality"]
 script = ExtResource("2_def")
@@ -46,9 +146,45 @@ sheet = &"hero"
 [sub_resource type="Resource" id="Upgrade_recruit"]
 script = ExtResource("2_def")
 id = &"recruit"
-title = "Recruit"
-description = "Trains for 5 s, then joins you"
+title = "Recruit Swordsman"
+description = "Sword and shield. Trains for 5 s, then joins you"
 icon = ExtResource("icon_soldier")
+base_cost = 10
+cost_growth = 1.0
+max_level = 0
+amount = 1.0
+sheet = &"army"
+
+[sub_resource type="Resource" id="Upgrade_recruit_bow"]
+script = ExtResource("2_def")
+id = &"recruit_bow"
+title = "Recruit Archer"
+description = "Shoots arrows from behind the army"
+icon = ExtResource("glyph_bow")
+base_cost = 10
+cost_growth = 1.0
+max_level = 0
+amount = 1.0
+sheet = &"army"
+
+[sub_resource type="Resource" id="Upgrade_recruit_wizard"]
+script = ExtResource("2_def")
+id = &"recruit_wizard"
+title = "Recruit Wizard"
+description = "Hurls magic bolts: hits hard, fires slowly"
+icon = ExtResource("glyph_ghost")
+base_cost = 10
+cost_growth = 1.0
+max_level = 0
+amount = 1.0
+sheet = &"army"
+
+[sub_resource type="Resource" id="Upgrade_recruit_healer"]
+script = ExtResource("2_def")
+id = &"recruit_healer"
+title = "Recruit Healer"
+description = "No attack: heals the most wounded friend near"
+icon = ExtResource("icon_potion")
 base_cost = 10
 cost_growth = 1.0
 max_level = 0
@@ -88,6 +224,18 @@ cost_growth = 1.0
 max_level = 4
 amount = 5.0
 sheet = &"army"
+
+[sub_resource type="Resource" id="Upgrade_muster"]
+script = ExtResource("2_def")
+id = &"muster"
+title = "Muster"
+description = "General only: call up to 10 soldiers from your barracks; they march to you"
+icon = ExtResource("icon_banner")
+base_cost = 0
+cost_growth = 1.0
+max_level = 0
+sheet = &"army"
+modes = Array[int]([3])
 
 [sub_resource type="Resource" id="Upgrade_siege_ram"]
 script = ExtResource("2_def")
@@ -174,40 +322,6 @@ amount = 1.5
 classes = Array[StringName]([&"swordsman"])
 key_hint = "C"
 
-[sub_resource type="Resource" id="Upgrade_spear_damage"]
-script = ExtResource("2_def")
-id = &"spear_damage"
-title = "Increase Damage"
-description = "+20% spear damage (stab and throw)"
-icon = ExtResource("glyph_spear")
-base_cost = 40
-amount = 0.2
-classes = Array[StringName]([&"spearman"])
-
-[sub_resource type="Resource" id="Upgrade_spear_rate"]
-script = ExtResource("2_def")
-id = &"spear_rate"
-title = "Fire Rate"
-description = "+15% faster stabs and throws"
-icon = ExtResource("glyph_rotate_right")
-base_cost = 60
-cost_growth = 1.6
-max_level = 3
-amount = 0.15
-classes = Array[StringName]([&"spearman"])
-
-[sub_resource type="Resource" id="Upgrade_spear_throw"]
-script = ExtResource("2_def")
-id = &"spear_throw"
-title = "Can Throw"
-description = "Throw spears at range. E switches between stab and throw"
-icon = ExtResource("glyph_target")
-base_cost = 100
-cost_growth = 1.0
-max_level = 1
-classes = Array[StringName]([&"spearman"])
-key_hint = "E"
-
 [sub_resource type="Resource" id="Upgrade_bow_damage"]
 script = ExtResource("2_def")
 id = &"bow_damage"
@@ -262,7 +376,7 @@ icon = ExtResource("glyph_shield")
 base_cost = 80
 cost_growth = 1.0
 max_level = 1
-classes = Array[StringName]([&"swordsman", &"spearman"])
+classes = Array[StringName]([&"swordsman"])
 key_hint = "RMB"
 
 [sub_resource type="Resource" id="Upgrade_knife"]
@@ -280,4 +394,4 @@ key_hint = "RMB"
 
 [resource]
 script = ExtResource("1_catalog")
-upgrades = Array[ExtResource("2_def")]([SubResource("Upgrade_vitality"), SubResource("Upgrade_potion"), SubResource("Upgrade_recruit"), SubResource("Upgrade_soldier_damage"), SubResource("Upgrade_soldier_health"), SubResource("Upgrade_command"), SubResource("Upgrade_siege_ram"), SubResource("Upgrade_siege_catapult"), SubResource("Upgrade_sword_damage"), SubResource("Upgrade_sword_rate"), SubResource("Upgrade_sword_knockback"), SubResource("Upgrade_sword_wave"), SubResource("Upgrade_sword_dash"), SubResource("Upgrade_spear_damage"), SubResource("Upgrade_spear_rate"), SubResource("Upgrade_spear_throw"), SubResource("Upgrade_bow_damage"), SubResource("Upgrade_bow_rate"), SubResource("Upgrade_bow_range"), SubResource("Upgrade_bow_pierce"), SubResource("Upgrade_shield"), SubResource("Upgrade_knife")])
+upgrades = Array[ExtResource("2_def")]([SubResource("Upgrade_arm_sword"), SubResource("Upgrade_arm_bow"), SubResource("Upgrade_arm_wizard"), SubResource("Upgrade_arm_healer"), SubResource("Upgrade_vitality"), SubResource("Upgrade_potion"), SubResource("Upgrade_recruit"), SubResource("Upgrade_recruit_bow"), SubResource("Upgrade_recruit_wizard"), SubResource("Upgrade_recruit_healer"), SubResource("Upgrade_soldier_damage"), SubResource("Upgrade_soldier_health"), SubResource("Upgrade_command"), SubResource("Upgrade_muster"), SubResource("Upgrade_siege_ram"), SubResource("Upgrade_siege_catapult"), SubResource("Upgrade_sword_damage"), SubResource("Upgrade_sword_rate"), SubResource("Upgrade_sword_knockback"), SubResource("Upgrade_sword_wave"), SubResource("Upgrade_sword_dash"), SubResource("Upgrade_bow_damage"), SubResource("Upgrade_bow_rate"), SubResource("Upgrade_bow_range"), SubResource("Upgrade_bow_pierce"), SubResource("Upgrade_shield"), SubResource("Upgrade_knife"), SubResource("Upgrade_staff_damage"), SubResource("Upgrade_staff_rate"), SubResource("Upgrade_heal_power"), SubResource("Upgrade_heal_rate")])

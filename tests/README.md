@@ -4,21 +4,25 @@ Run from the project folder (`G` = the Godot binary). Tests start the game norma
 `test_runner.tscn` and print results with a `HOST` / `CLIENT` / `[time]` prefix. Excluded from exports.
 
 ```bash
-# Conquest: territories, liberation, capture, logistics upkeep, caravans, march order, walls, siege, citadel victory
+# Conquest: zones, territories, raids, treasury + lords, rations / meals, couriers + routes, the M map, barracks, squads,
+# guards (unguarded places fall), raids battering gates, march order, walls, siege, the Demon's Lair victory
 "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/conquest_test.gd
-# Conquest screenshots (window): HUD stock line, walls + siege engines at an enemy gate, Army tab
+# Conquest heroes: start Unarmed, buy a weapon (swapped in place: coins, Vitality, health, soldiers carry over), levels
+# from kills reset by a new weapon, the wizard's bolts and healer's heals; the left supplies panel, its flows and card
+"$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/conquest_hero_test.gd
+# Conquest screenshots (window): HUD + supplies panel with its Weapons card, walls + siege engines at an enemy gate,
+# Army tab, Hero tab with the weapons to buy
 "$G" --path . res://tests/test_runner.tscn -- --test=res://tests/conquest_shots_test.gd --out=/tmp/shots
+# Conquest's own main-menu section: Conquest → Host Conquest Game → its lobby; classic lobbies have no Conquest
+"$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/conquest_menu_test.gd
 # Menus: presses the real buttons (Host Game → Create Lobby → Leave, Find Game → Back, Host Game → Create Lobby → Start; no Play button)
-# Every test plays a Swordsman unless --class=<swordsman|spearman|bowman> (test_runner.gd)
+# Every test plays a Swordsman unless --class=<swordsman|bowman> (test_runner.gd)
 # Host/client pairs: add --port=<N> to both (e.g. 24575) when a game is already running on this PC (it holds 24565),
 # and no --fixed-fps (it races ahead of real time and the connection times out)
 "$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/ui_flow_test.gd
 
 # Training Field: menu entry, unlimited special ability, permanent damage targets, F-only manual orc spawning, switch hero at the gallery
 "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/training_test.gd
-
-# Spearman Bull Rush: three-second shield charge, front protection, heavy steering, correct spear grip, one hit per target, passes through real orcs
-"$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/bull_rush_test.gd --class=spearman
 
 # Bowman Bow Rain: placed ground area, server-authoritative falling arrows, duration and cleanup
 "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/bow_rain_test.gd
@@ -42,10 +46,10 @@ Run from the project folder (`G` = the Godot binary). Tests start the game norma
 "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/map_events_test.gd
 
 # Class balance bench (prints a table, no pass/fail): real DPS single / crowd / line, ability damage per use,
-# javelin / knife / dash / wave, soldier DPS, maxed upgrades, camera reach per zoom. Run it for all three classes.
+# knife / dash / wave, soldier DPS, maxed upgrades, camera reach per zoom. Run it for both classes.
 "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/balance_test.gd --class=swordsman
 
-# Soldiers: spear soldiers only stab, archers shoot from half the hero's bow range / step back / walk around a
+# Soldiers: archers shoot from half the hero's bow range / step back / walk around a
 # wall in the way / line up behind the hero, swordsmen spread over orcs and defend the hero first, a soldier
 # trapped in a cup of walls follows the hero's trail out, soldiers only walk or run (--shots=<dir> with a window: frames of a stab)
 "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/ally_test.gd
@@ -62,10 +66,11 @@ Run from the project folder (`G` = the Godot binary). Tests start the game norma
 # (key 4, HUD Kill + click), CHARGE after the kill, a KILL that misses charges there
 "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/army_test.gd
 
-# Desktop controls (Spearman): WASD, mouse thrust (aim wedge) / E → throw, K, F does nothing in a match, T opens / closes the upgrades sheet (Hero + Army cards), camera zoom per weapon, R rotates the camera 90°, touch controls hidden until a real touch
-"$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/desktop_input_test.gd --class=spearman
+# Desktop controls (Swordsman; --class=bowman for the bow): WASD, mouse swing (aim wedge), E does nothing with one weapon, right mouse shield (Bowman: aim + shoot), K, F does nothing in a match, T opens / closes the upgrades sheet (Hero + Army cards), camera zoom per weapon, R rotates the camera 90°, touch controls hidden until a real touch
+"$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/desktop_input_test.gd
+"$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/desktop_input_test.gd --class=bowman
 
-# Shield (Swordsman, or --class=spearman): blocks from the front only while up, slower, no attacks, breaks, back on respawn
+# Shield (Swordsman): blocks from the front only while up, slower, no attacks, breaks, back on respawn
 "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/shield_test.gd
 
 # Shield motion: carried upright on the forearm, swings when running, bobs / sways while up (walk clip), a blocked hit recoils and settles
@@ -105,6 +110,12 @@ Run from the project folder (`G` = the Godot binary). Tests start the game norma
 "$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/last_stand_mp_test.gd --role=host --port=24715 &
 "$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/last_stand_mp_test.gd --role=client --port=24715
 
+# Multiplayer Conquest: a squad made on the host reaches the client (leader + banner, out of the army, its map card);
+# the client's Train and squad orders reach the server and come back, an unguarded place counts down on the client;
+# the client buys a bow and binds its new hero (HUD, camera, prediction), the supplies flows reach it
+"$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/conquest_mp_test.gd --role=host --port=24725 &
+"$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/conquest_mp_test.gd --role=client --port=24725
+
 # Multiplayer King of the Hill: one spawn area per team (no warbands near), hill score, game over (+ back to lobby)
 "$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/mp_modes_host.gd &
 "$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/mp_modes_client.gd
@@ -112,7 +123,6 @@ Run from the project folder (`G` = the Godot binary). Tests start the game norma
 # Class upgrades (T sheet): cards per class, buying anywhere, damage / fire rate, and per class: shield, Knock Back
 # (locks Wave), Wave, Dash Attack · Can Throw · Fire Range, Penetration (3 orcs), Knife
 "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/class_upgrades_test.gd --class=swordsman
-"$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/class_upgrades_test.gd --class=spearman
 "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/class_upgrades_test.gd --class=bowman
 # Class upgrades online: client buys via the server, predicted dash, the host's Fire Range seen on the client
 "$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/class_upgrades_mp_test.gd --role=host --class=bowman --port=24705 &

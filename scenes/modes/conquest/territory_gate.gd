@@ -4,7 +4,8 @@ extends StaticBody3D
 ## take the place's banner. Any weapon of another faction chips at it (group `breakable`), but only siege engines
 ## (group `siege`) hit it at full force; heroes and soldiers deal HAND_SHARE. Comes back at a share of its health
 ## when the place changes hands.
-## It is solid only while the place is held and the gate stands; even then it opens for the holder's own heroes,
+## It is solid while the place is held (or infested: the demons bar it, so a walled place is stormed by breaking
+## the gate — siege engines) and the gate stands; a held gate opens for the holder's own heroes,
 ## soldiers and caravans near it while no foe is near (`_update_open`). Server decides; every peer gets the health
 ## (`_net_health`) and whether it is shut (`_net_shut`): predicted players collide on their own device too.
 
@@ -63,8 +64,10 @@ func is_broken() -> bool:
 
 ## Held, standing and not opened for a friend.
 func _should_shut() -> bool:
-	if territory == null or territory.state != TerritoryNode.State.OWNED or is_broken():
+	if territory == null or is_broken() or territory.state == TerritoryNode.State.NEUTRAL:
 		return false
+	if territory.state == TerritoryNode.State.INFESTED:
+		return true
 	return not _friend_waiting()
 
 
@@ -108,7 +111,7 @@ func hide_from_navigation(hidden: bool) -> void:
 func take_damage(amount: float, attacker: Node3D = null, is_melee: bool = true, crit: bool = false) -> void:
 	if not multiplayer.is_server() or is_broken() or territory == null:
 		return
-	if territory.state != TerritoryNode.State.OWNED:
+	if territory.state == TerritoryNode.State.NEUTRAL:
 		return  # nobody's gate: nothing to break
 	var attacker_team: Variant = attacker.get("team_id") if is_instance_valid(attacker) else null
 	if attacker_team == null or int(attacker_team) < 0 or int(attacker_team) == territory.owner_team:
@@ -120,6 +123,22 @@ func take_damage(amount: float, attacker: Node3D = null, is_melee: bool = true, 
 	if health <= 0.0 and was > 0.0:
 		territory.mode.announce("The gate of %s is broken!" % territory.display_name)
 	_net_health.rpc(health)
+
+
+## Server (ConquestMode raids): demons at the gate hammer it (they can't hurt it as units: their team is < 0).
+func batter(amount: float) -> void:
+	if not multiplayer.is_server() or is_broken() or territory == null or territory.state != TerritoryNode.State.OWNED:
+		return
+	health = maxf(health - amount, 0.0)
+	if health <= 0.0:
+		territory.mode.announce("Demons broke the gate of %s!" % territory.display_name)
+	_net_health.rpc(health)
+
+
+## Where attackers stand to hit it: just outside, in front of it (it faces the middle of the map).
+func outside_point(margin: float = 1.4) -> Vector3:
+	var at := global_position + global_basis.z.normalized() * (size.z * 0.5 + margin)
+	return Vector3(at.x, 0.0, at.z)
 
 
 ## Server: back to `share` of full health (the new holder rebuilds it).

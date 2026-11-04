@@ -33,7 +33,7 @@ static func pickup(kind: int, amount: int, position: Vector3) -> void:
 			"name": _name(&"pickup")})
 
 
-## kind: &"arrow", &"spear" (orc throwers), &"player_spear" (hits orcs) or &"sword_wave" (the Wave upgrade).
+## kind: &"arrow", &"spear" (orc throwers) or &"sword_wave" (the Wave upgrade).
 ## `extra`: "pierce" (enemies it flies through), "lifetime_scale" (longer flight = farther range).
 static func projectile(kind: StringName, from: Vector3, direction: Vector3, damage: float, shooter: Node,
 		crit: bool = false, check_shooter_origin: bool = true, speed: float = 0.0,

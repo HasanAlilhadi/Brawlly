@@ -3,9 +3,12 @@ extends Unit
 ## Conquest: a siege engine bought on the Army tab (`siege_ram` / `siege_catapult`, UpgradeDef.modes = Conquest),
 ## owned by a hero (NetSpawn kind `siege`, "engine" = "ram" / "catapult"). Only siege engines (group `siege`) hit
 ## gates at full force (TerritoryGate.HAND_SHARE for everyone else).
-## - Battering ram: rolls up to the nearest enemy gate within SEEK and rams it every `cooldown`.
-## - Catapult: stops within `range` of the nearest enemy gate (outside the walls) and lobs a boulder at it; the
-##   boulder also hurts foes near where it lands (`splash`).
+## Which gate: the one of the place its hero's army order points at (CHARGE / HOLD / KILL / MARCH within
+## ORDER_REACH of a walled place: a rival's, or one the demons still bar), at any distance; otherwise the nearest
+## such gate within `seek`. It drives there on the navigation mesh (around walls), then:
+## - Battering ram: rolls up to the gate (from outside) and rams it every `cooldown`.
+## - Catapult: stops within `range` of the gate and lobs a boulder at it; the boulder also hurts foes near where
+##   it lands (`splash`).
 ## Neither has a target? It trails its hero. It never fights units; monsters and rival factions attack it (group
 ## `player_units`). Server runs it; every peer sees the swing / the boulder through `_net_ram` / `_net_boulder`.
 ## The models are primitive placeholders built in code (like the gatehouse).
@@ -21,6 +24,8 @@ const ENGINES: Dictionary = {
 }
 ## Trailing its hero this far behind.
 const FOLLOW_DISTANCE: float = 5.0
+## An army order this close to a walled place's ring sends the engines at its gate.
+const ORDER_REACH: float = 18.0
 ## Seconds a boulder flies.
 const BOULDER_FLIGHT: float = 1.2
 const WOOD := Color(0.5, 0.34, 0.18)
@@ -30,6 +35,8 @@ var engine: String = "ram"
 
 var _blow_timer: float = 0.0
 var _gate: TerritoryGate
+var _nav: NavigationAgent3D
+var _gate_check: float = 0.0
 var _arm: Node3D
 
 
@@ -142,24 +149,51 @@ func _get_move_input(delta: float) -> Vector3:
 	if not multiplayer.is_server():
 		return Vector3.ZERO
 	_blow_timer = maxf(_blow_timer - delta, 0.0)
-	if not is_instance_valid(_gate) or not _is_target(_gate):
+	_gate_check -= delta
+	if _gate_check <= 0.0 or not is_instance_valid(_gate) or not _is_target(_gate):
+		_gate_check = 0.5
 		_gate = _find_gate()
 	if _gate:
 		return _siege(delta)
 	var leader := hero()
 	if leader == null or leader.is_dead:
 		return Vector3.ZERO
-	var to := _flat(leader.global_position - global_position)
-	return steer(to.normalized(), delta) if to.length() > FOLLOW_DISTANCE else Vector3.ZERO
+	return _drive_to(leader.global_position, FOLLOW_DISTANCE, delta)
 
 
-## A standing gate of a place another faction holds.
+## Toward `goal` along the navigation path (straight while there is none); stops within `arrive`.
+func _drive_to(goal: Vector3, arrive: float, delta: float) -> Vector3:
+	var to := _flat(goal - global_position)
+	if to.length() <= arrive:
+		return Vector3.ZERO
+	if _nav == null:
+		_nav = NavigationAgent3D.new()
+		_nav.radius = radius
+		_nav.path_desired_distance = 1.0
+		_nav.target_desired_distance = 0.8
+		add_child(_nav)
+	if _nav.target_position.distance_to(goal) > 1.0:
+		_nav.target_position = goal
+	var step := to
+	var next := _flat(_nav.get_next_path_position() - global_position)
+	if next.length() > 0.05 and not _nav.is_navigation_finished():
+		step = next
+	return steer(step.normalized(), delta)
+
+
+## A standing gate of a place another faction holds, or one the demons still bar.
 func _is_target(gate: TerritoryGate) -> bool:
-	return gate.territory and gate.territory.state == TerritoryNode.State.OWNED \
-			and gate.territory.owner_team != team_id and not gate.is_broken()
+	if gate.territory == null or gate.is_broken():
+		return false
+	var place := gate.territory
+	return place.state == TerritoryNode.State.INFESTED \
+			or (place.state == TerritoryNode.State.OWNED and place.owner_team != team_id)
 
 
 func _find_gate() -> TerritoryGate:
+	var ordered := _ordered_gate()
+	if ordered:
+		return ordered
 	var best: TerritoryGate = null
 	var best_d: float = info().seek
 	for node in get_tree().get_nodes_in_group(&"territories"):
@@ -173,14 +207,30 @@ func _find_gate() -> TerritoryGate:
 	return best
 
 
+## The gate of the place the hero's army order points at (any distance), or null.
+func _ordered_gate() -> TerritoryGate:
+	var leader := hero()
+	if leader == null or leader.army_order == Player.Order.FOLLOW:
+		return null
+	var point := leader.army_point
+	if leader.army_order == Player.Order.KILL and not GameConfig.is_gone(leader.army_target):
+		point = leader.army_target.global_position
+	for node in get_tree().get_nodes_in_group(&"territories"):
+		var place := node as TerritoryNode
+		if place.gate == null or not _is_target(place.gate):
+			continue
+		if _flat(place.global_position - point).length() < place.radius() + ORDER_REACH:
+			return place.gate
+	return null
+
+
 ## Closes in (ram: right up to the gate, from outside; catapult: into range), then strikes every cooldown.
 func _siege(delta: float) -> Vector3:
 	var outside := _gate.global_position + _gate.global_basis.z.normalized() * (_gate.size.z * 0.5 + 1.4)
 	var aim := _flat(_gate.global_position - global_position)
 	var reach: float = info().reach
 	if aim.length() > reach:
-		var goal := outside if engine == "ram" else _gate.global_position
-		return steer(_flat(goal - global_position).normalized(), delta)
+		return _drive_to(outside, 0.3 if engine == "ram" else 0.0, delta)
 	face(aim, delta * 2.0)
 	if _blow_timer <= 0.0:
 		_blow_timer = info().cooldown

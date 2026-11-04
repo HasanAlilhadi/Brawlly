@@ -2,7 +2,7 @@ extends Node
 ## Balance bench for the class passed with --class: measures real damage in the game (cooldowns, hit frames,
 ## hit areas) against still orcs with lots of health, crits off, and prints one table row per scenario:
 ## single target (DPS), a crowd of 6 (total DPS), a line of 4 (pierce), the special ability (damage per use on
-## one target and on the crowd), the extra weapons / moves (javelin, knife, dash, wave), all again with the
+## one target and on the crowd), the extra weapons / moves (knife, dash, wave), all again with the
 ## damage + rate upgrades maxed. Also the camera: how far ahead the screen shows at each zoom.
 ##   "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/balance_test.gd --class=bowman
 
@@ -37,7 +37,7 @@ func _ready() -> void:
 	await _soldier()
 	await _bench("base")
 	for upgrade in [&"_damage", &"_rate"]:
-		var def_id := StringName({"swordsman": "sword", "spearman": "spear", "bowman": "bow"}[id] + upgrade)
+		var def_id := StringName({"swordsman": "sword", "bowman": "bow"}[id] + upgrade)
 		for i in 5:
 			player.grant_upgrade(def_id)
 	await _bench("maxed")
@@ -110,7 +110,7 @@ func _attack(point: Vector3, seconds: float, how: String = "main") -> float:
 				else:
 					player.shoot(to)
 		await get_tree().physics_frame
-	await _wait(1.0)  # arrows / spears in flight land
+	await _wait(1.0)  # arrows in flight land
 	return _damage()
 
 
@@ -139,7 +139,7 @@ func _bench(label: String) -> void:
 		_orc(AHEAD * (d + i * 0.8))
 	var line := await _attack(AHEAD * d, BENCH_TIME) / BENCH_TIME
 	_row("%s %s" % [label, player.current_weapon()], "single %5.1f dps   crowd6 %6.1f dps   line4 %6.1f dps   (dmg %.1f, cd %.2f s, from %.1f m)" % [
-			single, crowd, line, player.arrow_damage if player.current_weapon() == "bow" else (player.spear_damage if player.class_def.id == &"spearman" else player.melee_damage),
+			single, crowd, line, player.arrow_damage if player.current_weapon() == "bow" else player.melee_damage,
 			player.melee_cooldown if player.holds_melee() else player.shoot_cooldown, d])
 	await _ability(label)
 
@@ -159,14 +159,6 @@ func _ability(label: String) -> void:
 						_orc(Vector3(cos(i * TAU / 6.0), 0, sin(i * TAU / 6.0)) * 1.2)
 				else:
 					_orc(AHEAD * 1.2)
-				player.use_ability()
-			&"bull_rush":
-				if crowd:
-					for row in 2:
-						for col in 3:
-							_orc(AHEAD * (2.5 + row * 1.2) + Vector3((col - 1) * 0.7, 0, 0))
-				else:
-					_orc(AHEAD * 3.0)
 				player.use_ability()
 			&"bow_rain":
 				center = AHEAD * 8.0
@@ -199,14 +191,6 @@ func _extras() -> void:
 				_orc(AHEAD * (1.2 + i * 1.0))
 			var wave := await _attack(AHEAD * 1.2, BENCH_TIME) / BENCH_TIME
 			_row("maxed sword + wave", "line4 %.1f dps" % wave)
-		&"spearman":
-			player.grant_upgrade(&"spear_throw")
-			player.switch_weapon()
-			await _reset()
-			_orc(AHEAD * 8.0)
-			var single := await _attack(AHEAD * 8.0, BENCH_TIME) / BENCH_TIME
-			_row("maxed javelin", "single %.1f dps from 8 m (dmg %.1f, cd %.2f s)" % [single, player.spear_damage, player.spear_cooldown])
-			player.switch_weapon()
 		&"bowman":
 			player.grant_upgrade(&"knife")
 			await _reset()

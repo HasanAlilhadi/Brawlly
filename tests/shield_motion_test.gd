@@ -1,5 +1,5 @@
 extends Node
-## Shield motion (Swordsman, or --class=spearman): carried upright on the forearm, face out, off the ground; it
+## Shield motion (Swordsman): carried upright on the forearm, face out, off the ground; it
 ## swings with the arm when running; up, it bobs / sways with the walk (walk clip, never sprint); a blocked hit
 ## knocks it back and it settles without re-blending the arms.
 ##   "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/shield_motion_test.gd

@@ -13,8 +13,10 @@ const SCORE_LIMITS := [
 	Vector3i(0, 0, 0),       # co-op: not used
 	Vector3i(30, 300, 120),  # king of the hill: seconds held
 	Vector3i(0, 0, 0),       # last stand: not used (ten circles)
-	Vector3i(100, 1000, 400),  # conquest: points from held territories
+	Vector3i(500, 6000, 2500),  # conquest: points from held territories (the Throne pays 25 a tick)
 ]
+## Conquest's default time limit (minutes): a big map takes a while.
+const CONQUEST_TIME: int = ConquestMode.DEFAULT_TIME
 const PLAYERS_WIDTH: float = 700.0
 const SLOT_HEIGHT: float = 70.0
 const CROWN_COLOR := Color("e0a830")
@@ -51,6 +53,8 @@ var _countdown_overlay: Control
 var _countdown_number: Label
 var _class_picker: ClassPicker
 var _preview: ArmyPreview
+## Conquest: no class to pick (heroes start unarmed and buy a weapon in the match), this note instead.
+var _classless_note: Label
 
 
 func _ready() -> void:
@@ -150,6 +154,10 @@ func _build() -> void:
 	_class_picker.picked.connect(func(class_id: StringName) -> void:
 		if not Net.game_in_progress:
 			Net.set_class(class_id))
+	_classless_note = MenuKit.label("Conquest heroes start unarmed. Buy a sword, bow or staff on the Hero tab (T) "
+			+ "and grow stronger with every kill. A new weapon starts your level over.", &"HintLabel", 24)
+	_classless_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(_classless_note)
 	box.add_child(HSeparator.new())
 	box.add_child(MenuKit.label("Match settings", &"HeaderLabel"))
 	_settings_box = VBoxContainer.new()
@@ -286,12 +294,19 @@ func _refresh_summary(settings: Dictionary) -> void:
 
 
 func _build_settings() -> void:
-	_mode_option = _add_option("Mode", Net.MODE_NAMES, func(index: int) -> void:
+	# Only the classic modes: Conquest is its own section of the main menu (its lobby has no mode choice).
+	var classic := PackedStringArray()
+	for each in Net.CLASSIC_MODES:
+		classic.append(Net.MODE_NAMES[each])
+	_mode_option = _add_option("Mode", classic, func(choice: int) -> void:
+		var index: int = Net.CLASSIC_MODES[choice]
 		Net.set_setting("mode", index)
 		Net.set_setting("map", String(MapCatalog.default_for(index).id))
 		var limits: Vector3i = SCORE_LIMITS[index]
 		if limits.y > 0:
-			Net.set_setting("score_limit", limits.z))
+			Net.set_setting("score_limit", limits.z)
+		if index == Net.Mode.CONQUEST:
+			Net.set_setting("time_limit", CONQUEST_TIME))
 	_mode_hint = MenuKit.label("", &"HintLabel", 22)
 	_mode_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_settings_box.add_child(_mode_hint)
@@ -309,7 +324,7 @@ func _build_settings() -> void:
 	_add_slider("start_coins", "Starting coins", 0, 1000, 50)
 	_add_slider("team_count", "Teams", 2, 4, 1)
 	_add_slider("score_limit", "Score to win", 1, 50, 1)
-	_add_slider("time_limit", "Time limit (minutes)", 3, 30, 1)
+	_add_slider("time_limit", "Time limit (minutes)", 3, 60, 1)
 
 
 ## World events: one toggle each (any mix: check = on), two columns (one on phones).
@@ -450,7 +465,10 @@ func _refresh() -> void:
 	_summary.visible = not editable
 	if not editable:
 		_refresh_summary(settings)
-	_mode_option.select(match_mode)
+	var conquest := match_mode == Net.Mode.CONQUEST
+	(_mode_option.get_parent() as Control).visible = not conquest
+	if not conquest:
+		_mode_option.select(Net.CLASSIC_MODES.find(match_mode))
 	_mode_option.disabled = not editable
 	_mode_hint.text = Net.MODE_HINTS[match_mode]
 	_difficulty_option.select(settings.difficulty)
@@ -479,7 +497,7 @@ func _refresh() -> void:
 			var limits: Vector3i = SCORE_LIMITS[match_mode]
 			slider.min_value = maxi(limits.x, 1)
 			slider.max_value = maxi(limits.y, 1)
-			slider.step = 10 if match_mode == Net.Mode.KING_OF_THE_HILL or match_mode == Net.Mode.CONQUEST else 1
+			slider.step = 100 if match_mode == Net.Mode.CONQUEST else (10 if match_mode == Net.Mode.KING_OF_THE_HILL else 1)
 			(entry.label as Label).text = Net.SCORE_LIMIT_LABELS[match_mode]
 		slider.value = settings.get(key, slider.min_value)
 		(entry.value as Label).text = str(int(slider.value))
@@ -509,7 +527,12 @@ func _refresh() -> void:
 		else:
 			_status.text = "%d / %d players ready" % [ready_players.x, ready_players.y]
 	else:
-		_status.text = "Waiting for the host to start…" if my_ready else "Pick your hero, then ready up."
+		_status.text = "Waiting for the host to start…" if my_ready else (
+				"Ready up when you are." if Net.mode() == Net.Mode.CONQUEST else "Pick your hero, then ready up.")
+	var classless := Net.mode() == Net.Mode.CONQUEST
+	_class_picker.visible = not classless
+	_preview.visible = not classless
+	_classless_note.visible = classless
 	_class_picker.select(Net.class_of(Net.my_id()))
 	_preview.set_class(Net.class_of(Net.my_id()))
 	_updating = false
@@ -538,12 +561,13 @@ func _player_row(peer: int, team_mode: bool) -> Control:
 	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	name_label.clip_text = true
 	row.add_child(name_label)
-	var hero := ClassDef.find(Net.class_of(peer))
-	row.add_child(MenuKit.icon(load(UiKit.GLYPHS % hero.icon), 30, UiKit.PROMPT_INK))
-	var class_label := MenuKit.label(hero.display_name, &"", 22)
-	class_label.add_theme_color_override("font_color", MenuKit.ACCENT)
-	class_label.visible = not MenuKit.is_compact(_player_list)  # phones: the class glyph only
-	row.add_child(class_label)
+	if Net.mode() != Net.Mode.CONQUEST:  # Conquest heroes have no class
+		var hero := ClassDef.find(Net.class_of(peer))
+		row.add_child(MenuKit.icon(load(UiKit.GLYPHS % hero.icon), 30, UiKit.PROMPT_INK))
+		var class_label := MenuKit.label(hero.display_name, &"", 22)
+		class_label.add_theme_color_override("font_color", MenuKit.ACCENT)
+		class_label.visible = not MenuKit.is_compact(_player_list)  # phones: the class glyph only
+		row.add_child(class_label)
 	if team_mode:
 		var team: int = Net.players[peer].get("team", 0)
 		var team_label := MenuKit.label(Net.team_label(team), &"", 24)

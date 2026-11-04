@@ -1,7 +1,7 @@
 extends Node
-## Shield (Swordsman / Spearman): blocks hits from the front only while up, slows the hero, no attacks behind it,
+## Shield (Swordsman): blocks hits from the front only while up, slows the hero, no attacks behind it,
 ## held up in front, breaks, gone until respawn. The shield is a class upgrade: the test buys it first.
-##   "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/shield_test.gd [--class=spearman]
+##   "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/shield_test.gd
 var t := 0.0
 var step := 0
 var player: Player

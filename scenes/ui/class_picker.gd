@@ -16,7 +16,7 @@ func _ready() -> void:
 	row.add_theme_constant_override("separation", 10)
 	add_child(row)
 	var group := ButtonGroup.new()
-	for def in ClassDef.all():
+	for def in ClassDef.pickable():
 		var tab := Button.new()
 		tab.theme_type_variation = &"ButtonTab"
 		tab.toggle_mode = true
@@ -43,7 +43,7 @@ func _ready() -> void:
 	_hint.add_theme_font_size_override("font_size", 22)
 	_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	add_child(_hint)
-	select(_selected if _selected != &"" else ClassDef.all()[0].id)
+	select(_selected if _selected != &"" else ClassDef.pickable()[0].id)
 
 
 ## Shows `class_id` as picked (no signal).

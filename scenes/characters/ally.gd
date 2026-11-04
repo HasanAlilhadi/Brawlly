@@ -3,10 +3,10 @@ extends Unit
 ## Soldier recruited from the upgrades sheet (see Player.soldiers_training): once trained it appears behind
 ## its player (`owner_peer`) and follows in a compact formation, fighting nearby hostiles: orcs, and in versus
 ## modes other players and their soldiers. Once dead, it is gone for good.
-## Soldiers carry their player's class weapon (`weapon`, see WEAPON_STATS): sword and shield, a long
-## spear (melee only: a straight stab, `_spear_stab`), or a bow — archers shoot from `archer_range()` (half
-## their hero's bow range) with a clear line of fire, step back from orcs that get close and stand in a row
-## behind the hero.
+## Four kinds, picked on the Army tab (`weapon`, see WEAPON_STATS): sword and shield; bow — archers shoot from
+## `archer_range()` (half their hero's bow range) with a clear line of fire; wizard — magic bolts from a little
+## closer; healer — no attack, heals the most wounded friend near (`_heal_move`). The three ranged kinds step
+## back from enemies that get close and stand in rows behind the hero (`is_ranged()`).
 ## Teamwork (`_best_enemy`): enemies hitting the hero, then the soldiers, come first; melee soldiers spread
 ## over the enemies instead of piling on one; archers focus the wounded. Following: when a wall or a building
 ## cuts a soldier off from its spot, it walks the hero's recent path (`Player.trail`, `_trail_point`).
@@ -15,10 +15,21 @@ extends Unit
 ## KILL hunts Player.army_target down (then CHARGE where it fell). Orders are always obeyed: on every new
 ## order (Player.order_serial) soldiers drop their fight at once and walk to their new spot without
 ## fighting (`_regroup`, until they get there or `regroup_time` runs out); KILL goes straight for the target.
+## Conquest squads (`squad` > 0, ConquestSquads): not in the hero's formation and deaf to the hero's orders; the
+## leader (`squad_leader`, a banner) walks to the squad's goal, the rest follow it and stand around the goal there
+## (`_think_squad`), guarding it within ConquestSquads.GUARD.
 
 const TARGET_GROUPS: Array[StringName] = [&"active_enemies", &"player_units"]
-const SPEAR_SCENE := preload("res://assets/items/dungeon/spear.glb")
 const BOW_SCENE := preload("res://assets/items/forest/bow.glb")
+const ORB_SCENE := preload("res://scenes/characters/soldier_orb.tscn")
+const POTION_SCENE := preload("res://assets/items/dungeon/potion.glb")
+## Wizards shoot from this share of an archer's range.
+const WIZARD_RANGE_SHARE: float = 0.8
+## Healers: heal the most wounded friend (hero or soldier of their team) within HEAL_SIGHT, from HEAL_RANGE,
+## `heal` health every cooldown (whole points: health is replicated).
+const HEAL_SIGHT: float = 9.0
+const HEAL_RANGE: float = 4.5
+const HEAL_COLOR := Color(0.45, 1.0, 0.55)
 ## Archers shoot from this share of their hero's bow range (Player.aim_range, Fire Range included).
 const ARCHER_RANGE_SHARE: float = 0.5
 ## An enemy closer than this makes an archer step back (still shooting).
@@ -31,24 +42,25 @@ const GUARD_BONUS: float = 2.0
 const BLOCKED_PENALTY: float = 3.0
 ## What blocks walking and arrows (trees, houses, camp walls, fences).
 const OBSTACLE_MASK: int = GameConfig.LAYER_WORLD | GameConfig.LAYER_FENCE
-## Spear stab timing (shares of the action): drawn back, then out, held, back to the carry grip.
-const STAB_DRAW: float = 0.35
-const STAB_OUT: float = 0.55
-const STAB_HOLD: float = 0.75
-const STAB_BACK: float = -0.15
-const STAB_REACH: float = 0.55
 ## Weapon id (ClassDef.ally_weapon) -> stats over the scene's (the sword soldier). `damage` is per hit
 ## (an arrow for the bow).
 ## Every soldier's health and damage × this (on top of the weapon's stats and the Soldier Damage / Health upgrades).
 const BASE_POWER: float = 1.25
-## Conquest upkeep: an archer out of arrows fights with this share of its arrow damage up close.
+## A ranged soldier pushed into melee hits with this share of its shot's damage.
 const BOW_MELEE_SHARE: float = 0.5
-## Weapon wear per hit dealt (durability runs 0..100; at 0 the weapon is broken).
-const WEAR_PER_HIT: float = 1.0
+## Conquest weapons wear by battle: a battle ends BATTLE_END seconds after the soldier's last attack, and then
+## counts as one use (`weapon_uses`). Every WEAR_STEP uses the weapon is weaker (WEAR_LOSS of its damage each),
+## after WEAPON_LIFE uses it is broken (BROKEN_POWER). A new weapon (one weapons supply) resets it.
+const BATTLE_END: float = 6.0
+const WEAPON_LIFE: int = 8
+const WEAR_STEP: int = 2
+const WEAR_LOSS: float = 0.15
+const BROKEN_POWER: float = 0.3
 const WEAPON_STATS: Dictionary = {
 	"sword": {},
-	"spear": {"damage": 11.5, "range": 1.45, "cooldown": 1.1},
 	"bow": {"damage": 11.0, "health": 65.0, "cooldown": 1.2},
+	"wizard": {"damage": 17.0, "health": 60.0, "cooldown": 1.8},
+	"healer": {"damage": 4.0, "health": 70.0, "cooldown": 1.4, "heal": 8.0},
 }
 
 @export var aggro_range: float = 6.0
@@ -79,16 +91,56 @@ const PATROL_RADIUS: float = 5.0
 const PATROL_TURN: float = 0.15
 var _nav: NavigationAgent3D
 var _patrol_angle: float = 0.0
-## Conquest upkeep (set by LogisticsManager on the server; the defaults change nothing in other modes):
-## speed and damage multipliers (starving, broken weapon), weapon durability 0..100 (-1 = never wears) and
-## arrows left (-1 = endless quiver; 0 = the archer fights up close).
+## Ranks (every mode): kills raise a soldier through RANK_NAMES (at RANK_KILLS; a healer's heals count too,
+## one kill per HEALS_PER_KILL); every rank adds RANK_BONUS to its health and damage. Conquest barracks also train
+## the soldiers waiting in them (`rank_for_drill`: DRILL_SECONDS of training per rank), who leave with that rank
+## (spawn data "rank"). `rank` is replicated (Sync) for the badge over its head.
+static var progression: bool = true
+const RANK_KILLS: Array[int] = [0, 2, 5, 10, 20]
+const DRILL_SECONDS: Array[float] = [0.0, 45.0, 120.0, 240.0, 420.0]
+const HEALS_PER_KILL: int = 3
+const RANK_NAMES: PackedStringArray = ["Recruit", "Soldier", "Veteran", "Elite", "Champion"]
+const RANK_BADGES: PackedStringArray = ["", "I", "II", "III", "IV"]
+const RANK_BONUS: float = 0.15
+const RANK_COLOR := Color(1.0, 0.82, 0.3)
+## Mustered (Conquest, spawn data "muster"): it walks from its barracks to its General on the navigation mesh,
+## fighting only what comes within aggro_range, and joins the formation within MUSTER_JOIN.
+const MUSTER_JOIN: float = 10.0
+var mustering: bool = false
+var kills: int = 0
+var _heals: int = 0
+## Healer: who it is healing (server).
+var _patient: Unit
+var rank: int = 0:
+	set(value):
+		var promoted := value > rank
+		rank = value
+		_show_rank(promoted)
+var _rank_label: Label3D
+## Conquest upkeep (server; the defaults change nothing in other modes): speed and damage multipliers (no
+## ration, a worn weapon) and the battles its weapon has been through (-1 = it never wears; see BATTLE_END).
 var upkeep_speed: float = 1.0
 var upkeep_damage: float = 1.0
-var durability: float = -1.0
-var ammo: int = -1
+var weapon_uses: int = -1:
+	set(value):
+		weapon_uses = value
+		upkeep_damage = weapon_power()
+## Server: seconds left of the battle it is in (0 = not fighting).
+var _battle: float = 0.0
+## Conquest: meals it carries (LogisticsManager; -1 = it never eats).
+var rations: int = -1
 
 ## The weapon it fights with (from the spawn data, every peer, before entering the tree).
 var weapon: String = "sword"
+## Conquest: its squad (0 = in its hero's army) and whether it leads it (replicated: the banner, the map).
+var squad: int = 0
+var squad_leader: bool = false:
+	set(value):
+		squad_leader = value
+		_show_banner()
+var _banner: Node3D
+## Server: where it walks to in its squad (the goal for the leader, behind the leader for the rest).
+var _squad_spot: Vector3 = Vector3.INF
 
 var leader: Player
 var target: Node3D
@@ -105,10 +157,6 @@ var _base_damage: float
 var _via: Vector3 = Vector3.INF
 ## The hero's walking direction (archers line up behind it).
 var _heading: Vector3 = Vector3.BACK
-var _stab_phase: float = -1.0  # spear stab progress 0..1, < 0 = not stabbing
-var _stab_scale: Vector3 = Vector3.ONE
-var _carry_transform: Transform3D
-var _stab_tween: Tween
 
 
 func _ready() -> void:
@@ -122,9 +170,41 @@ func _ready() -> void:
 	_base_damage = melee_damage * BASE_POWER
 	_find_leader()
 	refresh_army_bonus()
+	_show_banner()
 
 
 ## Hands and stats for `weapon` (before Unit._ready() attaches the hand items).
+## Every peer: a squad leader carries a banner on its back in its hero's color.
+func _show_banner() -> void:
+	if squad_leader and _banner == null and is_inside_tree():
+		_banner = Node3D.new()
+		_banner.name = "Banner"
+		_banner.position = Vector3(0.0, 0.0, -0.22)
+		var material := StandardMaterial3D.new()
+		material.albedo_color = Net.color_of(owner_peer)
+		var pole_material := StandardMaterial3D.new()
+		pole_material.albedo_color = Color(0.36, 0.25, 0.15)
+		var pole := MeshInstance3D.new()
+		var rod := CylinderMesh.new()
+		rod.top_radius = 0.025
+		rod.bottom_radius = 0.025
+		rod.height = 1.5
+		rod.material = pole_material
+		pole.mesh = rod
+		pole.position = Vector3(0.0, 1.0, 0.0)
+		_banner.add_child(pole)
+		var flag := MeshInstance3D.new()
+		var cloth := BoxMesh.new()
+		cloth.size = Vector3(0.04, 0.42, 0.6)
+		cloth.material = material
+		flag.mesh = cloth
+		flag.position = Vector3(0.0, 1.52, -0.31)
+		_banner.add_child(flag)
+		add_child(_banner)
+	if _banner:
+		_banner.visible = squad_leader
+
+
 func _apply_weapon_stats() -> void:
 	var stats: Dictionary = WEAPON_STATS.get(weapon, {})
 	melee_damage = stats.get("damage", melee_damage)
@@ -132,109 +212,89 @@ func _apply_weapon_stats() -> void:
 	melee_cooldown = stats.get("cooldown", melee_cooldown)
 	max_health = stats.get("health", max_health)
 	match weapon:
-		"spear":
-			# Carried like the orc spearmen; attacks are straight stabs (never thrown).
-			melee_anims = PackedStringArray(["spear-stab"])
-			right_hand_item = SPEAR_SCENE
-			right_hand_offset = Vector3(-0.27, -0.2, 0.0)
-			right_hand_rotation = Vector3.ZERO
-			left_hand_item = null
 		"bow":
 			right_hand_item = null
 			hold_right_arm = false
 			left_hand_item = BOW_SCENE
 			left_hand_offset = Vector3(0.27, -0.24, 0.0)
 			hold_left_arm = true
+		"wizard", "healer":
+			# A glowing orb (wizard) or a potion (healer) in the right hand, nothing in the left.
+			right_hand_item = ORB_SCENE if weapon == "wizard" else POTION_SCENE
+			right_hand_offset = Vector3(-0.27, -0.24, 0.0)
+			right_hand_rotation = Vector3.ZERO
+			left_hand_item = null
 
 
+## Bow soldiers.
 func is_archer() -> bool:
 	return weapon == "bow"
 
 
-## An archer with arrows left (Conquest: an empty quiver means melee until resupplied).
+## Bow, wizard and healer: they stand in rows behind the hero and keep away from enemies.
+func is_ranged() -> bool:
+	return weapon == "bow" or weapon == "wizard" or weapon == "healer"
+
+
+func is_healer() -> bool:
+	return weapon == "healer"
+
+
+## Fights from range: archers and wizards.
 func shoots() -> bool:
-	return is_archer() and ammo != 0
+	return is_archer() or weapon == "wizard"
+
+
+## Barracks training (Conquest): the rank `seconds` of drill earn.
+static func rank_for_drill(seconds: float) -> int:
+	var new_rank := 0
+	while new_rank + 1 < DRILL_SECONDS.size() and seconds >= DRILL_SECONDS[new_rank + 1]:
+		new_rank += 1
+	return new_rank
+
+
+## Before entering the tree: starts at `value` (as if it had the kills for it).
+func start_rank(value: int) -> void:
+	rank = clampi(value, 0, RANK_KILLS.size() - 1)
+	kills = RANK_KILLS[rank]
 
 
 func _roll_melee_damage() -> Array:
-	var damage := melee_damage * upkeep_damage * (BOW_MELEE_SHARE if is_archer() else 1.0)
+	var damage := melee_damage * upkeep_damage * (BOW_MELEE_SHARE if is_ranged() else 1.0)
 	return [damage, false]
 
 
 func _on_hit_dealt(_victim: Node3D, _amount: float) -> void:
-	_wear()
+	_fight()
 
 
-## Conquest: every hit dealt wears the weapon down (nothing when durability is off).
-func _wear() -> void:
-	if durability > 0.0:
-		durability = maxf(durability - WEAR_PER_HIT, 0.0)
+## Server: it attacks — in a battle until BATTLE_END seconds after its last attack.
+func _fight() -> void:
+	_battle = BATTLE_END
 
 
-## How far archers shoot: half their hero's bow range.
+## Server, every frame: a battle that is over has used its weapon once more.
+func _wear_weapon(delta: float) -> void:
+	if _battle <= 0.0:
+		return
+	_battle -= delta
+	if _battle <= 0.0 and weapon_uses >= 0:
+		weapon_uses = mini(weapon_uses + 1, WEAPON_LIFE)
+
+
+## Damage share of its weapon: whole while new, WEAR_LOSS less every WEAR_STEP battles, BROKEN_POWER once broken.
+func weapon_power() -> float:
+	if weapon_uses < 0:
+		return 1.0
+	if weapon_uses >= WEAPON_LIFE:
+		return BROKEN_POWER
+	return 1.0 - WEAR_LOSS * (weapon_uses / WEAR_STEP)
+
+
+## How far archers shoot: half their hero's bow range (wizards a little less).
 func archer_range() -> float:
 	var bow_range: float = leader.aim_range if is_instance_valid(leader) else 12.0
-	return bow_range * ARCHER_RANGE_SHARE
-
-
-## Every peer: the spear soldier's attack is a stab straight ahead (Kenney's melee clip swings the spear
-## overhead, which reads as a throw).
-func _play_action_local(anim_name: String, duration: float, release_arms: int) -> void:
-	if anim_name == "spear-stab":
-		_spear_stab(duration)
-		return
-	super(anim_name, duration, release_arms)
-
-
-func _spear_stab(duration: float) -> void:
-	_action_time = duration
-	_was_acting = true
-	_full_body_action = false
-	if _right_item == null:
-		return
-	var skeleton := model.find_child("Skeleton3D", true, false) as Skeleton3D
-	if skeleton and not skeleton.skeleton_updated.is_connected(_place_stab):
-		_stab_scale = _right_item.global_basis.get_scale()
-		_carry_transform = _right_item.transform
-		skeleton.skeleton_updated.connect(_place_stab)
-	if _stab_tween:
-		_stab_tween.kill()
-	_stab_tween = create_tween()
-	_stab_tween.tween_method(func(t: float) -> void: _stab_phase = t, 0.0, 1.0, duration * 0.95)
-	_stab_tween.tween_callback(func() -> void:
-		_stab_phase = -1.0
-		if is_instance_valid(_right_item):
-			_right_item.transform = _carry_transform)
-	get_tree().create_timer(duration * STAB_DRAW).timeout.connect(func() -> void:
-		if not is_dead and is_inside_tree():
-			var forward := facing()
-			HitFx.stab(self, 0.55, atan2(forward.x, forward.z), melee_range + 0.45, 0.22, Color(1.0, 0.96, 0.85), 0.2))
-
-
-## After each skeleton update while stabbing: the spear level and pointing straight ahead from the hand,
-## drawn back, pushed out and back again (blended from / to the carry grip at the ends).
-func _place_stab() -> void:
-	if _stab_phase < 0.0 or not is_instance_valid(_right_item):
-		return
-	var p := _stab_phase
-	var push := 0.0
-	if p < STAB_DRAW:
-		push = lerpf(0.0, STAB_BACK, p / STAB_DRAW)
-	elif p < STAB_OUT:
-		push = lerpf(STAB_BACK, STAB_REACH, ease((p - STAB_DRAW) / (STAB_OUT - STAB_DRAW), 0.3))
-	elif p < STAB_HOLD:
-		push = STAB_REACH
-	else:
-		push = lerpf(STAB_REACH, 0.0, (p - STAB_HOLD) / (1.0 - STAB_HOLD))
-	var level := clampf(minf(p / 0.15, (1.0 - p) / 0.15), 0.0, 1.0)
-	var carry := (_right_item.get_parent() as Node3D).global_transform * _carry_transform
-	var forward := facing()
-	var shaft := Basis(forward.cross(Vector3.UP), forward, Vector3.UP)  # +Y (shaft, tip) ahead
-	var hand := carry.origin
-	var aimed := Transform3D(shaft.scaled(_stab_scale), hand + forward * (push - 0.2))
-	var blended := carry.interpolate_with(aimed, level)
-	blended.origin = carry.origin.lerp(hand + forward * (push - 0.2), level)
-	_right_item.global_transform = blended
+	return bow_range * ARCHER_RANGE_SHARE * (WIZARD_RANGE_SHARE if weapon == "wizard" else 1.0)
 
 
 func _find_leader() -> void:
@@ -249,9 +309,44 @@ func _find_leader() -> void:
 func refresh_army_bonus() -> void:
 	var valid := is_instance_valid(leader)
 	var ratio := health / max_health if max_health > 0.0 else 1.0
-	max_health = _base_max_health * (leader.ally_health if valid else 1.0)
+	var ranked := 1.0 + RANK_BONUS * rank
+	max_health = _base_max_health * (leader.ally_health if valid else 1.0) * ranked
 	health = max_health * ratio
-	melee_damage = _base_damage * (leader.ally_damage if valid else 1.0)
+	melee_damage = _base_damage * (leader.ally_damage if valid else 1.0) * ranked
+
+
+## Server (Unit.take_damage): this soldier landed a killing blow. With `progression` on, kills raise its rank.
+func credit_kill(_victim: Node3D) -> void:
+	if not progression or is_dead or not multiplayer.is_server():
+		return
+	kills += 1
+	_check_rank()
+
+
+func _check_rank() -> void:
+	var new_rank := rank
+	while new_rank + 1 < RANK_KILLS.size() and kills >= RANK_KILLS[new_rank + 1]:
+		new_rank += 1
+	if new_rank != rank:
+		rank = new_rank
+		refresh_army_bonus()
+
+
+## Every peer: the rank badge over its head (I..IV), and a golden sparkle on a promotion.
+func _show_rank(promoted: bool) -> void:
+	if rank > 0 and _rank_label == null:
+		_rank_label = Label3D.new()
+		_rank_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		_rank_label.pixel_size = 0.009
+		_rank_label.outline_size = 8
+		_rank_label.modulate = RANK_COLOR
+		_rank_label.position = Vector3(0.0, health_bar_height + 0.28, 0.0)
+		add_child(_rank_label)
+	if _rank_label:
+		_rank_label.text = RANK_BADGES[clampi(rank, 0, RANK_BADGES.size() - 1)]
+		_rank_label.visible = rank > 0
+	if promoted and is_inside_tree():
+		HitFx.flash(global_position + Vector3(0, 1.0, 0), HitFx.REVIVE_SPARKLE, Color(RANK_COLOR, 0.9), 1.3, 0.5)
 
 
 ## Compact spiral ("sunflower") formation around the player: slot i sits at radius ~sqrt(i),
@@ -260,9 +355,9 @@ func refresh_army_bonus() -> void:
 func _update_slot() -> void:
 	var squad: Array[Node] = []
 	if is_instance_valid(leader):
-		squad = leader.followers().filter(func(a: Node) -> bool: return a.is_archer() == is_archer())
+		squad = leader.followers().filter(func(a: Node) -> bool: return a.is_ranged() == is_ranged())
 	var index := maxi(squad.find(self), 0)
-	if is_archer():
+	if is_ranged():
 		var row := index / 5
 		var spread := (index % 5 - 2) * 0.42 + (0.21 if row % 2 == 1 else 0.0)
 		_slot_offset = (-_heading).rotated(Vector3.UP, spread) * (2.0 + 0.8 * row)
@@ -288,6 +383,8 @@ func _get_move_input(delta: float) -> Vector3:
 
 ## The move this frame (any length up to 1); `_get_move_input` turns it into a run or a walk.
 func _desired_move(delta: float) -> Vector3:
+	if multiplayer.is_server():
+		_wear_weapon(delta)
 	look_override = Vector3.ZERO  # archers face their target while shooting / stepping back (`_shoot_at`)
 	_regroup = maxf(_regroup - delta, 0.0)
 	_think_timer -= delta
@@ -296,8 +393,14 @@ func _desired_move(delta: float) -> Vector3:
 		_think_timer = 0.25 + randf() * 0.1
 		_think()
 
+	if is_healer() and not GameConfig.is_gone(_patient):
+		return _heal_move(delta)
 	if not GameConfig.is_gone(target):
 		return _shoot_at(delta) if shoots() else engage(target, delta)
+	if mustering and is_instance_valid(leader):
+		return _nav_move(leader.global_position, delta, MUSTER_JOIN * 0.5)
+	if squad > 0:
+		return _nav_move(_squad_spot, delta, 0.6) if _squad_spot != Vector3.INF else _separation * 0.5
 	var order := _order()
 	if order == Player.Order.MARCH:
 		return _march_move(delta)
@@ -344,7 +447,10 @@ func _shoot_at(delta: float) -> Vector3:
 	face(to, delta * 2.0)
 	if _melee_timer <= 0.0 and _action_time <= 0.0:
 		_melee_timer = melee_cooldown * randf_range(0.9, 1.1)
-		play_action("holding-left-shoot", 0.3, ARM_LEFT)
+		if is_archer():
+			play_action("holding-left-shoot", 0.3, ARM_LEFT)
+		else:
+			play_action("holding-right-shoot", 0.4, ARM_RIGHT)
 		get_tree().create_timer(0.12).timeout.connect(_release_arrow)
 	var away := _keep_away()
 	if away != Vector3.ZERO:
@@ -409,7 +515,7 @@ func _trail_point(slot: Vector3) -> Vector3:
 
 
 func _release_arrow() -> void:
-	if is_dead or GameConfig.is_gone(target) or ammo == 0:
+	if is_dead or GameConfig.is_gone(target):
 		return
 	var from := global_position + Vector3(0, 0.55, 0)
 	var aim := target.global_position
@@ -421,10 +527,58 @@ func _release_arrow() -> void:
 		return
 	direction = direction.normalized()
 	face_now(direction)
-	if ammo > 0:
-		ammo -= 1
-	_wear()
+	if weapon == "wizard":
+		_fight()
+		NetSpawn.projectile(&"magic_bolt", from + direction * 0.4, direction, melee_damage * upkeep_damage, self)
+		return
+	_fight()
 	NetSpawn.projectile(&"arrow", from + direction * 0.4, direction, melee_damage * upkeep_damage, self)
+
+
+## Healer: walk up to its patient and heal it every cooldown (stepping back from enemies that get close).
+func _heal_move(delta: float) -> Vector3:
+	var to := _flat(_patient.global_position - global_position)
+	if to.length() > HEAL_RANGE:
+		return steer(to.normalized(), delta)
+	look_override = to.normalized() if to.length() > 0.1 else Vector3.ZERO
+	if _melee_timer <= 0.0 and _action_time <= 0.0 and multiplayer.is_server():
+		_melee_timer = melee_cooldown * randf_range(0.9, 1.1)
+		play_action("holding-right-shoot", 0.4, ARM_RIGHT)
+		var amount := roundf(float(WEAPON_STATS.healer.heal) * (1.0 + RANK_BONUS * rank) * upkeep_damage)
+		_patient.heal(amount)
+		_net_heal_fx.rpc(_patient.get_path())
+		_heals += 1
+		if progression and _heals % HEALS_PER_KILL == 0:
+			kills += 1
+			_check_rank()
+	var away := _keep_away()
+	return steer(away, delta) if away != Vector3.ZERO else _separation * 0.5
+
+
+@rpc("authority", "call_local", "unreliable")
+func _net_heal_fx(path: NodePath) -> void:
+	var patient := get_node_or_null(path) as Node3D
+	if patient and is_inside_tree():
+		HitFx.flash(patient.global_position + Vector3(0, 0.9, 0), HitFx.REVIVE_SPARKLE, Color(HEAL_COLOR, 0.9), 1.0, 0.4)
+
+
+## Healer (server, every think): the most wounded friend within HEAL_SIGHT (its hero and squad first), or null.
+func _find_patient() -> Unit:
+	var best: Unit = null
+	var best_share := 0.97
+	for node in get_tree().get_nodes_in_group(&"player_units"):
+		var unit := node as Unit
+		if unit == null or GameConfig.is_gone(unit) or unit.team_id != team_id or unit.max_health <= 0.0:
+			continue
+		if flat_distance_to(unit) > HEAL_SIGHT:
+			continue
+		var share := unit.health / unit.max_health
+		if unit == leader:
+			share -= 0.1  # the hero first
+		if share < best_share:
+			best_share = share
+			best = unit
+	return best
 
 
 func _walk_to(point: Vector3, delta: float) -> Vector3:
@@ -436,6 +590,8 @@ func _walk_to(point: Vector3, delta: float) -> Vector3:
 func _think() -> void:
 	if not is_instance_valid(leader):
 		_find_leader()
+	if squad > 0 and is_instance_valid(leader):
+		_order_serial = leader.order_serial  # a squad takes its orders from the map, not the hero's army orders
 	if is_instance_valid(leader) and leader.order_serial != _order_serial:
 		_obey()
 	shoot_range = archer_range()
@@ -445,6 +601,19 @@ func _think() -> void:
 		if walking.length() > 0.8:
 			_heading = _heading.slerp(walking.normalized(), 0.5).normalized()
 	_via = Vector3.INF
+	_think_orders()
+	if is_healer():
+		target = null  # healers never fight: they follow the orders and heal (`_heal_move`)
+		_patient = _find_patient()
+
+
+func _think_orders() -> void:
+	if mustering:
+		_think_muster()
+		return
+	if squad > 0:
+		_think_squad()
+		return
 	var order := _order()
 	if order == Player.Order.KILL:
 		_think_kill()
@@ -481,6 +650,46 @@ func _think() -> void:
 		_via = _trail_point(_slot_point())
 
 
+## Squad (server, every think): the leader heads for the squad's goal, the rest follow the leader (a ring around
+## it) and, once it is there, stand on a ring around the goal; on the way they fight what comes within aggro_range,
+## there what comes within ConquestSquads.GUARD of the goal.
+func _think_squad() -> void:
+	var squads := get_tree().get_first_node_in_group(&"conquest_squads") as ConquestSquads
+	var goal := squads.goal(squad) if squads else Vector3.INF
+	if goal == Vector3.INF:
+		squad = 0  # its squad is gone: back to its hero
+		squad_leader = false
+		mustering = true
+		return
+	_regroup = 0.0
+	_ensure_nav()
+	var mates := squads.members(squad)
+	var head: Ally = mates[0] if not mates.is_empty() and mates[0].squad_leader else null
+	var there := _flat(goal - global_position).length() < ConquestSquads.GUARD
+	if squad_leader or head == null:
+		_squad_spot = goal
+	else:
+		var index := maxi(mates.find(self) - 1, 0)
+		var count := maxi(mates.size() - 1, 1)
+		var ring := Vector3(cos(TAU * index / count), 0.0, sin(TAU * index / count)) * (2.6 if is_ranged() else 1.7)
+		var head_there := _flat(goal - head.global_position).length() < ConquestSquads.ARRIVE * 2.0
+		_squad_spot = (goal if head_there else head.global_position) + ring
+	_nav.target_position = _squad_spot
+	var guard := ConquestSquads.GUARD if there else aggro_range
+	var reach := guard + (shoot_range if shoots() else 0.0)
+	var candidate := _best_enemy(goal if there else global_position, reach)
+	target = _commit_target(target if is_instance_valid(target) and target is Unit else null, candidate, reach + 4.0)
+	if target and _flat(target.global_position - (goal if there else global_position)).length() > reach + 6.0:
+		target = null  # don't get dragged away
+
+
+## Server (ConquestSquads.command): a new squad order: drop the fight and go.
+func squad_ordered() -> void:
+	target = null
+	_target_lock = 0.0
+	_think_timer = 0.0
+
+
 ## The leader's army order (FOLLOW without a leader).
 func _order() -> int:
 	return leader.army_order if is_instance_valid(leader) else Player.Order.FOLLOW
@@ -488,7 +697,7 @@ func _order() -> int:
 
 ## How far a soldier looks for enemies: archers a little past their shooting range.
 func _sight() -> float:
-	return maxf(aggro_range, shoot_range + 1.5) if is_archer() else aggro_range
+	return maxf(aggro_range, shoot_range + 1.5) if is_ranged() else aggro_range
 
 
 ## Melee soldiers finish the enemy they're after: no switching to a closer one that got in the way (they
@@ -496,7 +705,7 @@ func _sight() -> float:
 ## isn't. A new target once it's dead or out of `keep_range`. Archers pick again every think (`_best_enemy`
 ## keeps the current one a little ahead).
 func _commit_target(current: Node3D, candidate: Node3D, keep_range: float) -> Node3D:
-	if GameConfig.is_gone(current) or flat_distance_to(current) > keep_range or is_archer():
+	if GameConfig.is_gone(current) or flat_distance_to(current) > keep_range or is_ranged():
 		return candidate
 	if candidate and candidate != current and _defending(candidate) and not _defending(current):
 		return candidate
@@ -515,7 +724,9 @@ func _defending(enemy: Node3D) -> bool:
 ## DEFEND_BONUS m closer (hitting a squadmate: GUARD_BONUS); melee soldiers add CROWD_PENALTY per squadmate
 ## already on it (they spread over the enemies); archers prefer the wounded and a clear line of fire.
 func _best_enemy(origin: Vector3, max_range: float) -> Node3D:
-	var squad: Array[Node] = leader.followers() if is_instance_valid(leader) else []
+	var squad: Array[Node] = []
+	if is_instance_valid(leader):  # (a hero being swapped for a new weapon is gone for a frame)
+		squad = leader.followers()
 	var best: Node3D = null
 	var best_score := INF
 	for group in TARGET_GROUPS:
@@ -529,7 +740,7 @@ func _best_enemy(origin: Vector3, max_range: float) -> Node3D:
 			var score := d
 			if _defending(enemy):
 				score -= DEFEND_BONUS if enemy.get("target") == leader else GUARD_BONUS
-			if is_archer():
+			if is_ranged():
 				var hp: Variant = enemy.get("health")
 				var top: Variant = enemy.get("max_health")
 				if hp is float and top is float and top > 0.0:
@@ -538,7 +749,7 @@ func _best_enemy(origin: Vector3, max_range: float) -> Node3D:
 					score += BLOCKED_PENALTY
 			else:
 				for mate in squad:
-					if mate != self and not mate.is_archer() and mate.target == enemy:
+					if mate != self and not mate.is_ranged() and mate.target == enemy:
 						score += CROWD_PENALTY
 			if enemy == target:
 				score -= 1.0  # no flip-flopping between two close ones
@@ -567,12 +778,7 @@ func _slot_point() -> Vector3:
 ## fight: near itself on the way, anything near the territory once arrived.
 func _think_march() -> void:
 	_regroup = 0.0  # a long walk: no "ignore every fight" window, aggro_range keeps them on the road
-	if _nav == null:
-		_nav = NavigationAgent3D.new()
-		_nav.radius = radius
-		_nav.path_desired_distance = 1.0
-		_nav.target_desired_distance = 0.8
-		add_child(_nav)
+	_ensure_nav()
 	var point := leader.army_point
 	var arrived := _flat(point - global_position).length() < MARCH_ARRIVE
 	if arrived:
@@ -589,9 +795,40 @@ func _think_march() -> void:
 ## MARCH: along the navigation path to the patrol spot (straight at it while there is no path: no navigation
 ## mesh, or it is still baking).
 func _march_move(delta: float) -> Vector3:
-	var goal := leader.army_point + _slot_offset
+	return _nav_move(leader.army_point + _slot_offset, delta, 0.6)
+
+
+## A NavigationAgent3D, made the first time a soldier walks somewhere far on its own (march, muster).
+func _ensure_nav() -> void:
+	if _nav:
+		return
+	_nav = NavigationAgent3D.new()
+	_nav.radius = radius
+	_nav.path_desired_distance = 1.0
+	_nav.target_desired_distance = 0.8
+	add_child(_nav)
+
+
+## Mustered: on its way to the General; joins the formation once close (then obeys orders like the rest).
+func _think_muster() -> void:
+	if GameConfig.is_gone(leader):
+		mustering = false
+		return
+	if _flat(leader.global_position - global_position).length() < MUSTER_JOIN:
+		mustering = false
+		_order_serial = leader.order_serial
+		return
+	_ensure_nav()
+	_nav.target_position = leader.global_position
+	var candidate := _best_enemy(global_position, aggro_range)
+	target = _commit_target(target if is_instance_valid(target) and target is Unit else null, candidate, aggro_range + 4.0)
+
+
+## Toward `goal` along the navigation path (straight at it while there is no path: no navigation mesh, or it is
+## still baking); stands still within `arrive`.
+func _nav_move(goal: Vector3, delta: float, arrive: float) -> Vector3:
 	var to_goal := _flat(goal - global_position)
-	if to_goal.length() < 0.6:
+	if to_goal.length() < arrive:
 		return _separation * 0.5
 	var step := to_goal
 	if _nav:

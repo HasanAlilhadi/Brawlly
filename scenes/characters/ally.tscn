@@ -31,6 +31,15 @@ properties/5/replication_mode = 2
 properties/6/path = NodePath(".:is_dead")
 properties/6/spawn = true
 properties/6/replication_mode = 2
+properties/7/path = NodePath(".:rank")
+properties/7/spawn = true
+properties/7/replication_mode = 2
+properties/8/path = NodePath(".:squad")
+properties/8/spawn = true
+properties/8/replication_mode = 2
+properties/9/path = NodePath(".:squad_leader")
+properties/9/spawn = true
+properties/9/replication_mode = 2
 
 [node name="Ally" type="CharacterBody3D"]
 collision_layer = 8

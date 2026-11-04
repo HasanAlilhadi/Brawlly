@@ -42,7 +42,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _build() -> void:
-	_frame = MenuKit.frame($UI, "Host a Game")
+	_frame = MenuKit.frame($UI, "Host a Conquest Game" if Net.conquest_section else "Host a Game")
 	var center := CenterContainer.new()
 	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	(_frame.body as Control).add_child(center)

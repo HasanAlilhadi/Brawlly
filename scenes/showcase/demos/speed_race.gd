@@ -15,7 +15,7 @@ var _board: Label3D
 func _ready() -> void:
 	var lanes: Array[Dictionary] = []
 	var base := _player_move_speed()
-	for def in ClassDef.all():
+	for def in ClassDef.pickable():
 		var speed := def.move_speed if def.move_speed > 0.0 else base
 		lanes.append({def = def, speed = speed, shield = false})
 		if def.shield:

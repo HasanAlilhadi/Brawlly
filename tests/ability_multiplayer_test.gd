@@ -1,5 +1,5 @@
 extends Node
-## Real ENet host/client regression for all three abilities and their remote effects.
+## Real ENet host/client regression for both class abilities and their remote effects.
 ## Run two test_runner processes with --test=res://tests/ability_multiplayer_test.gd
 ## --role=host / --role=client and the same --port (omit --fixed-fps for network runs).
 
@@ -51,14 +51,11 @@ func _ready() -> void:
 		await get_tree().process_frame
 	var client_id: int = multiplayer.get_peers()[0]
 	for owner_id in [1, client_id]:
-		for class_id in [&"swordsman", &"spearman", &"bowman"]:
+		for class_id in [&"swordsman", &"bowman"]:
 			var at := Vector3(-12 + casts.size() * 3, 0, -10)
 			var player: Player = main._spawn_player(owner_id, class_id, at)
 			player.face_now(Vector3.RIGHT)
 			player.net_yaw = PI * 0.5
-			# Exercise Bull Rush activation from the ranged weapon on every peer.
-			if class_id == &"spearman":
-				player.switch_weapon()
 			casts.append(player)
 	await get_tree().create_timer(0.4).timeout
 	# Targets exist only on the server: clients must receive their authoritative impact effects.
@@ -112,7 +109,7 @@ func _request_client_casts(paths: Array) -> void:
 
 
 func _check_active() -> void:
-	var counts := {&"whirlwind": 0, &"bull_rush": 0, &"bow_rain": 0}
+	var counts := {&"whirlwind": 0, &"bow_rain": 0}
 	for player in get_tree().get_nodes_in_group(&"players"):
 		if not player.ability_active:
 			continue
@@ -125,16 +122,11 @@ func _check_active() -> void:
 						- deg_to_rad(Player.WHIRLWIND_SPIN) * player._ability_visual_elapsed, -PI, PI)
 				_check(absf(angle_difference(player._spin_world_yaw, expected)) < 0.01,
 						"Whirlwind follows replicated cast phase")
-			&"bull_rush":
-				_check(is_instance_valid(player._rush_wind) and player._rush_wind.is_visible_in_tree(),
-						"Bull Rush spear effect visible for peer %d" % player.peer_id)
-				_check(player.current_weapon() == "spear" and player._bull_rush_direction.x > 0.95,
-						"Bull Rush weapon and direction replicate")
 			&"bow_rain":
 				_check(player._bow_rain_area.visible and player._bow_rain_area.global_position.distance_to(
 						player.bow_rain_target + Vector3(0, 0.035, 0)) < 0.01,
 						"Bow Rain marker visible at authoritative target for peer %d" % player.peer_id)
-	_check(counts == {&"whirlwind": 2, &"bull_rush": 2, &"bow_rain": 2}, "host and client activate every class ability")
+	_check(counts == {&"whirlwind": 2, &"bow_rain": 2}, "host and client activate every class ability")
 	var impacts := 0
 	for node in get_tree().current_scene.world.get_children():
 		if node is CPUParticles3D:
@@ -147,8 +139,6 @@ func _check_active() -> void:
 func _check_finished() -> void:
 	for player in get_tree().get_nodes_in_group(&"players"):
 		_check(not player.ability_active, "ability ends for peer %d" % player.peer_id)
-		if is_instance_valid(player._rush_wind):
-			_check(not player._rush_wind.visible, "Bull Rush effect ends")
 		if is_instance_valid(player._whirlwind_arc):
 			_check(not player._whirlwind_arc.visible, "Whirlwind effect ends")
 		_check(not player._bow_rain_area.visible, "Bow Rain marker ends")
@@ -178,14 +168,13 @@ func _restart(paths: Array) -> void:
 
 
 func _check_spawn_effects(world: Node3D) -> void:
-	for class_id in [&"swordsman", &"spearman", &"bowman"]:
+	for class_id in [&"swordsman", &"bowman"]:
 		var player := preload("res://scenes/characters/player.tscn").instantiate() as Player
 		# Model a spawn snapshot whose properties are applied before _ready.
 		player.get_node("Sync").free()
 		player.set_class(class_id)
 		player.ability_start_yaw = 0.7
 		player.ability_elapsed = 0.8
-		player._bull_rush_direction = Vector3.RIGHT
 		player.bow_rain_target = Vector3(8, 0, -6)
 		player.ability_active = true
 		player.set_physics_process(false)
@@ -194,9 +183,6 @@ func _check_spawn_effects(world: Node3D) -> void:
 			&"swordsman":
 				_check(is_instance_valid(player._whirlwind_arc) and player._whirlwind_arc.visible,
 						"active Whirlwind spawn restores its arc and phase")
-			&"spearman":
-				_check(is_instance_valid(player._rush_wind) and player._rush_wind.visible,
-						"active Bull Rush spawn restores the spear effect")
 			&"bowman":
 				_check(player._bow_rain_area.visible and player._bow_rain_area.global_position.x == 8.0,
 						"active Bow Rain spawn restores its target marker")

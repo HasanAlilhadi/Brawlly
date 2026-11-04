@@ -4,7 +4,6 @@ extends Node
 ##   coins; Increase Damage / Fire Rate change the stats. Army tab: Recruit, Soldier Damage / Health, Command.
 ## - swordsman: no shield until bought; Knock Back shoves far and locks Wave; Wave sends a slash through two orcs;
 ##   Dash Attack moves ~4.5 m and hits each orc crossed once, then cools down.
-## - spearman: stab only until Can Throw (then E switches to throwing); shield bought.
 ## - bowman: Fire Range lengthens aim and flight; Penetration hits 3 orcs in a line; Knife stabs up close (not as far
 ##   or as wide as the sword) and no arrows fly while stabbing.
 ## --shot=<png> saves the Army tab after its upgrades (needs a window: run off-screen, --position -4000,-4000).
@@ -47,8 +46,6 @@ func _ready() -> void:
 	match player.class_def.id:
 		&"swordsman":
 			await _swordsman()
-		&"spearman":
-			await _spearman()
 		&"bowman":
 			await _bowman()
 	printerr("%s class upgrades (%s): %d failures" % ["PASS" if failures == 0 else "FAIL", player.class_def.id, failures])
@@ -124,7 +121,7 @@ func _sheet() -> void:
 	for i in mini(expected, cards.size()):
 		var def := _def(StringName(names[i]))
 		_check(def != null and def.classes.has(player.class_def.id), "%s belongs to this class" % cards[i].name)
-	var prefix := {&"swordsman": "sword", &"spearman": "spear", &"bowman": "bow"}[player.class_def.id] as String
+	var prefix := {&"swordsman": "sword", &"bowman": "bow"}[player.class_def.id] as String
 	var coins := player.coins
 	var damage_before := _damage()
 	_check(await _buy(StringName(prefix + "_damage")), "bought Increase Damage anywhere")
@@ -152,7 +149,7 @@ func _army(hud: Hud) -> void:
 			and not (hud.upgrade_sheet.find_child("UpgradeCards", true, false) as Control).visible, "the Army tab shows the soldier cards")
 	var army := hud.upgrade_sheet.find_child("ArmyCards", true, false).get_children().map(
 			func(card: Node) -> String: return String(card.name).trim_prefix("Card_"))
-	_check(army == ["recruit", "soldier_damage", "soldier_health", "command"], "Army cards: %s" % [army])
+	_check(army == ["recruit", "recruit_bow", "recruit_wizard", "recruit_healer", "soldier_damage", "soldier_health", "command"], "Army cards: %s" % [army])
 	var coins := player.coins
 	var before := player.followers().size()
 	_check(await _buy(&"recruit"), "bought a soldier from the Army tab")
@@ -198,12 +195,7 @@ func _army(hud: Hud) -> void:
 
 
 func _damage() -> float:
-	match player.class_def.id:
-		&"spearman":
-			return player.spear_damage
-		&"bowman":
-			return player.arrow_damage
-	return player.melee_damage
+	return player.arrow_damage if player.class_def.id == &"bowman" else player.melee_damage
 
 
 func _cooldown() -> float:
@@ -268,37 +260,6 @@ func _swordsman() -> void:
 	player.dash(Vector3.FORWARD)
 	await _wait(0.4)
 	_check(is_equal_approx(crossed.health, after_one), "no second dash during the cooldown")
-
-
-func _spearman() -> void:
-	await _shield()
-	_check(player.weapons == PackedStringArray(["spear"]), "stab only before Can Throw (%s)" % player.weapons)
-	# A stab keeps the lane it started in: turning during it moves neither the hero nor the hit.
-	player.global_position = LANE_START
-	player._melee_timer = 0.0
-	player.attack_melee_toward(Vector3.BACK)
-	await _wait(0.05)
-	player.look_override = Vector3.RIGHT
-	player.set_melee_aim(Vector3.RIGHT)
-	await _wait(0.15)
-	_check(player._melee_hit_direction().is_equal_approx(Vector3.BACK) and player.facing().dot(Vector3.BACK) > 0.99,
-			"turning mid-stab keeps the stab's lane (%s, facing %s)" % [player._melee_hit_direction(), player.facing()])
-	player.set_melee_aim(Vector3.ZERO)
-	player.look_override = Vector3.ZERO
-	await _wait(0.6)
-	player.switch_weapon()
-	_check(player.current_weapon() == "spear", "E does nothing without Can Throw")
-	_check(await _buy(&"spear_throw"), "bought Can Throw")
-	_check(player.weapons == PackedStringArray(["spear", "javelin"]), "now carries thrust + throw")
-	player.switch_weapon()
-	_check(player.current_weapon() == "javelin" and player.holds_ranged(), "E switches to throwing")
-	player.global_position = LANE_START
-	var orc := _orc(LANE_START + Vector3(0, 0, 5.0))
-	await _wait(0.1)
-	player._shoot_timer = 0.0
-	player.shoot(Vector3(0, 0, 5.0))
-	await _wait(0.8)
-	_check(orc.health < orc.max_health, "a thrown spear hits (%.0f)" % orc.health)
 
 
 func _bowman() -> void:

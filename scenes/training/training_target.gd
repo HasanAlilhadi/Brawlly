@@ -28,10 +28,10 @@ func total_damage() -> float:
 	return _total_damage
 
 
-## Use the model's convex hull, not an oversized gameplay box. This keeps sword sectors, spear lanes and
+## Use the model's convex hull, not an oversized gameplay box. This keeps sword sectors and
 ## projectiles honest: damage is accepted only when their physics query touches the visible target.
 ## The hull is extruded straight up to `GameConfig.HIT_HEIGHT` (same footprint): the target is shorter
-## than the height shots fly at (0.55–0.7 m), so thrown spears and arrows would pass over it otherwise.
+## than the height shots fly at (0.55–0.7 m), so arrows would pass over it otherwise.
 func _fit_hitbox_to_model() -> void:
 	var mesh_node := _model as MeshInstance3D
 	if mesh_node == null:

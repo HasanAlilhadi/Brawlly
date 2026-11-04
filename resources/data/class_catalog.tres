@@ -3,9 +3,11 @@
 [ext_resource type="Script" path="res://scripts/game/class_catalog.gd" id="1_catalog"]
 [ext_resource type="Script" path="res://scripts/game/class_def.gd" id="2_def"]
 [ext_resource type="Resource" path="res://resources/data/classes/swordsman.tres" id="3_swordsman"]
-[ext_resource type="Resource" path="res://resources/data/classes/spearman.tres" id="4_spearman"]
 [ext_resource type="Resource" path="res://resources/data/classes/bowman.tres" id="5_bowman"]
+[ext_resource type="Resource" path="res://resources/data/classes/unarmed.tres" id="6_unarmed"]
+[ext_resource type="Resource" path="res://resources/data/classes/wizard.tres" id="7_wizard"]
+[ext_resource type="Resource" path="res://resources/data/classes/healer.tres" id="8_healer"]
 
 [resource]
 script = ExtResource("1_catalog")
-classes = Array[ExtResource("2_def")]([ExtResource("3_swordsman"), ExtResource("4_spearman"), ExtResource("5_bowman")])
+classes = Array[ExtResource("2_def")]([ExtResource("3_swordsman"), ExtResource("5_bowman"), ExtResource("6_unarmed"), ExtResource("7_wizard"), ExtResource("8_healer")])

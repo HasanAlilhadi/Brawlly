@@ -10,7 +10,6 @@ portrait on phones. There is no single player: host a game (alone is fine) or jo
 - **Classes** (picked in the lobby, with a preview of your hero and soldiers; `resources/data/classes/*.tres`, `ClassDef`): each hero fights
   only with its class's weapon, and nothing needs ammo.
   - **Swordsman** (`human.glb`): wide sword swings that cut through crowds. Soldiers: sword and shield.
-  - **Spearman** (`keeper.glb`): straight spear stabs that pierce everything in a line. Soldiers: spears (longer reach).
   - **Bowman** (`archer.glb`): fast arrows. **Bow Rain** marks a large area with X, then LMB rains arrows
     into it. Soldiers: archers that stop at range and shoot.
   - **Upgrades sheet** (press **T**, the gamepad View button, click the "T Upgrades" tab at the bottom of the screen or
@@ -21,13 +20,12 @@ portrait on phones. There is no single player: host a game (alone is fine) or jo
     your class's upgrades, bought with coins anywhere (free in the Training Field, which also hands out the unlocks):
     - Swordsman: Increase Damage, Fire Rate, **Knock Back or Wave** (pick one: hits shove enemies far back, or each
       swing sends a slash wave through enemies), **Dash Attack** (C: dash through enemies, slashing each), Shield.
-    - Spearman: Increase Damage, Fire Rate, **Can Throw** (E switches to throwing spears), Shield. (Bull Run: later.)
     - Bowman: Increase Damage, Fire Rate, Fire Range, **Penetration** (arrows go through up to 2 enemies),
       **Knife** (right mouse: a quick stab up close).
-  - **Shields** (bought; Swordsman 150, Spearman 200): hold **right mouse** / LT / the touch shield button to raise it.
+  - **Shields** (Swordsman, bought; 150): hold **right mouse** / LT / the touch shield button to raise it.
     It blocks every hit from the front (the damage goes into the shield) while up; you walk slower and can't attack.
     It breaks when worn out and comes back when you respawn.
-  - Every class has a special ability charged by XP: Swordsman Whirlwind, Spearman Bull Rush, and Bowman Bow Rain.
+  - Every class has a special ability charged by XP: Swordsman Whirlwind and Bowman Bow Rain.
 - Melee weapons are aim sticks (drag to keep swinging toward a direction, independent of movement); ranged = drag to
   aim, release to shoot. A tap auto-targets the nearest enemy. **Health** comes from potions (enemy drops, chests).
 - **Chests** have five rarities: Common (gray), Uncommon (green), Rare (blue), Epic (purple), and Legendary (gold).
@@ -168,11 +166,10 @@ portrait on phones. There is no single player: host a game (alone is fine) or jo
 | Move | WASD / arrow keys | Left stick | Drag on the left side |
 | Training: choose hero / spawn orc | F beside a hero / orc station | LB | — |
 | Class upgrades | T | View | Star button next to pause |
-| Sword / spear | Left mouse — swings / thrusts toward the cursor while held · J = nearest enemy | RB / X (nearest enemy) | Weapon stick: drag = direction, tap = nearest |
-| Bow / spear throw | Right mouse — hold to aim at the cursor, release to shoot | Right stick aims · RT / A shoots | Aim stick: drag to aim, release to shoot |
+| Sword | Left mouse — swings toward the cursor while held · J = nearest enemy | RB / X (nearest enemy) | Weapon stick: drag = direction, tap = nearest |
+| Bow | Right mouse — hold to aim at the cursor, release to shoot | Right stick aims · RT / A shoots | Aim stick: drag to aim, release to shoot |
 | Quick shot (nearest enemy) | K | RT / A without aiming | Tap the aim stick |
-| Spearman: thrust ⇄ throw (Can Throw) | E | Y | Small button above the weapon stick |
-| Shield (Swordsman, Spearman, bought) | Right mouse (hold; turns toward the cursor) | LT (hold) | Shield button left of the weapon stick |
+| Shield (Swordsman, bought) | Right mouse (hold; turns toward the cursor) | LT (hold) | Shield button left of the weapon stick |
 | Knife (Bowman, bought) | Right mouse | LT | Shield button (shows a blade) |
 | Dash Attack (Swordsman, bought) | C (where you move, else toward the cursor) | L3 | Dash button left of the shield button |
 | Interact (Training Field: switch hero, practice orc) | F | LB | — |

@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="ClassDef" format=3]
+
+[ext_resource type="Script" uid="uid://ci34kgmnqq6xo" path="res://scripts/game/class_def.gd" id="1_def"]
+[ext_resource type="PackedScene" path="res://assets/characters/human.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_def")
+id = &"unarmed"
+display_name = "Unarmed"
+description = "Bare fists: buy a weapon on the Hero tab (T)."
+model = ExtResource("2_model")
+weapons = PackedStringArray("fists")
+ally_weapon = "sword"
+conquest_only = true
+move_speed = 3.7
+icon = "user_group"
+recolor_key_hue = 0.65
+recolor_hue_range = 0.03
+recolor_min_saturation = 0.15
+recolor_reference_value = 0.6

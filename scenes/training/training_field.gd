@@ -168,7 +168,7 @@ func _add_wall(at: Vector3, size: Vector3) -> void:
 
 func _build_gallery() -> void:
 	_add_section_label("CHOOSE YOUR HERO", Vector3(0, 3.6, -17.1), Color("ffd36b"), 64)
-	var classes := ClassDef.all()
+	var classes := ClassDef.pickable()
 	for i in classes.size():
 		var def := classes[i]
 		var x := (i - (classes.size() - 1) * 0.5) * 5.5

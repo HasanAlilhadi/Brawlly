@@ -18,8 +18,9 @@ extends Resource
 @export var max_level: int = 5
 ## Effect strength per purchase (meaning depends on id: +health, +% damage, soldiers, …).
 @export var amount: float = 0.0
-## The upgrades sheet tab it shows on for every class: &"hero" (Vitality, Potion) or &"army" (Recruit,
-## Soldier Damage / Health, Command). Empty for class upgrades (they show on the Hero tab via `classes`).
+## The upgrades sheet tab it shows on for every class: &"hero" (Vitality, Potion), &"weapon" (Conquest: the
+## weapons a classless hero buys, first on the Hero tab) or &"army" (Recruit, Soldier Damage / Health, Command).
+## Empty for class upgrades (they show on the Hero tab via `classes`).
 @export var sheet: StringName = &""
 ## Class upgrade for these ClassDef ids (empty = a sheet item).
 @export var classes: Array[StringName] = []

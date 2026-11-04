@@ -35,11 +35,16 @@ enum Mode { COOP, KING_OF_THE_HILL, LAST_STAND, CONQUEST }
 enum Difficulty { EASY, NORMAL, HARD, BRUTAL }
 
 const MODE_NAMES: PackedStringArray = ["Co-op vs the Horde", "King of the Hill", "Last Stand", "Conquest"]
+## The main menu has two sections: the classic game (these modes, picked in the lobby) and Conquest (its own
+## entry, its own Find / Host pages; its lobby has no mode choice). `conquest_section` is the one the player
+## came from; `host()` sets the mode from it and the server browser lists only that section's games.
+const CLASSIC_MODES: Array[int] = [Mode.COOP, Mode.KING_OF_THE_HILL, Mode.LAST_STAND]
+var conquest_section: bool = false
 const MODE_HINTS: PackedStringArray = [
 	"Everyone together: wipe out every warband.",
 	"Teams hold the hill in the middle to earn points.",
 	"Everyone together: hold ten circles for a minute each while the horde grows stronger. The fallen stay down.",
-	"Three factions: free villages, outposts and cities from the monsters, then take them from each other. Feed and supply your army.",
+	"Conquest: four factions from the corners take the land zone by zone from the demons and each other, keep their armies fed and armed, and storm the Demon's Lair in the middle.",
 ]
 const SCORE_LIMIT_LABELS: PackedStringArray = ["", "Hill seconds to win", "", "Conquest points to win"]
 const DIFFICULTY_NAMES: PackedStringArray = ["Easy", "Normal", "Hard", "Brutal"]
@@ -282,10 +287,20 @@ func host(options: Dictionary = {}) -> Error:
 		"listed": bool(options.get("listed", true)),
 	}
 	players = {1: _entry(profile.name, 0, profile["class"])}
+	if conquest_section:
+		settings.mode = Mode.CONQUEST
+		settings.team_count = ConquestMode.FACTIONS
+		settings.time_limit = ConquestMode.DEFAULT_TIME
+		settings.score_limit = ConquestMode.DEFAULT_SCORE
 	if server_info.listed:
 		_start_broadcast()
 	lobby_changed.emit()
 	return OK
+
+
+## A discovered game belongs to the section the player browses (Conquest or the classic modes).
+func in_section(info: Dictionary) -> bool:
+	return (int(info.get("mode", Mode.COOP)) == Mode.CONQUEST) == conquest_section
 
 
 func default_server_name() -> String:

@@ -12,22 +12,25 @@ const CATALOG_PATH := "res://resources/data/class_catalog.tres"
 @export var model: PackedScene
 @export var weapons: PackedStringArray = PackedStringArray()
 @export var ally_weapon: String = "sword"
+## Conquest's classless heroes (Unarmed, Wizard, Healer): never offered in the lobby / Training Field picker
+## (`pickable()`); a Conquest hero becomes one by buying its weapon (Player.ARM_CLASSES).
+@export var conquest_only: bool = false
 ## Running speed in m/s (0: the player scene's move_speed): Swordsman fastest (melee must catch the Bowman),
-## Bowman and Spearman (biggest shield) a little slower.
+## Bowman a little slower.
 @export var move_speed: float = 0.0
 ## Running speed while carrying an unbroken shield (0: same as move_speed). Raised, it is × Player.BLOCK_SPEED.
 @export var shield_move_speed: float = 0.0
 ## Game Icon Pack glyph (assets/ui/icons/game/<icon>.svg).
 @export var icon: String = "sword"
-## Where the fists sit relative to the standard rig's (arm bone space): the keeper's arms are a bit higher
-## on their bones, so weapons in hand move with them.
+## Where the fists sit relative to the standard rig's (arm bone space), for a model whose arms sit higher or
+## lower on their bones, so weapons in hand move with them.
 @export var hand_offset: Vector3 = Vector3.ZERO
 ## Shield on the left arm (none: the class can't block), how much damage it soaks before it breaks, and
 ## the offset from the model's origin to its middle (shield space; front = +Z).
 @export var shield: PackedScene
 @export var shield_health: float = 0.0
 @export var shield_center: Vector3 = Vector3.ZERO
-## Size of the shield model (the rectangular one is small as modeled).
+## Size of the shield model (some shield models are small as modeled).
 @export var shield_scale: float = 1.0
 @export_group("Special ability")
 ## Special ability (X / R3 / the touch ability button), see Player.use_ability(): "" = no ability.
@@ -50,6 +53,11 @@ const CATALOG_PATH := "res://resources/data/class_catalog.tres"
 
 static func all() -> Array[ClassDef]:
 	return (load(CATALOG_PATH) as ClassCatalog).classes
+
+
+## The classes a player picks in the lobby / Training Field (not the Conquest-only ones).
+static func pickable() -> Array[ClassDef]:
+	return all().filter(func(def: ClassDef) -> bool: return not def.conquest_only)
 
 
 ## The class with `class_id`, or the first one (unknown ids, e.g. an old profile).

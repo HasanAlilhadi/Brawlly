@@ -1,9 +1,9 @@
 class_name Player
 extends Unit
 ## A player's hero (one per connected player), of the class picked in the lobby (`class_def`, see
-## ClassDef): Swordsman (sword), Spearman (spear thrust; E switches to throwing spears) or Bowman (bow).
+## ClassDef): Swordsman (sword) or Bowman (bow).
 ## Each class fights only with its own weapons, and nothing runs out of ammo. Moves with the joystick.
-## Melee weapons swing / thrust toward the aim stick (keeps attacking while held, even while running another
+## Melee weapons swing toward the aim stick (keeps attacking while held, even while running another
 ## way); ranged ones aim and fire on release. A tap auto-targets the nearest enemy.
 ##
 ## Multiplayer: the server simulates every player. Input arrives through `set_input()` (host) or the
@@ -14,10 +14,14 @@ extends Unit
 ## them back; orcs leave downed players alone, but an enemy player can finish them.
 ## Army orders: `command_army()` tells this player's soldiers to follow, charge a point or hold a point.
 ## Special ability (ClassDef.ability, X / R3): enemies drop XP orbs (Enemy.xp_drop); with ClassDef.ability_xp
-## collected, `use_ability()` spends it. Swordsman: Whirlwind (`_whirlwind_*`); Spearman: Bull Rush
-## (`_bull_rush_*`). Bowman: Bow Rain (`_bow_rain_*`).
+## collected, `use_ability()` spends it. Swordsman: Whirlwind (`_whirlwind_*`); Bowman: Bow
+## Rain (`_bow_rain_*`).
+## Conquest heroes have no class (`classless`): they start Unarmed (fists), buy a weapon on the Hero tab and
+## grow by fighting — see ARM_CLASSES and LEVEL_KILLS.
 
 signal coins_changed(count: int)
+## Every peer: the hero's level (Conquest) or its kill count changed.
+signal level_changed
 signal upgrades_changed
 ## Server: this player just went down / was revived (`helpers` = the players who revived them).
 signal went_down(player: Player)
@@ -39,7 +43,7 @@ signal ability_changed
 enum Order { FOLLOW, CHARGE, HOLD, KILL, MARCH }
 
 const TARGET_GROUPS: Array[StringName] = [&"active_enemies", &"player_units"]
-## Height arrows and thrown spears fly at; main.gd reads the mouse aim on this plane, so a shot passes right
+## Height arrows fly at; main.gd reads the mouse aim on this plane, so a shot passes right
 ## under the cursor (on the ground it would land short by the camera's slant).
 const SHOT_HEIGHT: float = 0.65
 ## Aim offsets longer than this are a point to hit (the mouse); shorter ones (sticks) only a direction.
@@ -64,20 +68,37 @@ const DOWNED_ANIMS := preload("res://assets/characters/animations/archer_downed.
 const DOWNED_CLIPS: Array[String] = ["crawl", "downed"]
 const REVIVE_RING_TEXTURE := preload("res://assets/vfx/light_masks/ring_a.png")
 ## Weapon id -> how it works. `melee` weapons swing (sword stick / left mouse) and hit the aim area, out to
-## `reach` m, every `cooldown` s: a fan `arc` degrees wide (sword), or a straight `lane` this many m wide with a
-## pointed end (spear stab). The others are aimed and fired (bow stick /
-## aim): the bow shoots arrows, the javelin throws the spear (slower, harder). No ammo. The class
-## (ClassDef.weapons) decides what a player carries; E / Y / the HUD button cycles them. `hand` holds the
+## `reach` m, every `cooldown` s: a fan `arc` degrees wide (sword). The others are aimed and fired (bow stick /
+## aim): the bow shoots arrows. No ammo. The class (ClassDef.weapons) decides what a player carries;
+## E / Y / the HUD button cycles them (when a class carries more than one). `hand` holds the
 ## model; `icon` is a Game Icon Pack glyph. New weapon = a row here + its model in `_weapon_items`.
 const WEAPONS: Dictionary = {
 	"sword": {"melee": true, "hand": ARM_RIGHT, "icon": "sword", "name": "Sword", "arc": 80.0, "reach": 1.55,
 			"cooldown": 0.5},
-	"spear": {"melee": true, "hand": ARM_RIGHT, "icon": "spear", "name": "Spear", "lane": 0.8, "reach": 2.6,
-			"cooldown": 0.65},
-	"javelin": {"melee": false, "hand": ARM_RIGHT, "icon": "spear", "name": "Throw"},
 	"bow": {"melee": false, "hand": ARM_LEFT, "icon": "bow", "name": "Bow"},
+	# Conquest (classless heroes): bare fists (`power` = share of melee_damage), the wizard's staff (magic bolts)
+	# and the healer's staff (heals the most wounded friend within `heal_radius` of the aim point, else a weak
+	# bolt). Ranged rows set the hero's shoot_cooldown / arrow_damage (`set_class`).
+	"fists": {"melee": true, "hand": ARM_RIGHT, "icon": "user_group", "name": "Fists", "arc": 70.0, "reach": 1.15,
+			"cooldown": 0.55, "power": 0.35},
+	"staff": {"melee": false, "hand": ARM_RIGHT, "icon": "ghost", "name": "Wizard Staff", "cooldown": 0.8,
+			"damage": 30.0},
+	"heal_staff": {"melee": false, "hand": ARM_RIGHT, "icon": "medical_kit", "name": "Healer Staff",
+			"cooldown": 0.9, "damage": 9.0, "heal": 16.0, "heal_radius": 3.0},
 }
-const SPEAR_SCENE := preload("res://assets/items/dungeon/spear.glb")
+## Conquest heroes have no class (`classless`, spawn data): they start as START_CLASS (fists) and buy a weapon on
+## the Hero tab (the `arm_*` items, ARM_CLASSES). Buying one swaps the hero for one of that weapon's class at the
+## same spot (main.rearm_player with `carry_state` / `apply_carry`: coins, health share, army, orders and the
+## other upgrades carry over); its level and weapon upgrades start over. Levels: kills (`credit_kill`; a healer's
+## heals count, one kill per HEALS_PER_KILL; animals don't) reach LEVEL_KILLS, and every level adds LEVEL_BONUS of
+## the hero's base health (healed at once) and damage / healing. `hero_level` and `hero_kills` are replicated.
+const START_CLASS: StringName = &"unarmed"
+const ARM_CLASSES: Dictionary = {&"arm_sword": &"swordsman", &"arm_bow": &"bowman", &"arm_wizard": &"wizard",
+		&"arm_healer": &"healer"}
+const LEVEL_KILLS: Array[int] = [0, 3, 8, 15, 25, 40, 60, 85, 115, 150, 200]
+const LEVEL_BONUS: float = 0.08
+const HEALS_PER_KILL: int = 3
+const HEAL_COLOR := Color(0.45, 1.0, 0.55)
 ## Procedural sword slash (`_sword_slash`), keyed carry → wind-up → mid-cut → follow-through → carry:
 ## arm sweep around the torso (degrees, + = across to the left), arm raised above level (a diagonal
 ## cut, high left to low right), body twist (degrees) and lunge (m), and where the blade points in the
@@ -89,17 +110,6 @@ const SLASH_TWIST: Array[float] = [0.0, 22.0, 0.0, -25.0, 0.0]
 const SLASH_LUNGE: Array[float] = [0.0, -0.04, 0.07, 0.1, 0.0]
 const SLASH_BLADE: Array[Vector3] = [Vector3.ZERO, Vector3(0.55, 0.35, -0.75), Vector3(-0.3, 0.05, 1.0),
 		Vector3(-0.95, -0.1, -0.3), Vector3.ZERO]
-## Procedural spear stab (`_spear_thrust`), keyed carry → drawn back → full stab → hold → carry. Straight
-## forward only: the hero, the arm and the shoulders stay put; the spear tips level, pointing down the middle
-## of the hit lane (0 carry grip, upright; 1 level), and slides along its shaft through the fist (m, + =
-## toward the tip): back, then out.
-const THRUST_LEVEL: Array[float] = [0.0, 1.0, 1.0, 1.0, 0.0]
-## Keep some shaft behind the fist. Larger positive values push the spear's butt past the hand and make the
-## weapon look detached, even though its axis is still aligned correctly.
-const THRUST_PUSH: Array[float] = [0.0, -0.16, 0.1, 0.08, 0.0]
-## Point on the spear shaft held in the fist (the model runs from local Y = 0 at the butt to 0.6 at the tip).
-const SPEAR_GRIP: Vector3 = Vector3(0.0, 0.2, 0.0)
-const SPEAR_MIN_SHAFT_BEHIND_HAND: float = 0.08
 ## The bow is held upright in the body's frame (limbs up / down, belly toward where the hero faces, string
 ## toward them), whatever the arm's pose: the fist (`left_hand_offset` + `BOW_FIST` in the arm's space) holds
 ## it at `BOW_GRIP` (bow space: limbs along +Y, belly +Z, string at z = 0). An arrow sits nocked at
@@ -109,7 +119,7 @@ const BOW_FIST: Vector3 = Vector3(0.0, 0.24, 0.0)
 const BOW_GRIP: Vector3 = Vector3(-0.04, 0.24, 0.15)
 const NOCK_POSITION: Vector3 = Vector3(-0.04, 0.24, 0.08)
 const ARROW_MODEL := preload("res://assets/items/forest/arrow.glb")
-## Shield (Swordsman, Spearman: ClassDef.shield): held up (right mouse / LT / the touch shield button) it blocks
+## Shield (Swordsman: ClassDef.shield): held up (right mouse / LT / the touch shield button) it blocks
 ## every hit from within BLOCK_ARC degrees of where the hero faces, soaking the damage until `shield_health`
 ## runs out and it breaks (back on respawn; buying a new one comes later). Up, the hero walks at BLOCK_SPEED
 ## and can't attack. Placed every frame (`_place_shield`, body space, the middle of the shield): carried on the
@@ -119,11 +129,6 @@ const ARROW_MODEL := preload("res://assets/items/forest/arrow.glb")
 const BLOCK_ARC: float = 150.0
 const BLOCK_SPEED: float = 0.45
 const SHIELD_BLOCK_AT: Vector3 = Vector3(0.06, 0.4, 0.27)
-## Bull Rush: the shield stays strapped to the moving forearm, faces forward and leans into the charge.
-const SHIELD_RUSH_LIFT: float = 0.08
-const SHIELD_RUSH_OUT: float = 0.06
-const SHIELD_RUSH_TILT: float = -12.0
-const SHIELD_RUSH_SWAY: float = 0.25
 ## Carried: strapped to the forearm (arm space), its middle lifted a bit, face out to the side and a little ahead.
 const SHIELD_CARRY: Vector3 = Vector3(0.18, 0.0, 0.0)
 const SHIELD_CARRY_LIFT: float = 0.08
@@ -156,13 +161,6 @@ const WHIRLWIND_ARC_DEGREES: float = 160.0
 const WHIRLWIND_SPIN: float = 900.0
 ## One damage pulse per 360° rotation. Keep this derived from the visual spin speed.
 const WHIRLWIND_TICK: float = 360.0 / WHIRLWIND_SPIN
-## Bull Rush (Spearman ability): sprint through enemies, turn slowly toward WASD input and damage each target
-## once. Enemy collision exceptions are temporary; world walls and buildings still stop the charge.
-const BULL_RUSH_SPEED: float = 2.2
-const BULL_RUSH_DAMAGE: float = 4.0
-const BULL_RUSH_RADIUS: float = 0.72
-## Heavy steering: normal movement turns immediately; Bull Rush can turn only this many degrees per second.
-const BULL_RUSH_TURN_SPEED: float = 105.0
 ## Bow Rain (Bowman ability): X enters placement mode and LMB confirms the ground target. Arrows fall
 ## across this radius for the ability duration. These values are intentionally centralized for tuning.
 const BOW_RAIN_RADIUS: float = 4.05
@@ -177,7 +175,7 @@ const BOW_RAIN_EDGE_MARGIN: float = 0.25
 const BOW_RAIN_SHADER := preload("res://assets/shaders/bow_rain_area.gdshader")
 # Class upgrades (UpgradeDef.classes, bought from the upgrades sheet; effects in `_apply_class_upgrades`).
 ## Unlocks every hero gets for free in the Training Field (all class upgrades cost nothing there).
-const TRAINING_UNLOCKS: Array[StringName] = [&"shield", &"spear_throw", &"knife", &"sword_dash"]
+const TRAINING_UNLOCKS: Array[StringName] = [&"shield", &"knife", &"sword_dash"]
 ## Dash Attack (Swordsman, C): DASH_DISTANCE m in DASH_TIME s through enemies, each one crossed takes
 ## melee_damage × the upgrade's amount once (in a DASH_RADIUS sweep).
 const DASH_TIME: float = 0.22
@@ -201,9 +199,6 @@ const WAVE_PIERCE: int = 3
 
 @export var arrow_damage: float = 22.0
 @export var shoot_cooldown: float = 0.4
-## Spear: thrusts (melee) and throws (javelin) deal this; throws are slower than arrows.
-@export var spear_damage: float = 42.0
-@export var spear_cooldown: float = 1.1
 @export var aim_range: float = 12.0
 ## Middle of the sword's handle (model space): the slash turns the blade around it, so it stays in the fist.
 @export var sword_grip_point: Vector3 = Vector3(0.0, 0.027, 0.0)
@@ -221,6 +216,29 @@ var display_name: String = "Player"
 var class_def: ClassDef
 ## Local Training Field: special abilities need no XP and XP pickups are ignored.
 var training_mode: bool = false
+## Conquest: no class picked — the hero buys its weapon and levels up by fighting (spawn data, every peer).
+var classless: bool = false
+## Replicated (Conquest): kills so far (heals count too) and the level they reached (LEVEL_KILLS).
+var hero_kills: int = 0:
+	set(value):
+		hero_kills = value
+		level_changed.emit()
+var hero_level: int = 0:
+	set(value):
+		var gained := value > hero_level
+		hero_level = value
+		if is_node_ready():
+			_apply_class_upgrades()
+			_update_name_label()
+			if gained:
+				HitFx.flash(global_position + Vector3(0.0, 1.0, 0.0), HitFx.REVIVE_SPARKLE, Color(1.0, 0.85, 0.3), 1.6, 0.6)
+		level_changed.emit()
+## Healing per cast of the healer's staff (from its row, upgrades and level; every peer).
+var heal_power: float = 0.0
+## Health the scene gives the hero (before Vitality and levels) and what its levels added (server).
+var _hero_base_health: float = 0.0
+var _level_health: float = 0.0
+var _heals: int = 0
 ## Movement input (screen axes), set from the HUD / network.
 var joystick_vector: Vector2 = Vector2.ZERO
 ## Soldier damage / health multipliers (the "soldier_damage" / "soldier_health" upgrades). Server only.
@@ -363,10 +381,8 @@ var dash_active: bool = false:
 
 var _base_melee_damage: float
 var _base_arrow_damage: float
-var _base_spear_damage: float
 var _base_aim_range: float
 var _base_shoot_cooldown: float
-var _base_spear_cooldown: float
 var _dash_left: float = 0.0  # server and the predicting owner: seconds of dash left
 var _dash_direction: Vector3 = Vector3.ZERO
 var _dash_cooldown: float = 0.0  # server and the owner (HUD): seconds until the next dash
@@ -400,9 +416,6 @@ var _slash_skeleton_rest: Transform3D
 var _slash_raise_axis: Vector3 = Vector3.RIGHT
 var _slash_torso: int = -1
 var _slash_carry: Quaternion = Quaternion.IDENTITY  # carry grip in the skeleton's space
-var _thrust_phase: float = -1.0  # stab phase (see `_thrust_pose`); < 0 = not stabbing
-var _thrust_dir: Vector3 = Vector3.ZERO  # the stab's lane, fixed when it starts (see `_spear_thrust`)
-var _thrust_until: int = 0  # ticks (ms) when the current stab ends
 var _nocked_arrow: Node3D  # the arrow on the string (bow only)
 var _nock_body: Vector3 = Vector3.INF  # where it sits in the model's space (last drawn frame)
 var _shield_recoil: float = 0.0  # 1 right after a blocked hit, back to 0 (see `_place_shield`)
@@ -416,12 +429,6 @@ var _ability_tick: float = 0.0  # server: next Whirlwind hit / Bow Rain arrow
 var _spin_angle: float = 0.0  # every peer: total Whirlwind turn, independent of movement facing
 var _spin_world_yaw: float = 0.0  # visible body yaw; movement may still turn the model underneath it
 var _whirlwind_arc: MeshInstance3D  # one reusable effect; moved instead of spawned every frame
-var _rush_wind: Node3D
-var _bull_rush_direction: Vector3 = Vector3.ZERO
-var _bull_rush_last_position: Vector3 = Vector3.ZERO
-var _bull_rush_hit_ids: Dictionary = {}
-var _bull_rush_exceptions: Array[PhysicsBody3D] = []
-var _bull_rush_saved_mask: int = -1
 var _bow_rain_area: MeshInstance3D
 var _bow_rain_previewing: bool = false
 var _bow_rain_fired: int = 0
@@ -444,7 +451,11 @@ func set_class(class_id: StringName) -> void:
 	move_child(body, index)
 	weapons = _class_weapons()
 	weapon_index = 0
-	if not weapons.has("sword"):
+	if weapons.has("staff"):
+		right_hand_item = Ally.ORB_SCENE
+	elif weapons.has("heal_staff"):
+		right_hand_item = Ally.POTION_SCENE
+	elif not weapons.has("sword"):
 		right_hand_item = null
 	if not weapons.has("bow"):
 		left_hand_item = class_def.shield
@@ -457,6 +468,10 @@ func set_class(class_id: StringName) -> void:
 	var melee := _melee_weapon()
 	if melee != "":
 		melee_cooldown = WEAPONS[melee].cooldown
+	for weapon in weapons:
+		if WEAPONS.has(weapon) and not WEAPONS[weapon].melee and WEAPONS[weapon].has("cooldown"):
+			shoot_cooldown = WEAPONS[weapon].cooldown  # a staff: _ready takes these as the bases
+			arrow_damage = WEAPONS[weapon].damage
 	recolor_key_hue = class_def.recolor_key_hue
 	recolor_hue_range = class_def.recolor_hue_range
 	recolor_min_saturation = class_def.recolor_min_saturation
@@ -479,11 +494,10 @@ func _ready() -> void:
 	add_to_group(&"players")
 	add_to_group(&"player_units")
 	_base_melee_damage = melee_damage
+	_hero_base_health = max_health
 	_base_arrow_damage = arrow_damage
-	_base_spear_damage = spear_damage
 	_base_aim_range = aim_range
 	_base_shoot_cooldown = shoot_cooldown
-	_base_spear_cooldown = spear_cooldown
 	if class_def.move_speed > 0.0:
 		move_speed = class_def.move_speed
 	_base_move_speed = move_speed
@@ -496,10 +510,10 @@ func _ready() -> void:
 	_build_name_label()
 	_build_downed_visuals()
 	_build_bow_rain_area()
-	var spear := _attach_spear() if weapons.has("spear") or weapons.has("javelin") else null
 	# Hand items that are weapons (the left one can be a shield instead of the bow).
 	_weapon_items = {"sword": _right_item if weapons.has("sword") else null, "bow": _left_item if weapons.has("bow") else null,
-			"spear": spear, "javelin": spear}
+			"staff": _right_item if weapons.has("staff") else null,
+			"heal_staff": _right_item if weapons.has("heal_staff") else null}
 	_setup_bow()
 	_setup_shield()
 	enable_xray()  # visible behind walls and cover (the camera looks down at an angle)
@@ -522,9 +536,6 @@ func _get_move_input(delta: float) -> Vector3:
 	if is_downed:
 		_update_downed(delta)
 		return Vector3(joystick_vector.x, 0.0, joystick_vector.y)
-	if _is_bull_rushing():
-		_steer_bull_rush(Vector3(joystick_vector.x, 0.0, joystick_vector.y), delta)
-		return _bull_rush_direction
 	if _dash_left > 0.0:
 		return _dash_step(delta)
 	_shoot_timer = maxf(_shoot_timer - delta, 0.0)
@@ -539,9 +550,6 @@ func _get_move_input(delta: float) -> Vector3:
 
 
 func _prediction_move_input(delta: float) -> Vector3:
-	if _is_bull_rushing():
-		_steer_bull_rush(Vector3(predict_input.x, 0.0, predict_input.y), delta)
-		return _bull_rush_direction
 	if _dash_left > 0.0:
 		return _dash_step(delta)
 	return super(delta)
@@ -568,8 +576,7 @@ func _add_downed_anims() -> void:
 	source.free()
 
 
-## Every peer: sword swings and spear thrusts get a trail through the hit wedge; spear throws empty the
-## hand briefly.
+## Every peer: sword swings get a trail through the hit wedge.
 func _play_action_local(anim_name: String, duration: float, release_arms: int) -> void:
 	# A delayed replicated normal attack must not replace the special ability's weapon pose.
 	if ability_active and class_def.ability != &"bow_rain":
@@ -580,8 +587,6 @@ func _play_action_local(anim_name: String, duration: float, release_arms: int) -
 	var melee := anim_name.begins_with("attack-melee") and holds_melee()
 	if melee and current_weapon() == "sword" and _right_hold and _right_item and not is_downed:
 		_sword_slash(duration)
-	elif melee and current_weapon() == "spear" and _right_hold and _weapon_items.get("spear") and not is_downed:
-		_spear_thrust(duration)
 	else:
 		super(anim_name, duration, release_arms)
 	if anim_name == "holding-left-shoot" and _nocked_arrow:
@@ -592,10 +597,6 @@ func _play_action_local(anim_name: String, duration: float, release_arms: int) -
 		return
 	if melee:
 		get_tree().create_timer(attack_hit_delay / anim_speed * 0.55).timeout.connect(_slash_fx)
-	elif current_weapon() == "javelin":
-		# The spear in hand leaves with the throw and a new one is drawn a moment later.
-		get_tree().create_timer(0.15).timeout.connect(_show_spear.bind(false))
-		get_tree().create_timer(0.75).timeout.connect(_show_spear.bind(true))
 
 
 ## Bowman: an arrow on the string, and the bow placed upright in the body's frame after every skeleton update
@@ -635,15 +636,10 @@ func has_shield() -> bool:
 	return class_def != null and class_def.shield != null and shield_health > 0.0
 
 
-## The shield can go up now: carried, not broken, a melee weapon in hand (thrown spears / the bow aim with
-## the same button), standing.
+## The shield can go up now: carried, not broken, a melee weapon in hand (the bow aims with the same
+## button), standing.
 func can_block() -> bool:
 	return has_shield() and holds_melee() and not is_dead and not is_downed and not ability_active
-
-
-## A Bull Rush automatically guards with an intact shield; it does not need the block button held.
-func _shield_is_guarding() -> bool:
-	return shield_up or (_is_bull_rushing() and has_shield())
 
 
 ## Server: raise / lower the shield.
@@ -673,27 +669,16 @@ func _place_shield(skeleton: Skeleton3D) -> void:
 	var sway := Transform3D.IDENTITY
 	if torso >= 0:
 		sway = skeleton.get_bone_global_pose(torso) * skeleton.get_bone_global_rest(torso).affine_inverse()
-		var sway_strength := SHIELD_RUSH_SWAY if _is_bull_rushing() else SHIELD_SWAY
-		sway.basis = Basis(Quaternion.IDENTITY.slerp(sway.basis.orthonormalized().get_rotation_quaternion(), sway_strength))
+		sway.basis = Basis(Quaternion.IDENTITY.slerp(sway.basis.orthonormalized().get_rotation_quaternion(), SHIELD_SWAY))
 	# The shield's middle and facing in skeleton space: carried, up in front, and the blend between them.
 	var face := SHIELD_CARRY_FACE.normalized()
 	var carry_basis := sway.basis * body.basis * Basis(Vector3.UP.cross(face), Vector3.UP, face)
 	var forearm := arm * (SHIELD_CARRY + class_def.hand_offset)
 	var size := class_def.shield_scale
 	var carried := Transform3D(carry_basis, forearm + carry_basis * Vector3(0.0, SHIELD_CARRY_LIFT * size, SHIELD_CARRY_OUT))
-	var charge_guard := _is_bull_rushing() and has_shield()
-	var raised: Transform3D
-	if charge_guard:
-		# Unlike the standing block, a running arm moves a lot. Anchor the charge pose to its real forearm
-		# point so the shield can never float away while the sprint animation plays.
-		var charge_basis := sway.basis * body.basis * Basis(Vector3.RIGHT,
-				deg_to_rad(SHIELD_RUSH_TILT) - deg_to_rad(SHIELD_RECOIL_TILT) * _shield_recoil)
-		raised = Transform3D(charge_basis, forearm + charge_basis * Vector3(0.0,
-				SHIELD_RUSH_LIFT * size, SHIELD_RUSH_OUT - SHIELD_RECOIL_BACK * _shield_recoil))
-	else:
-		var recoil := Transform3D(Basis(Vector3.RIGHT, -deg_to_rad(SHIELD_RECOIL_TILT) * _shield_recoil),
-				SHIELD_BLOCK_AT - Vector3(0.0, 0.0, SHIELD_RECOIL_BACK) * _shield_recoil)
-		raised = sway * body * recoil
+	var recoil := Transform3D(Basis(Vector3.RIGHT, -deg_to_rad(SHIELD_RECOIL_TILT) * _shield_recoil),
+			SHIELD_BLOCK_AT - Vector3(0.0, 0.0, SHIELD_RECOIL_BACK) * _shield_recoil)
+	var raised := sway * body * recoil
 	var middle := carried.interpolate_with(raised, _shield_raise) if _shield_raise < 1.0 else raised
 	_left_item.transform = arm.affine_inverse() * middle * Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * size),
 			-class_def.shield_center * size)
@@ -708,7 +693,7 @@ func _show_shield() -> void:
 func _apply_shield() -> void:
 	_update_move_speed()
 	_show_shield()
-	var guarding := _shield_is_guarding()
+	var guarding := shield_up
 	if guarding:
 		set_melee_aim(Vector3.ZERO)
 	var raise_to := 1.0 if guarding else 0.0
@@ -725,17 +710,13 @@ func _apply_shield() -> void:
 
 ## Server: a hit from in front landed on the raised shield: it soaks the damage (and maybe breaks).
 func _shield_blocks(attacker: Node3D) -> bool:
-	if not _shield_is_guarding() or not has_shield():
+	if not shield_up or not has_shield():
 		return false
 	if not is_instance_valid(attacker):
 		return true
 	var to := attacker.global_position - global_position
 	to.y = 0.0
-	# The body turns smoothly while steering, but the Bull Rush shield guards the
-	# direction of travel immediately. Keep the normal shield arc and durability.
-	var guard_direction := _bull_rush_direction if _is_bull_rushing() \
-			and _bull_rush_direction.length_squared() > 0.0001 else facing()
-	return to.length() < 0.05 or rad_to_deg(guard_direction.angle_to(to)) <= BLOCK_ARC * 0.5
+	return to.length() < 0.05 or rad_to_deg(facing().angle_to(to)) <= BLOCK_ARC * 0.5
 
 
 func _block(amount: float) -> void:
@@ -760,25 +741,13 @@ func _net_blocked(broken: bool) -> void:
 	_shield_recoil_tween.tween_property(self, "_shield_recoil", 0.0, 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 
-func _show_spear(shown: bool) -> void:
-	var spear := _weapon_items.get("spear") as Node3D
-	if spear:
-		spear.visible = shown and _weapon_items.get(current_weapon()) == spear and not is_downed
-
-
 func _slash_fx() -> void:
 	if is_dead or not is_inside_tree():
 		return
-	# The trail covers the hit area (the server knows where the swing started; other peers use the facing):
-	# a sweep for the sword, a straight stab for the spear.
+	# The trail covers the hit area (the server knows where the swing started; other peers use the facing).
 	var forward := _melee_dir if multiplayer.is_server() and _melee_dir != Vector3.ZERO else facing()
 	var yaw := atan2(forward.x, forward.z)
-	if melee_lane() > 0.0:
-		forward = _melee_hit_direction()
-		HitFx.stab(self, 0.6, atan2(forward.x, forward.z), melee_reach(), melee_lane() * 0.5,
-				Color(1.0, 0.96, 0.85), 0.22, _melee_hit_direction)
-	else:
-		HitFx.swing_arc(self, 0.5, yaw, melee_reach(), Color(1.0, 0.96, 0.85), melee_arc())
+	HitFx.swing_arc(self, 0.5, yaw, melee_reach(), Color(1.0, 0.96, 0.85), melee_arc())
 
 
 ## Sword attack, standing or running: no clip (Kenney's melee clip twists the arm, so the blade pointed
@@ -813,102 +782,13 @@ func _sword_slash(duration: float) -> void:
 	_slash_tween.tween_method(_slash_pose, 3.0, 4.0, back).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 
 
-## The skeleton the slash / thrust poses (and its rest transform, for the lunge / twist).
+## The skeleton the slash poses (and its rest transform, for the lunge / twist).
 func _find_slash_skeleton() -> void:
 	if _slash_skeleton == null:
 		_slash_skeleton = model.find_child("Skeleton3D", true, false) as Skeleton3D
 		if _slash_skeleton:
 			_slash_skeleton_rest = _slash_skeleton.transform
 			_slash_torso = _slash_skeleton.get_bone_parent(_slash_skeleton.find_bone("arm-right"))
-
-
-## Spear attack, standing or running: no clip (Kenney's melee clip swings the spear at the ground). The spear
-## tips level, draws back through the fist, shoots straight out along the hit lane, holds a moment and returns
-## (`THRUST_*` keys). Nothing moves sideways and the hero never steps forward. Damage lands in the fast part
-## (`attack_hit_delay`).
-func _spear_thrust(duration: float) -> void:
-	_action_time = duration
-	_was_acting = true
-	_full_body_action = false
-	if _arm_tween:
-		_arm_tween.kill()
-	if _slash_tween:
-		_slash_tween.kill()
-	_find_slash_skeleton()
-	if _slash_skeleton == null:
-		return
-	_right_hold.influence = 1.0
-	_right_hold.pose_offset = Quaternion.IDENTITY
-	_slash_skeleton.transform = _slash_skeleton_rest
-	# The lane is fixed where the stab starts: turning or re-aiming during it doesn't drag the spear, its
-	# streak or the hit sideways (`_melee_hit_direction`, `_facing_locked`).
-	_thrust_until = 0
-	_thrust_dir = _melee_hit_direction()
-	_thrust_until = Time.get_ticks_msec() + int(duration * 1000.0)
-	face_now(_thrust_dir)
-	# The spear is placed from the arm's real (final) pose each frame, so it points straight ahead whatever
-	# the holding pose / walk cycle does to the arm.
-	if not _slash_skeleton.skeleton_updated.is_connected(_place_stab_spear):
-		_slash_skeleton.skeleton_updated.connect(_place_stab_spear)
-	var hit := attack_hit_delay / anim_speed
-	var draw := hit * 0.7
-	var strike := hit * 0.3 + 0.04
-	var rest := maxf(duration * 0.95 - draw - strike, 0.1)
-	_thrust_pose(0.0)
-	_slash_tween = create_tween()
-	_slash_tween.tween_method(_thrust_pose, 0.0, 1.0, draw).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	_slash_tween.tween_method(_thrust_pose, 1.0, 2.0, strike).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
-	_slash_tween.tween_method(_thrust_pose, 2.0, 3.0, rest * 0.35)
-	_slash_tween.tween_method(_thrust_pose, 3.0, 4.0, rest * 0.65).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-
-
-## Stab pose at `phase` (0 carry, 1 drawn back, 2 full stab, 3 held, 4 carry). The spear itself is placed in
-## `_place_stab_spear` once the skeleton's pose is final; outside a stab it is back in its carry grip.
-func _thrust_pose(phase: float) -> void:
-	var spear := _weapon_items.get("spear") as Node3D
-	if spear == null:
-		return
-	_thrust_phase = phase if phase > 0.0 and phase < float(THRUST_PUSH.size() - 1) else -1.0
-	if _thrust_phase < 0.0:
-		spear.basis = Basis.IDENTITY
-		spear.position = _right_fist_position() - SPEAR_GRIP
-	else:
-		_place_stab_spear()
-
-
-## Every skeleton update while stabbing: the spear level and pointing from the fist to the middle of the hit
-## lane's far end (in the body's frame, so straight ahead from the top-down camera), slid along its shaft.
-func _place_stab_spear() -> void:
-	var spear := _weapon_items.get("spear") as Node3D
-	if _thrust_phase < 0.0 or spear == null or _slash_skeleton == null:
-		return
-	var i := clampi(int(_thrust_phase), 0, THRUST_PUSH.size() - 2)
-	var t := clampf(_thrust_phase - i, 0.0, 1.0)
-	# The arm as last drawn (its BoneAttachment3D carries the pose after the holding-pose modifier;
-	# get_bone_global_pose() outside the skeleton update would miss it), in skeleton space.
-	var arm := _slash_skeleton.global_transform.affine_inverse() * (spear.get_parent() as Node3D).global_transform
-	arm.basis = arm.basis.orthonormalized()
-	# Body (model) space -> skeleton space.
-	var body_to_skeleton := (_slash_skeleton.global_transform.affine_inverse() * model.global_transform).orthonormalized()
-	var fist := _right_fist_position()
-	var fist_body := body_to_skeleton.affine_inverse() * (arm * fist)
-	var lane_forward := Vector3(0.0, 0.0, 1.0)
-	if not _is_bull_rushing():
-		lane_forward = model.global_basis.inverse() * _melee_hit_direction()
-		lane_forward.y = 0.0
-		lane_forward = lane_forward.normalized()
-	var far := lane_forward * (melee_reach() / maxf(model.scale.z, 0.01))
-	far.y = fist_body.y
-	var ahead := (far - fist_body).normalized()
-	var down := (Vector3.DOWN - ahead * ahead.dot(Vector3.DOWN)).normalized()
-	var level_body := Basis(ahead.cross(down), ahead, down)  # spear +Y (shaft) ahead, flat side up
-	var level := arm.basis.inverse() * body_to_skeleton.basis * level_body
-	var grip := Basis(Quaternion.IDENTITY.slerp(Quaternion(level.orthonormalized()),
-			lerpf(THRUST_LEVEL[i], THRUST_LEVEL[i + 1], t)))
-	var push := minf(lerpf(THRUST_PUSH[i], THRUST_PUSH[i + 1], t),
-			SPEAR_GRIP.y - SPEAR_MIN_SHAFT_BEHIND_HAND)
-	spear.basis = grip
-	spear.position = fist - grip * SPEAR_GRIP + grip * Vector3(0.0, push, 0.0)
 
 
 ## Slash pose at `phase` (0 carry, 1 wind-up, 2 mid-cut, 3 follow-through, 4 carry): blends the `SLASH_*` keys.
@@ -954,20 +834,16 @@ func _slash_arm_basis(offset: Quaternion) -> Basis:
 	return torso * Basis(offset * _right_hold.get_held_rotation())
 
 
-## Procedural slash / stab poses back to carry, then the arms (see `_held_arms`).
+## Procedural slash pose back to carry, then the arms (see `_held_arms`).
 func _hold_arms(instant: bool = false) -> void:
 	if ability_active and class_def.ability == &"whirlwind":
 		_whirlwind_pose()
-		return
-	if _is_bull_rushing():
-		_bull_rush_pose()
 		return
 	if _slash_tween:
 		_slash_tween.kill()
 		_slash_tween = null
 	if _slash_skeleton:
 		_slash_pose(0.0)
-		_thrust_pose(0.0)
 	super(instant)
 
 
@@ -982,7 +858,7 @@ func _places_item(item: Node3D) -> bool:
 func _held_arms() -> int:
 	if is_downed:
 		return 0
-	return _weapon_hand() | (ARM_LEFT if _shield_is_guarding() else 0)
+	return _weapon_hand() | (ARM_LEFT if shield_up else 0)
 
 
 # --- Weapons ------------------------------------------------------------------
@@ -1013,27 +889,16 @@ func _melee_weapon() -> String:
 	return ""
 
 
-## Width in degrees of the melee hit fan (0 for a lane weapon).
+## Width in degrees of the melee hit fan.
 func melee_arc() -> float:
 	return float(WEAPONS.get(_melee_weapon(), WEAPONS.sword).get("arc", 0.0))
 
 
-## Width in m of the melee hit lane (the spear; 0 for a fan weapon).
-func melee_lane() -> float:
-	return float(WEAPONS.get(_melee_weapon(), WEAPONS.sword).get("lane", 0.0))
-
-
 ## The melee hit area seen from above (x, z in the hero's space, +Z forward), starting at `back`: a fan to
-## `melee_reach()` (sword) or a lane with a pointed end (spear). Convex: the hit prism and the aim marker.
+## `melee_reach()`. Convex: the hit prism and the aim marker.
 func melee_outline(back: float) -> PackedVector2Array:
 	var reach := melee_reach()
 	var points := PackedVector2Array()
-	if melee_lane() > 0.0:
-		var half := melee_lane() * 0.5
-		var shoulder := reach - half * 1.1
-		points.append_array([Vector2(-half, back), Vector2(half, back), Vector2(half, shoulder), Vector2(0.0, reach),
-				Vector2(-half, shoulder)])
-		return points
 	var half_arc := deg_to_rad(melee_arc() * 0.5)
 	points.append(Vector2(0.0, back))
 	for i in 9:
@@ -1042,24 +907,12 @@ func melee_outline(back: float) -> PackedVector2Array:
 	return points
 
 
-## The spear model in the right hand (carried like the orc spearmen), hidden unless the spear is in hand.
-func _attach_spear() -> Node3D:
-	var skeleton := model.find_child("Skeleton3D", true, false) as Skeleton3D
-	if skeleton == null:
-		return null
-	var spear := _attach_item(skeleton, SPEAR_SCENE, "arm-right")
-	if spear:
-		spear.position = _right_fist_position() - SPEAR_GRIP
-		spear.visible = false
-	return spear
-
-
 ## The carried weapon that isn't in hand ("" with a single weapon).
 func other_weapon() -> String:
 	return weapons[(weapon_index + 1) % weapons.size()] if weapons.size() > 1 else ""
 
 
-## Server: next carried weapon in hand (the Spearman: thrust <-> throw). Cancels aiming / swinging with the old one.
+## Server: next carried weapon in hand. Cancels aiming / swinging with the old one.
 func switch_weapon() -> void:
 	if is_dead or is_downed or weapons.size() < 2 or ability_active:
 		return
@@ -1107,8 +960,6 @@ func _idle_anim() -> String:
 func _move_anim(strength: float) -> String:
 	if is_downed:
 		return "crawl"
-	if _is_bull_rushing():
-		return "sprint"
 	return "walk" if shield_up else super(strength)
 
 
@@ -1174,24 +1025,17 @@ func _from_owner() -> bool:
 func attack_melee() -> void:
 	if is_dead or is_downed or shield_up or ability_active or _melee_timer > 0.0 or not holds_melee():
 		return
-	if current_weapon() == "spear":
-		melee()
-		return
 	var target := find_nearest(TARGET_GROUPS, 1.8, global_position)
 	if target:
 		face_now(_flat_dir_to(target))
 	melee()
 
 
-## Attack toward `direction`. Sword swings get aim assist; spear thrusts keep the exact lane direction.
+## Attack toward `direction`. Sword swings get aim assist.
 func attack_melee_toward(direction: Vector3) -> void:
 	if is_dead or is_downed or shield_up or ability_active or _melee_timer > 0.0 or not holds_melee():
 		return
 	direction.y = 0.0
-	if current_weapon() == "spear":
-		face_now(direction)
-		melee()
-		return
 	var best := direction.normalized()
 	var best_angle := deg_to_rad(MELEE_ASSIST_DEGREES)
 	for group in TARGET_GROUPS:
@@ -1233,9 +1077,7 @@ func set_melee_aim(direction: Vector3) -> void:
 		return
 	_melee_aim = direction.normalized()
 	look_override = _melee_aim
-	# A stab under way keeps its lane: the marker stays on it until the stab ends.
-	var shown := _thrust_dir if _thrusting() else _melee_aim
-	_melee_indicator.rotation.y = atan2(shown.x, shown.z)
+	_melee_indicator.rotation.y = atan2(_melee_aim.x, _melee_aim.z)
 	_melee_indicator.visible = is_local()
 	_aim_indicator.visible = false
 
@@ -1276,11 +1118,6 @@ func _begin_ability() -> void:
 		xp -= class_def.ability_xp
 		_ability_xp_lockout_left = class_def.ability_xp_lockout
 		ability_xp_locked = _ability_xp_lockout_left > 0.0
-	if class_def.ability == &"bull_rush":
-		_bull_rush_direction = facing().normalized()
-		var spear_index := weapons.find("spear")
-		if spear_index >= 0:
-			weapon_index = spear_index
 	_ability_left = class_def.ability_duration
 	_ability_tick = 0.0 if class_def.ability == &"bow_rain" else WHIRLWIND_TICK
 	_bow_rain_fired = 0
@@ -1328,8 +1165,6 @@ func _update_ability(delta: float) -> void:
 		if _ability_tick <= 0.0:
 			_ability_tick += WHIRLWIND_TICK
 			_whirlwind_hit()
-	elif class_def.ability == &"bull_rush":
-		_bull_rush_hit()
 	elif class_def.ability == &"bow_rain":
 		_ability_tick -= delta
 		var arrow_interval := class_def.ability_duration / float(BOW_RAIN_TOTAL_ARROWS)
@@ -1364,23 +1199,6 @@ func _apply_ability() -> void:
 		_spin_angle = wrapf(deg_to_rad(WHIRLWIND_SPIN) * ability_elapsed, 0.0, TAU)
 		_spin_world_yaw = wrapf(ability_start_yaw - _spin_angle, -PI, PI)
 		_action_time = 0.0
-		if class_def.ability == &"bull_rush":
-			# Enemy bodies cannot halt the charge. The separate spear sweep still detects and damages them.
-			if multiplayer.is_server() and _bull_rush_saved_mask < 0:
-				_bull_rush_saved_mask = collision_mask
-				collision_mask &= ~GameConfig.LAYER_ENEMIES
-			if _bull_rush_direction.length_squared() < 0.0001:
-				_bull_rush_direction = facing()
-			_bull_rush_direction.y = 0.0
-			_bull_rush_direction = _bull_rush_direction.normalized()
-			_bull_rush_last_position = global_position
-			_bull_rush_hit_ids.clear()
-	elif class_def.ability == &"bull_rush":
-		if multiplayer.is_server() and _bull_rush_saved_mask >= 0:
-			collision_mask = _bull_rush_saved_mask
-			_bull_rush_saved_mask = -1
-		_clear_bull_rush_exceptions()
-		_bull_rush_direction = Vector3.ZERO
 	if class_def.ability == &"whirlwind":
 		if ability_active:
 			_ensure_whirlwind_arc()
@@ -1388,28 +1206,11 @@ func _apply_ability() -> void:
 			_whirlwind_arc.visible = ability_active and not is_dead
 	if class_def.ability == &"bow_rain":
 		_refresh_bow_rain_area()
-	if _is_bull_rushing() and not is_dead and not is_downed:
-		if not is_instance_valid(_rush_wind):
-			var spear := _weapon_items.get("spear") as Node3D
-			if is_instance_valid(spear):
-				_rush_wind = preload("res://scripts/components/rush_wind.gd").new()
-				_rush_wind.name = &"RushWind"
-				spear.add_child(_rush_wind)
-				_rush_wind.position = Vector3(0.0, 0.6, 0.0)
-				_rush_wind.rotation.x = -PI * 0.5  # effect +Z follows the spear's +Y shaft
-		if is_instance_valid(_rush_wind):
-			_rush_wind.set_active(true)
-	elif is_instance_valid(_rush_wind):
-		_rush_wind.set_active(false)
 	if class_def.shield != null:
 		_apply_shield()
 	if takes_over_weapon:
 		_hold_arms()
 	ability_changed.emit()
-
-
-func _is_bull_rushing() -> bool:
-	return ability_active and class_def != null and class_def.ability == &"bull_rush"
 
 
 ## Same range rule is used by the local preview and by the authoritative server.
@@ -1528,72 +1329,6 @@ func _bow_rain_arrow() -> void:
 	NetSpawn.projectile(&"arrow", from, Vector3.DOWN, damage, self, crit, false, BOW_RAIN_ARROW_SPEED, true)
 
 
-## Turn toward held movement input at a limited rate. Releasing WASD keeps the current momentum.
-func _steer_bull_rush(input_direction: Vector3, delta: float) -> void:
-	input_direction.y = 0.0
-	if input_direction.length_squared() < 0.0001 or _bull_rush_direction.length_squared() < 0.0001:
-		return
-	var target := input_direction.normalized()
-	var yaw := atan2(_bull_rush_direction.x, _bull_rush_direction.z)
-	var target_yaw := atan2(target.x, target.z)
-	yaw += clampf(angle_difference(yaw, target_yaw), -deg_to_rad(BULL_RUSH_TURN_SPEED) * delta,
-			deg_to_rad(BULL_RUSH_TURN_SPEED) * delta)
-	_bull_rush_direction = Vector3(sin(yaw), 0.0, cos(yaw))
-
-
-## Server: sweep the path travelled since the previous physics frame. Every valid target takes one heavy
-## spear hit, even if a slow frame moved the player farther than one overlap radius.
-func _bull_rush_hit() -> void:
-	var shape := SphereShape3D.new()
-	shape.radius = BULL_RUSH_RADIUS
-	var query := PhysicsShapeQueryParameters3D.new()
-	query.shape = shape
-	query.collision_mask = melee_mask
-	query.exclude = [get_rid()]
-	var start := _bull_rush_last_position
-	var finish := global_position + _bull_rush_direction * BULL_RUSH_RADIUS * 0.65
-	var distance := start.distance_to(finish)
-	var steps := maxi(1, ceili(distance / (BULL_RUSH_RADIUS * 0.65)))
-	for step in steps + 1:
-		var at := start.lerp(finish, float(step) / steps) + Vector3(0.0, 0.55, 0.0)
-		query.transform = Transform3D(Basis.IDENTITY, at)
-		for hit in get_world_3d().direct_space_state.intersect_shape(query, 32):
-			var collider := hit.collider as Node3D
-			if collider == null or not collider.has_method("take_damage") or not _can_hit(collider):
-				continue
-			var id := collider.get_instance_id()
-			if _bull_rush_hit_ids.has(id):
-				continue
-			_bull_rush_hit_ids[id] = true
-			if collider is PhysicsBody3D and collider.is_in_group(&"active_enemies") \
-					and (collider.collision_layer & GameConfig.LAYER_ENEMIES) == 0:
-				var body := collider as PhysicsBody3D
-				add_collision_exception_with(body)
-				_bull_rush_exceptions.append(body)
-			var crit := randf() < crit_chance
-			collider.take_damage(spear_damage * BULL_RUSH_DAMAGE * (crit_multiplier if crit else 1.0), self, true, crit)
-	_bull_rush_last_position = global_position
-
-
-func _clear_bull_rush_exceptions() -> void:
-	for body in _bull_rush_exceptions:
-		if is_instance_valid(body):
-			remove_collision_exception_with(body)
-	_bull_rush_exceptions.clear()
-
-
-## Spear level and straight ahead for the whole charge.
-func _bull_rush_pose() -> void:
-	_find_slash_skeleton()
-	if _right_hold:
-		_right_hold.influence = 1.0
-	if _left_hold and _shield_is_guarding():
-		_left_hold.influence = 1.0
-	if _slash_skeleton and not _slash_skeleton.skeleton_updated.is_connected(_place_stab_spear):
-		_slash_skeleton.skeleton_updated.connect(_place_stab_spear)
-	_thrust_pose(2.0)
-
-
 ## Whirlwind damage: everything hostile around the hero (a cylinder up to the hit height).
 func _whirlwind_hit() -> void:
 	var shape := CylinderShape3D.new()
@@ -1683,10 +1418,6 @@ func _process(delta: float) -> void:
 		if is_instance_valid(_whirlwind_arc):
 			_whirlwind_arc.visible = true
 			_place_whirlwind_arc()
-	elif _is_bull_rushing() and not is_dead:
-		_bull_rush_pose()
-	if is_instance_valid(_rush_wind) and (is_dead or is_downed or not _is_bull_rushing()):
-		_rush_wind.set_active(false)
 
 
 # --- Bow ----------------------------------------------------------------------
@@ -1701,7 +1432,7 @@ func set_aim(aim: Vector3) -> void:
 	look_override = direction
 	if not is_local():
 		return
-	# The path the shot will really take: from where it leaves (the nocked arrow / the spear) to the aim point.
+	# The path the shot will really take: from where it leaves (the nocked arrow) to the aim point.
 	var from := _shot_from(direction)
 	var to := _aim_point(aim)
 	to.y = from.y
@@ -1725,9 +1456,9 @@ func _aim_point(aim: Vector3) -> Vector3:
 
 
 ## Where a shot toward `direction` leaves from: the nocked arrow (bow, in the model's frame turned to face
-## `direction`), or just in front of the chest (spear).
+## `direction`), or just in front of the chest before the bow was first drawn.
 func _shot_from(direction: Vector3) -> Vector3:
-	if current_weapon() == "javelin" or _nock_body == Vector3.INF:
+	if _nock_body == Vector3.INF:
 		return global_position + Vector3(0.0, SHOT_HEIGHT, 0.0) + direction * 0.4
 	var nock := model.global_transform * _nock_body - global_position
 	var turn := atan2(direction.x, direction.z) - model.global_rotation.y
@@ -1745,7 +1476,7 @@ func is_aiming() -> bool:
 	return look_override != Vector3.ZERO
 
 
-## Fires the ranged weapon in hand (arrow, or a thrown spear) toward `direction`, or at the nearest
+## Fires the ranged weapon in hand (an arrow) toward `direction`, or at the nearest
 ## enemy when no direction is given. Server only.
 func shoot(direction: Vector3 = Vector3.ZERO) -> void:
 	if is_dead or is_downed or (ability_active and class_def.ability != &"bow_rain") or not holds_ranged():
@@ -1757,13 +1488,12 @@ func shoot(direction: Vector3 = Vector3.ZERO) -> void:
 		if direction != Vector3.ZERO:
 			_pending_shot = direction
 		return
-	var spear := current_weapon() == "javelin"
-	_shoot_timer = spear_cooldown if spear else shoot_cooldown
+	_shoot_timer = shoot_cooldown
 	if direction == Vector3.ZERO:
 		var target := find_nearest(TARGET_GROUPS, aim_range, global_position)
 		direction = target.global_position - global_position if target else facing()
 	# Aimed: exactly where the player aims (no snapping onto a target). `direction` may carry the distance
-	# to the aimed point (see set_aim): the shot leaves from the bow / spear and flies through that point.
+	# to the aimed point (see set_aim): the shot leaves from the bow and flies through that point.
 	direction.y = 0.0
 	var target_point := _aim_point(direction)
 	face_now(direction.normalized())
@@ -1773,14 +1503,120 @@ func shoot(direction: Vector3 = Vector3.ZERO) -> void:
 	direction = target_point - from
 	direction.y = 0.0
 	direction = direction.normalized()
-	if spear:
-		play_action("attack-melee-right", 0.4, ARM_RIGHT)
-		NetSpawn.projectile(&"player_spear", from, direction, spear_damage * multiplier, self, crit)
-	else:
-		play_action("holding-left-shoot", 0.25, ARM_LEFT)
-		# Fire Range: the arrow flies longer, in step with the farther aim; Penetration: it goes through enemies.
-		NetSpawn.projectile(&"arrow", from, direction, arrow_damage * multiplier, self, crit, true, 0.0, false,
-				{"pierce": arrow_pierce, "lifetime_scale": aim_range / _base_aim_range})
+	if current_weapon() == "staff" or current_weapon() == "heal_staff":
+		play_action("holding-right-shoot", 0.3, ARM_RIGHT)
+		if current_weapon() == "heal_staff" and _cast_heal(target_point):
+			return
+		NetSpawn.projectile(&"magic_bolt", from, direction, arrow_damage * multiplier, self, crit, true)
+		return
+	play_action("holding-left-shoot", 0.25, ARM_LEFT)
+	# Fire Range: the arrow flies longer, in step with the farther aim; Penetration: it goes through enemies.
+	NetSpawn.projectile(&"arrow", from, direction, arrow_damage * multiplier, self, crit, true, 0.0, false,
+			{"pierce": arrow_pierce, "lifetime_scale": aim_range / _base_aim_range})
+
+
+## Healer's staff (server): heals the most wounded friend (a hero or soldier, not yourself) within the staff's
+## heal_radius of `point`. False when nobody there is hurt (the staff then fires a weak bolt).
+func _cast_heal(point: Vector3) -> bool:
+	var radius := float(WEAPONS.heal_staff.heal_radius)
+	var best: Unit = null
+	for node in get_tree().get_nodes_in_group(&"player_units"):
+		var unit := node as Unit
+		if unit == null or unit == self or GameConfig.is_gone(unit) or GameConfig.is_hostile(self, unit) \
+				or unit.max_health <= 0.0 or unit.health >= unit.max_health:
+			continue
+		var offset := unit.global_position - point
+		offset.y = 0.0
+		if offset.length() > radius + Unit.target_radius(unit):
+			continue
+		if best == null or unit.health / unit.max_health < best.health / best.max_health:
+			best = unit
+	if best == null:
+		return false
+	best.heal(roundf(heal_power))
+	_net_heal_fx.rpc(best.get_path())
+	_heals += 1
+	if classless and _heals % HEALS_PER_KILL == 0:
+		_add_kill()
+	return true
+
+
+@rpc("authority", "call_local", "unreliable")
+func _net_heal_fx(path: NodePath) -> void:
+	var patient := get_node_or_null(path) as Node3D
+	if patient and is_inside_tree():
+		HitFx.flash(patient.global_position + Vector3(0, 0.9, 0), HitFx.REVIVE_SPARKLE, Color(HEAL_COLOR, 0.9), 1.1, 0.45)
+
+
+## Server (Unit.take_damage): this hero landed a killing blow. Conquest heroes level up from it.
+func credit_kill(victim: Node3D) -> void:
+	if classless and victim != null and not victim.is_in_group(&"animals"):
+		_add_kill()
+
+
+## Server: one more kill toward the next level; a new level adds LEVEL_BONUS of the base health (healed now).
+func _add_kill() -> void:
+	hero_kills += 1
+	var level := hero_level
+	while level + 1 < LEVEL_KILLS.size() and hero_kills >= LEVEL_KILLS[level + 1]:
+		level += 1
+	if level > hero_level:
+		var gain := _hero_base_health * LEVEL_BONUS * (level - hero_level)
+		_level_health += gain
+		max_health += gain
+		heal(gain)
+		hero_level = level
+
+
+## Kills the next level needs (0 at the top level).
+func kills_for_next_level() -> int:
+	return LEVEL_KILLS[hero_level + 1] if hero_level + 1 < LEVEL_KILLS.size() else 0
+
+
+## Server (main.rearm_player): what a Conquest hero keeps when it swaps weapons — everything but the class, its
+## level and its weapon upgrades.
+func carry_state() -> Dictionary:
+	var levels := {}
+	for id in upgrade_levels:
+		var def := _upgrade_def(id)
+		if def and not def.is_class_upgrade() and not ARM_CLASSES.has(id):
+			levels[id] = upgrade_levels[id]
+	return {"coins": coins, "levels": levels, "extra_health": max_health - _hero_base_health - _level_health,
+			"health_share": health / maxf(max_health, 1.0), "follower_cap": follower_cap,
+			"training_kinds": _training_kinds.duplicate(), "training_left": _training_left.duplicate(),
+			"army_order": army_order, "army_point": army_point, "army_target": army_target,
+			"order_serial": order_serial, "trail": trail.duplicate(), "ally_damage": ally_damage,
+			"ally_health": ally_health, "facing": facing()}
+
+
+## Server: the new hero takes over what the old one carried (see `carry_state`).
+func apply_carry(carry: Dictionary) -> void:
+	coins = carry.coins
+	upgrade_levels = carry.levels
+	max_health = _hero_base_health + float(carry.extra_health)
+	health = maxf(1.0, roundf(max_health * float(carry.health_share)))
+	follower_cap = carry.follower_cap
+	ally_damage = carry.ally_damage
+	ally_health = carry.ally_health
+	_training_kinds = carry.training_kinds
+	soldiers_training = _training_kinds.size()
+	var left: Array[float] = []
+	left.assign(carry.training_left)
+	_training_left = left
+	army_order = carry.army_order
+	army_point = carry.army_point
+	army_target = carry.army_target
+	army_target_path = army_target.get_path() if is_instance_valid(army_target) else NodePath()
+	order_serial = carry.order_serial
+	trail = carry.trail
+	face_now(carry.facing)
+
+
+func _upgrade_def(id: StringName) -> UpgradeDef:
+	for def in CATALOG.upgrades:
+		if def.id == id:
+			return def
+	return null
 
 
 ## Aim path (drifting chevrons) and a reticle at the aim point, at shot height; placed by `set_aim`.
@@ -1821,35 +1657,23 @@ func melee_reach() -> float:
 
 func _roll_melee_damage() -> Array:
 	var crit := randf() < crit_chance
-	var base := spear_damage if current_weapon() == "spear" else melee_damage
-	return [base * (crit_multiplier if crit else 1.0), crit]
+	return [melee_damage * (crit_multiplier if crit else 1.0), crit]
 
 
 ## The hero may aim elsewhere while the attack animation winds up. Test exactly the wedge currently shown
 ## to the player; a released/tapped attack falls back to the direction the body still faces.
 func _melee_hit_direction() -> Vector3:
-	if _thrusting():
-		return _thrust_dir
 	return _melee_aim if _melee_aim != Vector3.ZERO else facing()
 
 
-## A spear stab is under way: its lane stays where it started.
-func _thrusting() -> bool:
-	return _thrust_dir != Vector3.ZERO and Time.get_ticks_msec() < _thrust_until and current_weapon() == "spear"
-
-
-func _facing_locked() -> bool:
-	return _thrusting()
-
-
 ## Melee hits a prism, so big colliders count by their surface instead of their center.
-## The spear matches the visible decal exactly; the sword also covers point-blank targets behind its start.
+## The sword also covers point-blank targets behind the start of the visible decal.
 func _melee_query(direction: Vector3) -> PhysicsShapeQueryParameters3D:
 	if _melee_wedge == null or _melee_wedge_weapon != _melee_weapon():
 		_melee_wedge_weapon = _melee_weapon()
 		var points := PackedVector3Array()
 		for y in [0.05, GameConfig.HIT_HEIGHT + 0.3]:
-			for corner in melee_outline(0.25 if melee_lane() > 0.0 else -0.3):
+			for corner in melee_outline(-0.3):
 				points.append(Vector3(corner.x, y, corner.y))
 		_melee_wedge = ConvexPolygonShape3D.new()
 		_melee_wedge.points = points
@@ -1861,7 +1685,7 @@ func _melee_query(direction: Vector3) -> PhysicsShapeQueryParameters3D:
 	return query
 
 
-## Orange marker of the hit area in front of the hero while aiming the melee weapon (fan / spear lane).
+## Orange marker of the hit area in front of the hero while aiming the melee weapon (a fan).
 func _build_melee_indicator() -> void:
 	_melee_indicator = _fan_indicator(melee_outline(0.25))
 	_knife_indicator = _fan_indicator(knife_outline(0.25))
@@ -1891,7 +1715,7 @@ func _fan_indicator(outline: PackedVector2Array) -> Node3D:
 
 func _build_name_label() -> void:
 	_name_label = Label3D.new()
-	_name_label.text = display_name
+	_name_label.text = _name_text()
 	_name_label.font_size = 56
 	_name_label.outline_size = 14
 	_name_label.pixel_size = 0.006
@@ -1902,6 +1726,15 @@ func _build_name_label() -> void:
 	_name_label.position = Vector3(0, health_bar_height + 0.28, 0)
 	_name_label.visible = Net.is_online()
 	add_child(_name_label)
+
+
+func _name_text() -> String:
+	return "%s  Lv %d" % [display_name, hero_level] if classless and hero_level > 0 else display_name
+
+
+func _update_name_label() -> void:
+	if _name_label:
+		_name_label.text = _name_text()
 
 
 # --- Pickups (server) -------------------------------------------------------------
@@ -1935,8 +1768,13 @@ func collect(kind: Pickup.Kind, amount: int) -> bool:
 
 # --- Army ---------------------------------------------------------------------
 
-## This player's soldiers currently in the world (all of them follow).
+## This player's soldiers following them in the army (Conquest squads are out on their own: `soldiers()`).
 func followers() -> Array[Node]:
+	return soldiers().filter(func(ally: Node) -> bool: return int(ally.get("squad")) == 0)
+
+
+## Every soldier of this player in the world: the army and their Conquest squads.
+func soldiers() -> Array[Node]:
 	return get_tree().get_nodes_in_group(&"allies").filter(
 			func(ally: Node) -> bool: return ally.get("owner_peer") == peer_id and not ally.get("is_dead"))
 
@@ -1958,9 +1796,16 @@ func _record_trail() -> void:
 			trail.remove_at(0)
 
 
-## Everything that counts toward follower_cap: following + in training.
+## Army tab recruit cards -> the soldier kind they train (Ally.WEAPON_STATS).
+const RECRUIT_WEAPONS: Dictionary = {&"recruit": "sword", &"recruit_bow": "bow", &"recruit_wizard": "wizard",
+		&"recruit_healer": "healer"}
+## Server: the kind of each soldier in training, oldest first.
+var _training_kinds: PackedStringArray = []
+
+
+## Everything that counts toward follower_cap: following, in squads and in training.
 func army_size() -> int:
-	return followers().size() + soldiers_training
+	return soldiers().size() + soldiers_training
 
 
 ## Seconds until the next soldier in training is ready (0 = none training).
@@ -1991,8 +1836,12 @@ func _physics_process(delta: float) -> void:
 ## The oldest soldier in training is ready: it appears right behind you and follows at once.
 func _finish_training() -> void:
 	soldiers_training -= 1
+	var kind := "sword"
+	if not _training_kinds.is_empty():
+		kind = _training_kinds[0]
+		_training_kinds.remove_at(0)
 	var at := GameConfig.clamp_to_world(global_position - facing() * 1.3)
-	NetSpawn.unit(&"ally", at, {"team": team_id, "owner": peer_id, "weapon": class_def.ally_weapon})
+	NetSpawn.unit(&"ally", at, {"team": team_id, "owner": peer_id, "weapon": kind})
 	_net_soldier_ready.rpc(at)
 
 
@@ -2020,30 +1869,28 @@ func owns_shield() -> bool:
 	return class_def != null and class_def.shield != null and upgrade_level(&"shield") > 0
 
 
-## The class's weapons, without the thrown spear until "Can Throw" is bought.
+## The class's weapons.
 func _class_weapons() -> PackedStringArray:
-	var carried := PackedStringArray()
-	for weapon in class_def.weapons:
-		if weapon != "javelin" or upgrade_level(&"spear_throw") > 0:
-			carried.append(weapon)
-	return carried
+	return PackedStringArray(class_def.weapons)
 
 
 ## Every peer: the stats the class upgrades change, straight from the levels (so clients aim with the same range
-## and swing at the same speed). Fire Rate shortens the cooldowns and speeds the swing / thrust up to match.
+## and swing at the same speed). Fire Rate shortens the cooldowns and speeds the swing up to match.
 func _apply_class_upgrades() -> void:
 	if class_def == null or _base_aim_range <= 0.0:
 		return
-	melee_damage = _base_melee_damage * (1.0 + _upgrade_amount(&"sword_damage"))
-	spear_damage = _base_spear_damage * (1.0 + _upgrade_amount(&"spear_damage"))
-	arrow_damage = _base_arrow_damage * (1.0 + _upgrade_amount(&"bow_damage"))
-	var rate := 1.0 + _upgrade_amount(&"sword_rate") + _upgrade_amount(&"spear_rate") + _upgrade_amount(&"bow_rate")
+	var level := 1.0 + LEVEL_BONUS * hero_level
+	var power := float(WEAPONS.get(_melee_weapon(), {}).get("power", 1.0))  # fists hit softer than the sword
+	melee_damage = _base_melee_damage * power * (1.0 + _upgrade_amount(&"sword_damage")) * level
+	arrow_damage = _base_arrow_damage * (1.0 + _upgrade_amount(&"bow_damage") + _upgrade_amount(&"staff_damage")) * level
+	heal_power = float(WEAPONS.heal_staff.heal) * (1.0 + _upgrade_amount(&"heal_power")) * level
+	var rate := 1.0 + _upgrade_amount(&"sword_rate") + _upgrade_amount(&"bow_rate") + _upgrade_amount(&"staff_rate") \
+			+ _upgrade_amount(&"heal_rate")
 	var melee := _melee_weapon()
 	if melee != "":
 		melee_cooldown = WEAPONS[melee].cooldown / rate
 	anim_speed = rate
 	shoot_cooldown = _base_shoot_cooldown / rate
-	spear_cooldown = _base_spear_cooldown / rate
 	aim_range = _base_aim_range + _upgrade_amount(&"bow_range")
 	arrow_pierce = upgrade_level(&"bow_pierce")
 	knockback_power = _upgrade_amount(&"sword_knockback") if upgrade_level(&"sword_knockback") > 0 else 1.0
@@ -2105,6 +1952,66 @@ func dash(direction: Vector3) -> void:
 
 
 ## Local input (C / L3 / the touch dash button): dash now on the server, else predict it here and ask the server.
+## Conquest (the M map): an order for the place with `index` (ConquestMode.place_action).
+func request_place_action(index: int, action: StringName, arg: int) -> void:
+	if multiplayer.is_server():
+		_place_action(index, action, arg)
+	else:
+		net_place_action.rpc_id(1, index, action, arg)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func net_place_action(index: int, action: StringName, arg: int) -> void:
+	if _from_owner():
+		_place_action(index, action, arg)
+
+
+func _place_action(index: int, action: StringName, arg: int) -> void:
+	var conquest := get_tree().get_first_node_in_group(&"conquest") as ConquestMode
+	if conquest:
+		conquest.place_action(self, index, action, arg)
+
+
+## Conquest (the M map): an order for a squad (ConquestSquads.command: go to place `arg`, hold `point`, join).
+func request_squad_action(squad: int, action: StringName, arg: int, point: Vector3) -> void:
+	if multiplayer.is_server():
+		_squad_action(squad, action, arg, point)
+	else:
+		net_squad_action.rpc_id(1, squad, action, arg, point)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func net_squad_action(squad: int, action: StringName, arg: int, point: Vector3) -> void:
+	if _from_owner():
+		_squad_action(squad, action, arg, point)
+
+
+func _squad_action(squad: int, action: StringName, arg: int, point: Vector3) -> void:
+	var conquest := get_tree().get_first_node_in_group(&"conquest") as ConquestMode
+	if conquest and conquest.squads:
+		conquest.squads.command(self, squad, action, arg, point)
+
+
+## Conquest (F): take the treasury of the place you lord and stand in.
+func request_withdraw() -> void:
+	if multiplayer.is_server():
+		_withdraw()
+	else:
+		net_withdraw.rpc_id(1)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func net_withdraw() -> void:
+	if _from_owner():
+		_withdraw()
+
+
+func _withdraw() -> void:
+	var conquest := get_tree().get_first_node_in_group(&"conquest") as ConquestMode
+	if conquest and not is_dead:
+		conquest.withdraw(self)
+
+
 func request_dash(direction: Vector3) -> void:
 	if multiplayer.is_server():
 		dash(direction)
@@ -2343,10 +2250,15 @@ func is_upgrade_useful(def: UpgradeDef) -> bool:
 	match def.id:
 		&"potion":
 			return health < max_health
-		&"recruit":
+		&"recruit", &"recruit_bow", &"recruit_wizard", &"recruit_healer":
 			return army_size() < follower_cap
 		&"siege_ram", &"siege_catapult":
 			return SiegeEngine.count_for(get_tree(), peer_id, _siege_kind(def.id)) == 0  # one of each
+		&"muster":
+			var conquest := get_tree().get_first_node_in_group(&"conquest") as ConquestMode
+			return conquest != null and conquest.can_muster(self) > 0  # the General, barracks not empty, room
+		&"arm_sword", &"arm_bow", &"arm_wizard", &"arm_healer":
+			return classless and class_def != null and class_def.id != ARM_CLASSES[def.id]  # Conquest: another weapon
 	if not def.modes.is_empty() and not def.modes.has(Net.mode()):
 		return false
 	if def.is_class_upgrade():
@@ -2394,19 +2306,29 @@ func _apply_upgrade(def: UpgradeDef) -> void:
 				ally_damage += def.amount
 			else:
 				ally_health += def.amount
-			for ally in followers():
+			for ally in soldiers():
 				(ally as Ally).refresh_army_bonus()
 		&"command":
 			follower_cap += int(def.amount)
+		&"muster":
+			var conquest := get_tree().get_first_node_in_group(&"conquest") as ConquestMode
+			if conquest:
+				conquest.muster(self)
 		&"siege_ram", &"siege_catapult":
 			# Conquest: the engine rolls out right behind the hero and is theirs.
 			var at := GameConfig.clamp_to_world(global_position - facing() * 2.5)
 			NetSpawn.unit(&"siege", at, {"engine": _siege_kind(def.id), "team": team_id, "owner": peer_id})
-		&"recruit":
+		&"recruit", &"recruit_bow", &"recruit_wizard", &"recruit_healer":
 			for i in int(def.amount):
+				_training_kinds.append(RECRUIT_WEAPONS[def.id])
 				soldiers_training += 1
 		&"potion":
 			heal(def.amount)
+		&"arm_sword", &"arm_bow", &"arm_wizard", &"arm_healer":
+			# Conquest: the same hero again with this weapon, at this spot (level and weapon upgrades start over).
+			var main := get_tree().current_scene
+			if main and main.has_method(&"rearm_player"):
+				main.rearm_player(self, ARM_CLASSES[def.id])
 		_:
 			push_warning("Upgrade '%s' has no effect in Player._apply_upgrade()" % def.id)
 
@@ -2525,7 +2447,6 @@ func _update_move_speed() -> void:
 		if ability_active:
 			match class_def.ability:
 				&"whirlwind": ability_scale = WHIRLWIND_SPEED
-				&"bull_rush": ability_scale = BULL_RUSH_SPEED
 		move_speed = running_speed() * (DOWNED_SPEED if is_downed else 1.0) * (BLOCK_SPEED if shield_up else 1.0) \
 				* ability_scale
 

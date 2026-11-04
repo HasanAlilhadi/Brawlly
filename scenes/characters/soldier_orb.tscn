@@ -1,0 +1,34 @@
+[gd_scene format=3]
+
+[ext_resource type="Texture2D" path="res://assets/vfx/particles/magic_02.png" id="1_core"]
+[ext_resource type="Texture2D" path="res://assets/vfx/particles/light_01.png" id="2_glow"]
+
+[sub_resource type="StandardMaterial3D" id="Material_core"]
+transparency = 1
+blend_mode = 1
+shading_mode = 0
+vertex_color_use_as_albedo = true
+albedo_texture = ExtResource("1_core")
+billboard_mode = 1
+
+[sub_resource type="StandardMaterial3D" id="Material_glow"]
+transparency = 1
+blend_mode = 1
+shading_mode = 0
+vertex_color_use_as_albedo = true
+albedo_texture = ExtResource("2_glow")
+billboard_mode = 1
+
+[node name="SoldierOrb" type="Node3D"]
+
+[node name="Glow" type="Sprite3D" parent="."]
+material_override = SubResource("Material_glow")
+modulate = Color(0.25, 0.55, 1, 0.7)
+pixel_size = 0.0016
+texture = ExtResource("2_glow")
+
+[node name="Core" type="Sprite3D" parent="."]
+material_override = SubResource("Material_core")
+modulate = Color(0.6, 0.85, 1, 1)
+pixel_size = 0.0008
+texture = ExtResource("1_core")

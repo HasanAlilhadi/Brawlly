@@ -29,7 +29,6 @@ const TOUCH_NUB := preload("res://assets/ui/touch/joystick_circle_nub_a.png")
 const TOUCH_NUB_HELD := preload("res://assets/ui/touch/highlights/joystick_circle_nub_highlight.png")
 const TOUCH_BUTTON := preload("res://assets/ui/touch/button_circle.png")
 const TOUCH_BUTTON_HELD := preload("res://assets/ui/touch/highlights/button_circle_highlight.png")
-const SPEAR_ICON := preload("res://assets/ui/icons/game/spear.svg")
 const SHIELD_ICON := preload("res://assets/ui/icons/game/shield.svg")
 const KNIFE_ICON := preload("res://assets/ui/icons/game/axe.svg")
 const DASH_ICON := preload("res://assets/ui/icons/game/cursor_move.svg")
@@ -74,7 +73,7 @@ var _army_buttons: Array[Button] = []
 var _kill_picking: bool = false
 var _ping_button: Button
 var _switch_button: TouchButton
-## Touch: hold to raise the shield (Swordsman, Spearman with the spear in hand).
+## Touch: hold to raise the shield (Swordsman with the shield upgrade).
 var shield_button: TouchButton
 ## Touch: the special ability (dim until enough XP).
 var ability_button: TouchButton
@@ -108,6 +107,8 @@ var _objective_time: Label
 var _objective_bar: ProgressBar
 var _objective_hint: Label
 var _spectate_label: Label
+## The top-left column (stats, square buttons); modes add their own panels under them (Conquest: ConquestPanel).
+var left_column: VBoxContainer
 
 
 func _ready() -> void:
@@ -745,11 +746,7 @@ func toggle_upgrades() -> void:
 
 ## Desktop: a weapon bar at the bottom right (the class's weapons, the one in hand lit, E to switch).
 func _build_weapon_controls() -> void:
-	# The glyph is tight (no padding like the 64 px RPG icons), so the touch stick gets a 44 px copy.
-	var spear_image := SPEAR_ICON.get_image()
-	spear_image.resize(44, 44, Image.INTERPOLATE_LANCZOS)
-	var spear_icon := ImageTexture.create_from_image(spear_image)
-	_weapon_icons = {"sword": melee_button.icon, "bow": bow_stick.icon, "spear": spear_icon, "javelin": spear_icon}
+	_weapon_icons = {"sword": melee_button.icon, "bow": bow_stick.icon}
 	for side in [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]:
 		melee_button.set_offset(side, bow_stick.get_offset(side))
 	melee_button.drag_radius = bow_stick.drag_radius
@@ -929,6 +926,7 @@ func _update_weapon_controls() -> void:
 ## (minimap, stats, army orders), one scale for icons, fonts and buttons.
 func _apply_design() -> void:
 	var left := _column(false)
+	left_column = left
 	var top_left := $Root/TopLeft as Control
 	top_left.reparent(left, false)
 	top_left.custom_minimum_size = Vector2(HudStyle.LEFT_WIDTH, 0)

@@ -1,16 +1,15 @@
 extends Node
 ## Soldiers (allies) on an open field (scenery collision off), against orcs held still unless noted:
-## - spear soldiers stab (melee only: no projectile, the spear points straight ahead mid-stab);
 ## - archers shoot from half their hero's bow range, step back from an orc next to them, walk around a wall
 ##   that blocks their line of fire, and line up behind the hero;
 ## - teamwork: three swordsmen spread over three orcs; an orc hitting the hero is attacked first;
 ## - following: a soldier cut off by a cup-shaped wall walks the hero's path out and catches up;
+## - wizards hurl magic bolts from range; healers never attack and heal a wounded hero / squadmate;
+## - kills (and a healer's heals) raise ranks, and a rank raises health and damage;
 ## - soldiers only ever walk or run (no catch-up / charge boost): following, charging and fighting.
 ##   "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/ally_test.gd
-## --shots=<dir> also saves frames of a spear stab (needs a window: --position -4000,-4000, no --headless).
 
 var failures := 0
-var shots := ""
 var main: Node
 var player: Player
 var _arrows: Array[Dictionary] = []  # {time, from} of each arrow spawned
@@ -24,9 +23,6 @@ func _check(ok: bool, message: String) -> void:
 
 
 func _ready() -> void:
-	for arg in OS.get_cmdline_user_args():
-		if arg.begins_with("--shots="):
-			shots = arg.substr(8)
 	get_tree().change_scene_to_file("res://scenes/main/main.tscn")
 	while get_tree().current_scene == null or get_tree().current_scene.name != "Main" \
 			or get_tree().get_nodes_in_group(&"players").is_empty():
@@ -41,7 +37,6 @@ func _ready() -> void:
 	get_tree().node_added.connect(func(node: Node) -> void:
 		if node is ArrowProjectile:
 			_arrows.append({"time": Time.get_ticks_msec(), "node": node}))
-	await _spear()
 	await _archer_range()
 	await _archer_keep_away()
 	await _archer_line_of_fire()
@@ -50,6 +45,9 @@ func _ready() -> void:
 	await _defend()
 	await _follow_around_wall()
 	await _two_speeds()
+	await _wizard()
+	await _healer()
+	await _ranks()
 	printerr("%s ally: done (%d failures)" % ["PASS" if failures == 0 else "FAIL", failures])
 	get_tree().quit(1 if failures else 0)
 
@@ -128,29 +126,6 @@ func _wall(at: Vector3, size: Vector2) -> void:
 
 func _flat(a: Vector3, b: Vector3) -> float:
 	return Vector2(a.x - b.x, a.z - b.z).length()
-
-
-func _spear() -> void:
-	await _reset()
-	if shots != "":
-		main.camera.offset *= 0.5
-	var ally := _ally("spear", Vector3(1.5, 0, 0))
-	var orc := _orc(Vector3(3.2, 0, 0))
-	var best_level := -1.0
-	var shot_index := 0
-	for i in 240:
-		await get_tree().physics_frame
-		if ally._stab_phase > 0.4 and ally._stab_phase < 0.7 and ally._right_item:
-			best_level = maxf(best_level, ally._right_item.global_basis.y.normalized().dot(ally.facing()))
-		if shots != "" and i % 3 == 0 and shot_index < 36:
-			get_viewport().get_texture().get_image().save_png("%s/spear_%02d.png" % [shots, shot_index])
-			shot_index += 1
-	_check(orc.health < orc.max_health, "spear soldier hits in melee (%.0f damage)" % (orc.max_health - orc.health))
-	_check(_arrows.is_empty(), "spear soldier never throws (%d projectiles)" % _arrows.size())
-	_check(_flat(ally.global_position, orc.global_position) < 2.4, "it fights up close (%.1f m)" % _flat(ally.global_position, orc.global_position))
-	_check(best_level > 0.9, "mid-stab the spear points straight ahead (%.2f)" % best_level)
-	if shots != "":
-		main.camera.offset *= 2.0
 
 
 func _archer_range() -> void:
@@ -274,7 +249,7 @@ func _follow_around_wall(no_trail: bool = false) -> void:
 ## Every frame a soldier moves, its speed is its walk or its run (or slower only while attacking / pushed).
 func _two_speeds() -> void:
 	await _reset()
-	var soldiers: Array[Ally] = [_ally("sword", Vector3(-6, 0, -6)), _ally("bow", Vector3(6, 0, -6)), _ally("spear", Vector3(0, 0, -8))]
+	var soldiers: Array[Ally] = [_ally("sword", Vector3(-6, 0, -6)), _ally("bow", Vector3(6, 0, -6)), _ally("wizard", Vector3(0, 0, -8))]
 	var run := soldiers[0].move_speed
 	var walk := run * soldiers[0].walk_share
 	var count := {"frames": 0, "other": 0}  # moving frames; frames at a third speed
@@ -307,3 +282,43 @@ func _two_speeds() -> void:
 		sample.call()
 	_check(count.frames > 100 and count.other <= count.frames * 0.03,
 			"soldiers move only at walk %.1f or run %.1f m/s (%d of %d moving frames at another speed)" % [walk, run, count.other, count.frames])
+
+
+func _wizard() -> void:
+	await _reset()
+	var ally := _ally("wizard", Vector3(0, 0, -1.5))
+	await _wait(1.0)
+	_check(ally.is_ranged() and ally.shoots() and not ally.is_archer(), "a wizard fights from range without arrows")
+	var orc := _orc(Vector3(0, 0, ally.archer_range() + 1.0))
+	await _until(func() -> bool: return orc.health < orc.max_health, 8.0)
+	_check(orc.health < orc.max_health, "its magic bolts hit (%.0f damage)" % (orc.max_health - orc.health))
+	_check(_flat(ally.global_position, orc.global_position) > 3.0, "from range (%.1f m)" % _flat(ally.global_position, orc.global_position))
+
+
+func _healer() -> void:
+	await _reset()
+	var healer := _ally("healer", Vector3(0, 0, -1.5))
+	var mate := _ally("sword", Vector3(1.5, 0, 0))
+	mate.health = mate.max_health * 0.4
+	var orc := _orc(Vector3(0, 0, 3.0))
+	var before := mate.health
+	await _wait(4.0)
+	_check(mate.health > before, "a healer heals a wounded squadmate (%.0f -> %.0f)" % [before, mate.health])
+	_check(healer.target == null, "and never picks a fight")
+	orc.queue_free()
+
+
+func _ranks() -> void:
+	await _reset()
+	var ally := _ally("sword", Vector3(1.5, 0, 0))
+	ally.max_health = 100.0
+	ally.health = 100.0
+	ally._base_max_health = 100.0
+	ally._base_damage = 10.0
+	ally.refresh_army_bonus()
+	for i in Ally.RANK_KILLS[2]:
+		ally.credit_kill(null)
+	_check(ally.rank == 2, "kills raise its rank outside Conquest too (rank %d after %d kills)" % [ally.rank, ally.kills])
+	_check(is_equal_approx(ally.melee_damage, 10.0 * (1.0 + Ally.RANK_BONUS * 2) * player.ally_damage),
+			"a rank adds damage (%.1f)" % ally.melee_damage)
+	_check(Ally.rank_for_drill(0.0) == 0 and Ally.rank_for_drill(Ally.DRILL_SECONDS[3]) == 3, "barracks drill earns ranks")

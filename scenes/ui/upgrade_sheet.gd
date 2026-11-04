@@ -17,6 +17,7 @@ const KEY_PROMPTS := {"C": "keyboard/c", "E": "keyboard/e", "RMB": "mouse/right"
 const SLIDE_TIME: float = 0.32
 const RECRUIT := &"recruit"
 const SIEGE: Array[StringName] = [&"siege_ram", &"siege_catapult"]
+const MUSTER := &"muster"
 
 var is_open: bool = false
 var _player: Player
@@ -116,6 +117,9 @@ func set_player(player: Player) -> void:
 	_player = player
 	player.coins_changed.connect(func(_count: int) -> void: _refresh())
 	player.upgrades_changed.connect(_refresh)
+	player.level_changed.connect(func() -> void:
+		if visible:
+			_refresh())
 	player.health_changed.connect(func(_current: float, _maximum: float) -> void:
 		if visible:
 			_refresh())
@@ -123,6 +127,8 @@ func set_player(player: Player) -> void:
 	for card in _cards:
 		(card.root as Node).queue_free()
 	_cards.clear()
+	for def in player.sheet_items(&"weapon"):  # Conquest: buy a weapon (the hero swaps to its class)
+		_add_card(def, _hero_grid)
 	for def in player.class_upgrades():
 		_add_card(def, _hero_grid)
 	for def in player.sheet_items(&"hero"):
@@ -309,10 +315,15 @@ func _refresh() -> void:
 		var level_label: Label = card.level
 		var button: Button = card.button
 		var siege := SIEGE.has(def.id)  # Conquest engines: one of each in the field at a time
-		if def.id == RECRUIT:
+		if Player.RECRUIT_WEAPONS.has(def.id):
 			level_label.text = "Army %d / %d" % [_player.army_size(), _player.follower_cap]
 		elif siege:
 			level_label.text = "In the field" if not _player.is_upgrade_useful(def) else "Siege engine"
+		elif def.id == MUSTER:
+			level_label.text = _muster_text()
+		elif Player.ARM_CLASSES.has(def.id):  # Conquest weapons: the one in hand, or your level that would be lost
+			level_label.text = "In hand" if not _player.is_upgrade_useful(def) else (
+					"Weapon · you lose level %d" % _player.hero_level if _player.hero_level > 0 else "Weapon")
 		elif def.is_consumable():
 			level_label.text = "Health %d / %d" % [ceili(_player.health), ceili(_player.max_health)]
 		elif def.max_level > 1:
@@ -328,11 +339,17 @@ func _refresh() -> void:
 		elif locked:
 			button.text = "Other choice taken"
 			button.disabled = true
-		elif def.id == RECRUIT and not _player.is_upgrade_useful(def):
+		elif Player.RECRUIT_WEAPONS.has(def.id) and not _player.is_upgrade_useful(def):
 			button.text = "Army full"
 			button.disabled = true
 		elif siege and not _player.is_upgrade_useful(def):
 			button.text = "In the field"
+			button.disabled = true
+		elif def.id == MUSTER and not _player.is_upgrade_useful(def):
+			button.text = "Not now"
+			button.disabled = true
+		elif Player.ARM_CLASSES.has(def.id) and not _player.is_upgrade_useful(def):
+			button.text = "In hand"
 			button.disabled = true
 		elif def.is_consumable() and not _player.is_upgrade_useful(def):
 			button.text = "Full health"
@@ -343,6 +360,17 @@ func _refresh() -> void:
 			button.icon = null if cost == 0 else COIN_ICON
 			button.disabled = not _player.can_buy(def)
 	_refresh_recruit()
+
+
+## Conquest muster card: barracks waiting for the faction, and whether this hero is its General.
+func _muster_text() -> String:
+	var conquest := _player.get_tree().get_first_node_in_group(&"conquest") as ConquestMode
+	if conquest == null or conquest.logistics == null:
+		return ""
+	var mine := conquest.logistics.stock_of(_player.team_id)
+	if mine.get(&"general", 0) != _player.peer_id:
+		return "Generals only"
+	return "Barracks %d" % mine.get(&"barracks", 0)
 
 
 ## The recruit card's live part: who is training and how long until the next one.

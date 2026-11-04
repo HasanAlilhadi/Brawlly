@@ -1,29 +1,68 @@
 class_name ConquestMode
 extends GameMode
-## Conquest: three factions, each from its Citadel, fight over Villages, Outposts and Cities. Monsters hold every
-## place at the start (kill the guards to liberate it), then a faction raises its banner by standing in the ring;
-## places held by another faction need their gate broken first (cities, citadels). Held places pay food,
-## equipment and ammo into the faction's stockpile and points into its score every logistics tick
-## (LogisticsManager); the army eats and wears its weapons. Win: hold every Citadel, reach the score limit, or
-## lead when the time runs out.
-## Built on top of GameMode (the base runs teams, spawns, respawns, the clock and the score RPCs unchanged);
-## main.gd creates this instead of GameMode only for Net.Mode.CONQUEST. The plan of the territories comes from
-## the match seed, so every peer builds the same `Territory_<n>` nodes; the server runs them.
+## Conquest (PC only): the land is infested by demons. Four factions start from Citadels in the four corners of a
+## big map (WORLD_HALF) and push inward through Villages, Outposts and specialized Cities (Iron: weapons, Lumber:
+## arrows, Farm: food) toward the Demon's Lair in the middle: walled, held by a giant demon lord, worth the most.
+## The map is seven square rings (`zone_of`, ZONE_EDGES): zone 6 by the corners (strong walls, rich, weak demons)
+## down to zone 1 (no walls, poor, strong demons, raided often: `_raid`) and the Lair (zone 0).
+## Demons hold every place at the start (kill the garrison to liberate it), then a faction raises its banner by
+## standing in the ring; walled places held by another faction need their gate broken first (siege engines).
+## Held places produce into their own stores, fill barracks the faction's General musters, and score points every
+## logistics tick (LogisticsManager); armies far from home live on caravans. Win: hold the Throne for
+## THRONE_WIN_TICKS ticks in a row, hold every Citadel, reach the score limit, or lead when the time runs out.
+## Built on top of GameMode (the base runs teams, respawns, the clock and the score RPCs unchanged); main.gd creates
+## this instead of GameMode only for Net.Mode.CONQUEST. The plan of the territories comes from the match seed, so
+## every peer builds the same `Territory_<n>` nodes (Citadels 0..3, the Throne 4, then Cities, Outposts,
+## Villages); the server runs them.
 
-const FACTIONS: int = 3
-const VILLAGES: int = 9
-const OUTPOSTS: int = 6
-## Territories stay this far apart, this far from a citadel and from the map border.
-const TERRITORY_SPACING: float = 18.0
-const CITADEL_SPACING: float = 24.0
-const BORDER: float = 10.0
+const FACTIONS: int = 4
+## Half the map's size on procedural maps (600 m across); a designed map keeps its own.
+const WORLD_HALF: float = 300.0
+## Warbands (demons roaming between the places): the lobby's count × this.
+const BAND_FACTOR: int = 2
+## Places on a full-size map (fewer on a smaller one, by area): Cities cycle Iron / Lumber / Farm.
+const CITIES: int = 40
+const OUTPOSTS: int = 20
+const VILLAGES: int = 30
+## Citadels sit this share of the half-size out on both axes (the corners).
+const CORNER: float = 0.86
+## Zones: square rings by the larger of |x| and |z| as a share of the half-size; zone i ends at ZONE_EDGES[i]
+## (zone 6: the rest, out to the border).
+const ZONE_EDGES: Array[float] = [0.08, 0.22, 0.36, 0.5, 0.64, 0.8]
+const ZONES: int = 7
+## Demon raids on held places (guarded or not; never a Citadel): every RAID_EVERY s each one rolls ZONE_RAID (its
+## zone's chance: the nearer the Lair, the more raids); a raid is RAID_BASE + RAID_STEP × (5 - zone) demons, from
+## the middle's side, RAID_DISTANCE out. At most RAID_MAX at a time. A standing gate is battered first
+## (`_batter`: raiders at it deal BATTER_DAMAGE × their power a second), then they walk in.
+const RAID_EVERY: float = 30.0
+const ZONE_RAID: Array[float] = [0.5, 0.45, 0.3, 0.18, 0.1, 0.05, 0.02]
+const BATTER_DAMAGE: float = 4.0
+const BATTER_REACH: float = 4.0
+const RAID_BASE: int = 3
+const RAID_STEP: int = 2
+const RAID_DISTANCE: float = 32.0
+const RAID_MAX: int = 4
+## Places stay this far apart, this far from a Citadel / the Throne, and from the map border.
+const TERRITORY_SPACING: float = 26.0
+const STRONGHOLD_SPACING: float = 60.0
+const BORDER: float = 14.0
+## Holding the Throne this many logistics ticks in a row (5 minutes) wins.
+const THRONE_WIN_TICKS: int = 60
+const THRONE_INDEX: int = FACTIONS
 ## Lowest score limit Conquest accepts (the lobby's range starts here; tests may leave the default).
-const SCORE_LIMIT_MIN: int = 100
-const PLACE_NAMES: PackedStringArray = ["Ashford", "Brightwater", "Coldharbor", "Dunmere", "Eastwatch",
-		"Fallowmere", "Greystone", "Hollowell", "Ironbrook", "Juniper Hill", "Kingsmoor", "Larkfield", "Millbrook",
-		"Northgate", "Oakhaven", "Pinecrest", "Queensford", "Ravenhold", "Stonebridge", "Thornwick", "Umberlee",
-		"Valewood", "Westmarch", "Yarrowby"]
-const CITADEL_NAMES: PackedStringArray = ["Highkeep", "Sunspire", "Wolfcrag"]
+const SCORE_LIMIT_MIN: int = 500
+## A new Conquest lobby's score and time limits (Net.host from the Conquest section).
+const DEFAULT_SCORE: int = 2500
+const DEFAULT_TIME: int = 45
+const CITADEL_NAMES: PackedStringArray = ["Highkeep", "Sunspire", "Wolfcrag", "Stormhold"]
+## Place names: a front and a back from these (from the seed, never twice).
+const NAME_FRONTS: PackedStringArray = ["Ash", "Bright", "Cold", "Dun", "East", "Fallow", "Grey", "Hollow", "Iron",
+		"Juniper", "Kings", "Lark", "Mill", "North", "Oak", "Pine", "Queens", "Raven", "Stone", "Thorn", "Umber",
+		"Vale", "West", "Yarrow", "Amber", "Black", "Copper", "Deep", "Elder", "Frost", "Gold", "Hart", "Marsh",
+		"Red", "Silver", "Wolf"]
+const NAME_BACKS: PackedStringArray = ["ford", "water", "harbor", "mere", "watch", "stone", "well", "brook", "moor",
+		"field", "gate", "haven", "crest", "hold", "bridge", "wick", "lee", "wood", "march", "by", "dale", "fell",
+		"hurst", "ton"]
 
 ## Navigation mesh voxels (the map's cell size must match).
 const NAV_CELL: float = 0.5
@@ -32,59 +71,125 @@ const NAV_CELL_HEIGHT: float = 0.25
 ## Every territory, in plan order (every peer, after build_objectives).
 var territories: Array[TerritoryNode] = []
 var logistics: LogisticsManager
+var squads: ConquestSquads
 ## Server: the baked world for marching soldiers (navigation_ready once the bake thread is done).
 var navigation: NavigationRegion3D
 var navigation_ready: bool = false
+## Server: who holds the Throne and for how many ticks in a row.
+var throne_ticks: int = 0
 
-## [{kind, pos, owner, name}] from the seed (setup); build_objectives turns it into nodes.
+## [{kind, specialty, pos, owner, name}] from the seed (setup); build_objectives turns it into nodes.
 var _plan: Array[Dictionary] = []
+## Server: raiding parties still on the way / fighting ([{place, demons}]).
+var _raids: Array[Dictionary] = []
+var _raid_timer: Timer
+
+
+## The zone of a point: 0 (the middle) .. 6 (the corners).
+static func zone_of(point: Vector3) -> int:
+	var share := maxf(absf(point.x), absf(point.z)) / maxf(GameConfig.world_half, 1.0)
+	for i in ZONE_EDGES.size():
+		if share < ZONE_EDGES[i]:
+			return i
+	return ZONES - 1
+var _throne_holder: int = -1
+
+
+## Every peer: the size of a Conquest world (main.gd, before anything is built).
+static func world_half_for(map: MapDef) -> float:
+	return map.world_half if map and map.layout else WORLD_HALF
 
 
 func setup(match_settings: Dictionary, players: Dictionary, map: MapDef = null) -> void:
 	match_settings.team_count = FACTIONS  # the same dictionary as Net.settings: colors follow on every peer
 	super.setup(match_settings, players, map)
+	if not (map and map.layout):
+		_place_in_corners(players)
 	_plan_territories(int(settings.get("seed", 0)))
 
 
-## Citadels at the faction bases, a City between every two of them and one in the middle, then Outposts and
-## Villages scattered (from the seed: every peer plans the same).
+## Procedural maps: the four factions start in the four corners (the base put them on a circle).
+func _place_in_corners(players: Dictionary) -> void:
+	var half := GameConfig.world_half * CORNER
+	var corners: Array[Vector3] = [Vector3(-half, 0.0, -half), Vector3(half, 0.0, -half), Vector3(half, 0.0, half),
+			Vector3(-half, 0.0, half)]
+	for team in FACTIONS:
+		team_bases[team] = corners[team]
+	var slots := {}
+	var peers := players.keys()
+	peers.sort()
+	for peer in peers:
+		var team: int = players[peer].get("team", 0)
+		var slot: int = slots.get(team, 0)
+		slots[team] = slot + 1
+		_spawn_points[peer] = team_bases[team] + Vector3(cos(slot * 1.3), 0.0, sin(slot * 1.3)) * 2.2
+
+
+## Citadels in the corners, the Lair in the middle, then Cities, Outposts and Villages spread over zones 1..6 by
+## each ring's area (Cities cycle Iron / Lumber / Farm, so every ring has each; from the seed: every peer plans the
+## same).
 func _plan_territories(match_seed: int) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = match_seed + 4111
 	var half := GameConfig.world_half
-	var names := Array(PLACE_NAMES)
+	var area := clampf(pow(half / WORLD_HALF, 2.0), 0.12, 1.0)
+	var names := _shuffled_names(rng)
+	for team in FACTIONS:
+		_plan.append({"kind": TerritoryNode.Kind.CITADEL, "pos": team_bases[team], "owner": team,
+				"name": CITADEL_NAMES[team]})
+	_plan.append({"kind": TerritoryNode.Kind.THRONE, "pos": Vector3.ZERO, "owner": -1, "name": "The Demon's Lair"})
+	var city_index := 0
+	for kind in [TerritoryNode.Kind.CITY, TerritoryNode.Kind.OUTPOST, TerritoryNode.Kind.VILLAGE]:
+		var total: int = {TerritoryNode.Kind.CITY: CITIES, TerritoryNode.Kind.OUTPOST: OUTPOSTS}.get(kind, VILLAGES)
+		total = maxi(roundi(total * area), 3)
+		for zone in range(1, ZONES):
+			for i in _zone_share(total, zone):
+				var spot := _free_spot(rng, half, ZONE_EDGES[zone - 1], ZONE_EDGES[zone] if zone < ZONE_EDGES.size() else 1.0)
+				if spot == Vector3.INF:
+					continue
+				var planned := {"kind": kind, "pos": spot, "owner": -1, "name": names.pop_back()}
+				if kind == TerritoryNode.Kind.CITY:
+					planned.specialty = 1 + city_index % 3
+					city_index += 1
+				_plan.append(planned)
+	for planned in _plan:
+		planned.zone = zone_of(planned.pos)
+
+
+## How many of `total` places go into `zone` (1..6): its ring's share of the area of zones 1..6.
+func _zone_share(total: int, zone: int) -> int:
+	var inner: float = ZONE_EDGES[zone - 1]
+	var outer: float = ZONE_EDGES[zone] if zone < ZONE_EDGES.size() else 1.0
+	var whole := 1.0 - ZONE_EDGES[0] * ZONE_EDGES[0]
+	return maxi(roundi(total * (outer * outer - inner * inner) / whole), 1)
+
+
+## Every front + back pair once, shuffled (enough for every place).
+func _shuffled_names(rng: RandomNumberGenerator) -> Array:
+	var names := []
+	for front in NAME_FRONTS:
+		for back in NAME_BACKS:
+			names.append(front + back)
 	for i in names.size():
 		var j := rng.randi_range(i, names.size() - 1)
 		var swap: Variant = names[i]
 		names[i] = names[j]
 		names[j] = swap
-	for team in FACTIONS:
-		_plan.append({"kind": TerritoryNode.Kind.CITADEL, "pos": team_bases[team], "owner": team,
-				"name": CITADEL_NAMES[team]})
-	_plan.append({"kind": TerritoryNode.Kind.CITY, "pos": Vector3.ZERO, "owner": -1, "name": names[_plan.size() % names.size()]})
-	for team in FACTIONS:
-		var a := team_bases[team].normalized()
-		var b := team_bases[(team + 1) % FACTIONS].normalized()
-		var between := (a + b).normalized() if (a + b).length() > 0.01 else a.rotated(Vector3.UP, PI * 0.5)
-		_plan.append({"kind": TerritoryNode.Kind.CITY, "pos": between * half * 0.45, "owner": -1,
-				"name": names[_plan.size() % names.size()]})
-	for kind in [TerritoryNode.Kind.OUTPOST, TerritoryNode.Kind.VILLAGE]:
-		var count := OUTPOSTS if kind == TerritoryNode.Kind.OUTPOST else VILLAGES
-		for i in count:
-			var spot := _free_spot(rng, half)
-			if spot != Vector3.INF:
-				_plan.append({"kind": kind, "pos": spot, "owner": -1, "name": names[_plan.size() % names.size()]})
+	return names
 
 
-func _free_spot(rng: RandomNumberGenerator, half: float) -> Vector3:
-	for attempt in 80:
-		var angle := rng.randf() * TAU
-		var r := rng.randf_range(0.2, 0.9) * half
-		var spot := Vector3(cos(angle), 0.0, sin(angle)) * minf(r, half - BORDER)
+## A spot in the square ring between `inner` and `outer` (shares of the half-size) clear of every planned place.
+func _free_spot(rng: RandomNumberGenerator, half: float, inner: float, outer: float) -> Vector3:
+	var spacing := TERRITORY_SPACING * clampf(half / WORLD_HALF, 0.5, 1.0)
+	var edge := minf(outer * half, half - BORDER)
+	for attempt in 160:
+		var spot := Vector3(rng.randf_range(-edge, edge), 0.0, rng.randf_range(-edge, edge))
+		if maxf(absf(spot.x), absf(spot.z)) < inner * half + 4.0:
+			continue
 		var crowded := false
 		for planned in _plan:
-			var apart := CITADEL_SPACING if planned.kind == TerritoryNode.Kind.CITADEL else TERRITORY_SPACING
-			if spot.distance_to(planned.pos) < apart:
+			var stronghold: bool = planned.kind == TerritoryNode.Kind.CITADEL or planned.kind == TerritoryNode.Kind.THRONE
+			if spot.distance_to(planned.pos) < (STRONGHOLD_SPACING * spacing / TERRITORY_SPACING if stronghold else spacing):
 				crowded = true
 				break
 		if not crowded:
@@ -102,16 +207,20 @@ func world_clear_areas() -> Array[Vector3]:
 
 
 func world_clear_radius() -> float:
-	return TerritoryNode.INFO[TerritoryNode.Kind.CITY].radius + 2.0
+	return TerritoryNode.INFO[TerritoryNode.Kind.THRONE].radius + 3.0
 
 
 func build_objectives(world: Node3D) -> void:
 	super.build_objectives(world)
+	add_to_group(&"conquest")
 	for i in _plan.size():
 		var planned: Dictionary = _plan[i]
 		var territory := TerritoryNode.new()
 		territory.name = "Territory_%d" % i
 		territory.kind = planned.kind
+		territory.specialty = int(planned.get("specialty", TerritoryNode.Specialty.NONE)) as TerritoryNode.Specialty
+		territory.zone = int(planned.get("zone", zone_of(planned.pos)))
+		territory.index = i
 		territory.display_name = planned.name
 		territory.mode = self
 		territory.position = planned.pos
@@ -128,14 +237,30 @@ func build_objectives(world: Node3D) -> void:
 		for territory in territories:
 			if territory.gate:
 				territory.gate.hide_from_navigation(false)
+	if multiplayer.is_server():
+		_raid_timer = Timer.new()
+		_raid_timer.wait_time = RAID_EVERY
+		_raid_timer.timeout.connect(_raid)
+		add_child(_raid_timer)
+		_raid_timer.start()
+		var batter_timer := Timer.new()
+		batter_timer.wait_time = 1.0
+		batter_timer.timeout.connect(func() -> void:
+			if not is_over:
+				_batter())
+		add_child(batter_timer)
+		batter_timer.start()
 	logistics = LogisticsManager.new()
 	logistics.mode = self
 	add_child(logistics)
 	logistics.stock_changed.connect(func() -> void: scores_changed.emit())  # the HUD line shows the stock
+	squads = ConquestSquads.new()
+	squads.mode = self
+	add_child(squads)
 
 
 ## Server: a navigation mesh of the whole world (ground minus trees, rocks, walls and fences) for soldiers on a
-## MARCH order (Ally._think_march). Parsed now, baked on a thread; soldiers walk straight until it is ready.
+## MARCH order or mustered (Ally). Parsed now, baked on a thread; soldiers walk straight until it is ready.
 func _bake_navigation(world: Node3D) -> void:
 	var half := GameConfig.world_half
 	var mesh := NavigationMesh.new()
@@ -168,6 +293,77 @@ func _bake_navigation(world: Node3D) -> void:
 			navigation_ready = true)
 
 
+## Server, every RAID_EVERY s: held places without a standing gate may be raided (more often toward the middle).
+## The raiders come from the middle's side and walk to the place (their `home`), fighting what they meet; once
+## in the ring with nobody of the holder's, they take it back (TerritoryNode).
+func _raid() -> void:
+	if is_over:
+		return
+	_raids = _raids.filter(func(raid: Dictionary) -> bool:
+		return (raid.demons as Array).any(func(d: Node) -> bool: return not GameConfig.is_gone(d)))
+	for territory in territories:
+		if _raids.size() >= RAID_MAX:
+			return
+		if territory.state != TerritoryNode.State.OWNED or territory.kind == TerritoryNode.Kind.CITADEL:
+			continue
+		if _raids.any(func(raid: Dictionary) -> bool: return raid.place == territory):
+			continue
+		if randf() < ZONE_RAID[territory.zone]:
+			raid_place(territory)
+
+
+## Server: sends one raiding party at `territory` (tests call it directly).
+func raid_place(territory: TerritoryNode) -> Array[Node]:
+	var inward := -territory.position
+	inward.y = 0.0
+	var start := territory.position + (inward.normalized() if inward.length() > 1.0 else Vector3.FORWARD) * RAID_DISTANCE
+	var count := RAID_BASE + RAID_STEP * maxi(5 - territory.zone, 0)
+	var rows := mini(1 + TerritoryNode.ZONE_ROWS[territory.zone], WorldEvents.WAVE_TYPES.size())
+	var strength := GameConfig.orc_strength * TerritoryNode.ZONE_STRENGTH[territory.zone]
+	var demons: Array[Node] = []
+	for i in count:
+		var types: Array = WorldEvents.WAVE_TYPES[randi() % rows]
+		var at := GameConfig.clamp_to_world(start + Vector3(randf_range(-4.0, 4.0), 0.0, randf_range(-4.0, 4.0)))
+		var demon := NetSpawn.unit(&"enemy", at, {"scene": WorldEvents.ENEMIES + str(types[randi() % types.size()]) + ".tscn",
+				"strength": strength, "coins": 1.0}) as Enemy
+		if demon == null:
+			continue
+		demon.add_to_group(&"active_enemies")
+		demon.follow_point(_raid_goal(territory), 1.0)
+		demons.append(demon)
+	_raids.append({"place": territory, "demons": demons})
+	announce("Demons march on %s!" % territory.display_name)
+	return demons
+
+
+## Where raiders head: the gate while it stands (to batter it), else the middle of the ring.
+func _raid_goal(territory: TerritoryNode) -> Vector3:
+	if territory.gate and not territory.gate.is_broken():
+		return territory.gate.outside_point(1.0) + Vector3(randf_range(-2.0, 2.0), 0.0, randf_range(-1.0, 1.0))
+	return territory.position + Vector3(randf_range(-2.0, 2.0), 0.0, randf_range(-2.0, 2.0))
+
+
+## Server, every second: raiders at a standing gate batter it; once it is down (or there is none) they go in.
+## Returns the damage dealt (tests).
+func _batter() -> float:
+	var dealt := 0.0
+	for raid in _raids:
+		var place: TerritoryNode = raid.place
+		var gate := place.gate
+		var standing := gate != null and not gate.is_broken() and place.state == TerritoryNode.State.OWNED
+		for node in raid.demons:
+			var demon := node as Enemy
+			if GameConfig.is_gone(demon):
+				continue
+			if standing:
+				var at := Ally._flat(demon.global_position - gate.outside_point(1.0)).length()
+				if at < BATTER_REACH + gate.size.x * 0.5 and GameConfig.is_gone(demon.target):
+					gate.batter(BATTER_DAMAGE * demon.power)
+					dealt += BATTER_DAMAGE * demon.power
+			demon.follow_point(_raid_goal(place) if standing else place.position, 1.0)
+	return dealt
+
+
 func uses_time_limit() -> bool:
 	return true
 
@@ -192,10 +388,17 @@ func add_score(key: int, amount: int) -> void:
 		_finish_by_score()
 
 
+func throne() -> TerritoryNode:
+	return territories[THRONE_INDEX] if territories.size() > THRONE_INDEX else null
+
+
 ## Server (TerritoryNode): a place changed hands. Every Citadel under one banner ends the match.
 func on_territory_captured(territory: TerritoryNode, previous: int) -> void:
 	if territory.kind == TerritoryNode.Kind.CITADEL and previous >= 0:
 		announce("{team:%d} lost their Citadel!" % previous)
+	if territory.kind == TerritoryNode.Kind.THRONE:
+		announce("{team:%d} took the Demon's Lair! Hold it for %d minutes to rule." % [territory.owner_team,
+				THRONE_WIN_TICKS * int(LogisticsManager.TICK) / 60])
 	var holder := territories[0].owner_team
 	for team in FACTIONS:
 		if territories[team].owner_team != holder:
@@ -204,20 +407,121 @@ func on_territory_captured(territory: TerritoryNode, previous: int) -> void:
 		finish("{team:%d} wins!" % holder, "Every Citadel flies their banner.")
 
 
-## Score line plus, on a second line, this device's faction stockpile with income and upkeep per tick
-## ("Food 40 (+10 -13)  Equip 12 (+6)  Ammo 33 (+4)  Army +7", "STARVING" when short).
+## Server, every logistics tick: the Throne's clock (it restarts whenever the Throne changes hands).
+func on_logistics_tick() -> void:
+	var seat := throne()
+	if seat == null or is_over:
+		return
+	var holder := seat.owner_team if seat.state == TerritoryNode.State.OWNED else -1
+	if holder != _throne_holder:
+		_throne_holder = holder
+		throne_ticks = 0
+	if holder < 0:
+		return
+	throne_ticks += 1
+	var left := (THRONE_WIN_TICKS - throne_ticks) * int(LogisticsManager.TICK)
+	if throne_ticks >= THRONE_WIN_TICKS:
+		finish("{team:%d} wins!" % holder, "They held the Demon's Lair and rule the land.")
+	elif left == 60:
+		announce("{team:%d} rules the Lair in one minute! Take it from them!" % holder)
+
+
+## Server (Player.request_place_action, the map): an order for place `index` from `player` — its lord, the
+## faction's General, or anyone of the faction while it has no lord. `action`: withdraw (the lord takes its gold,
+## anywhere), muster (`arg`: a class, TerritoryNode.SOLDIER_KINDS index, or -1 = any: soldiers from its barracks),
+## train (`arg`: the class its people are armed with, or TerritoryNode.NO_TRAINING), route (`arg`: a place index,
+## TerritoryNode.ROUTE_ARMY or ROUTE_NONE), courier (buy one). muster's `arg` packs the squad size too: class + 10 × size (ConquestSquads.SIZES
+## index; `squad_take()`). Returns whether it was done.
+func place_action(player: Player, index: int, action: StringName, arg: int) -> bool:
+	if player == null or player.is_dead or index < 0 or index >= territories.size() or logistics == null:
+		return false
+	var place := territories[index]
+	if place.state != TerritoryNode.State.OWNED or place.owner_team != player.team_id:
+		return false
+	var general := logistics.general_of(player.team_id) == player.peer_id
+	if place.lord != 0 and place.lord != player.peer_id and not general:
+		return false
+	var done := false
+	match action:
+		&"withdraw":
+			if place.lord == player.peer_id and place.treasury > 0:
+				player.coins += place.treasury
+				announce("%s takes %d gold from %s." % [player.display_name, place.treasury, place.display_name])
+				place.treasury = 0
+				done = true
+		&"muster":
+			var kind := arg % 10 if arg >= 0 else -1
+			var size: int = ConquestSquads.SIZES[clampi(arg / 10, 0, ConquestSquads.SIZES.size() - 1)] if arg >= 0 else LogisticsManager.MAP_TAKE
+			done = logistics.muster_from(player, place, kind, size) > 0
+		&"train":
+			if arg >= TerritoryNode.NO_TRAINING and arg < TerritoryNode.SOLDIER_KINDS.size():
+				place.train_kind = arg
+				done = true
+		&"route":
+			var valid := arg == TerritoryNode.ROUTE_NONE or arg == TerritoryNode.ROUTE_ARMY
+			if arg >= 0 and arg < territories.size() and arg != index:
+				var to := territories[arg]
+				valid = to.state == TerritoryNode.State.OWNED and to.owner_team == player.team_id
+			if valid:
+				place.route = arg
+				if arg == TerritoryNode.ROUTE_ARMY and place.lord == 0:
+					place.lord = player.peer_id  # its goods go to the army of whoever sends them
+					place._send_state()
+				done = true
+		&"courier":
+			done = logistics.buy_courier(player, place)
+	if done:
+		logistics.send_places()
+	return done
+
+
+## Server (Player.request_withdraw, F): the hero empties the treasury of the place they lord and stand in.
+func withdraw(player: Player) -> int:
+	for territory in territories:
+		var taken := territory.withdraw(player)
+		if taken > 0:
+			announce("%s takes %d gold from %s." % [player.display_name, taken, territory.display_name])
+			return taken
+	return 0
+
+
+func _local_hero() -> Player:
+	for node in get_tree().get_nodes_in_group(&"players"):
+		if (node as Player).peer_id == Net.my_id():
+			return node
+	return null
+
+
+## The place at `point` (any state), or null.
+func place_at(point: Vector3) -> TerritoryNode:
+	for territory in territories:
+		var offset := point - territory.global_position
+		offset.y = 0.0
+		if offset.length() < territory.radius():
+			return territory
+	return null
+
+
+## Server (Player, the Army tab): the General musters soldiers from the barracks.
+func muster(player: Player) -> int:
+	return logistics.muster(player) if logistics else 0
+
+
+func can_muster(player: Player) -> int:
+	return logistics.can_muster(player) if logistics else 0
+
+
+## Score line plus the "F: take N gold" prompt (the lord standing in a place with gold) and the Lair's holder. The
+## faction's supplies, General, meals and warnings are in the HUD's left column (ConquestPanel).
 func score_text(tokens: bool = false) -> String:
 	var text := super.score_text(tokens)
 	if tokens or logistics == null:
 		return text
-	var mine := logistics.stock_of(Net.team_of(Net.my_id()))
-	if mine.is_empty():
-		return text
-	var income: Dictionary = mine[&"income"]
-	text += "\nFood %d (+%d -%d)  Equip %d (+%d)  Ammo %d (+%d)" % [mine[&"food"], income.get(&"food", 0),
-			mine[&"food_need"], mine[&"equipment"], income.get(&"equipment", 0), mine[&"ammo"], income.get(&"ammo", 0)]
-	if mine[&"cap_bonus"] > 0:
-		text += "  Army +%d" % mine[&"cap_bonus"]
-	if mine[&"starving"]:
-		text += "  STARVING"
-	return text
+	var me := _local_hero()
+	var here := place_at(me.global_position) if me else null
+	if here and here.state == TerritoryNode.State.OWNED and here.lord == Net.my_id() and here.treasury > 0:
+		text += "\nF: take %d gold from %s" % [here.treasury, here.display_name]
+	var seat := throne()
+	if seat and seat.state == TerritoryNode.State.OWNED:
+		text += "\nDemon's Lair: {label:%d}" % seat.owner_team
+	return Net.localize(text) if "{label:" in text else text

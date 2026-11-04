@@ -77,7 +77,7 @@ func _unhandled_input(event: InputEvent) -> void:
 # --- Building -------------------------------------------------------------------------
 
 func _build() -> void:
-	_frame = MenuKit.frame($UI, "Find a Game")
+	_frame = MenuKit.frame($UI, "Find a Conquest Game" if Net.conquest_section else "Find a Game")
 	var tools: HBoxContainer = _frame.tools
 	_search = LineEdit.new()
 	_search.name = "SearchEdit"
@@ -217,6 +217,8 @@ func _visible_servers() -> Array:
 	var keys := []
 	for key: String in Net.servers:
 		var info: Dictionary = Net.servers[key]
+		if not Net.in_section(info):
+			continue  # Conquest games show only in the Conquest section, the classic ones only outside it
 		if _hide_full.button_pressed and int(info.get("players", 0)) >= int(info.get("max", Net.MAX_PLAYERS)):
 			continue
 		if _hide_playing.button_pressed and bool(info.get("in_game", false)):

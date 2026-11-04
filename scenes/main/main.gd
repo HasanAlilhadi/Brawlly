@@ -20,10 +20,10 @@ const MENU_CURSOR := preload("res://assets/ui/cursors/cursor_gauntlet_bronze.png
 const PROJECTILE_SCENES := {
 	&"arrow": preload("res://scenes/combat/arrow_projectile.tscn"),
 	&"spear": preload("res://scenes/combat/spear_projectile.tscn"),
-	&"player_spear": preload("res://scenes/combat/player_spear_projectile.tscn"),
 	&"sword_wave": preload("res://scenes/combat/sword_wave_projectile.tscn"),
 	&"enemy_arrow": preload("res://scenes/combat/enemy_arrow_projectile.tscn"),
 	&"bolt": preload("res://scenes/combat/bolt_projectile.tscn"),
+	&"magic_bolt": preload("res://scenes/combat/magic_bolt_projectile.tscn"),
 	&"blood_bolt": preload("res://scenes/combat/blood_bolt_projectile.tscn"),
 }
 ## Desktop monitors show the world from a bit further away than phones.
@@ -31,7 +31,7 @@ const DESKTOP_CAMERA_ZOOM: float = 1.25
 ## Default camera zoom-out on top of that (1.2 = 20% further than the camera's offset).
 const CAMERA_ZOOM: float = 1.2
 ## Extra zoom-out while holding a ranged weapon, so you see further where you shoot.
-const WEAPON_CAMERA_ZOOM: Dictionary = {"spear": 0.05, "javelin": 0.1, "bow": 0.2}
+const WEAPON_CAMERA_ZOOM: Dictionary = {"bow": 0.2}
 ## Share of the Fire Range gain the camera zooms out by (1 = in proportion: +50% range, +50% further out).
 const RANGE_CAMERA_ZOOM: float = 0.8
 ## Army orders from the keyboard / buttons without a cursor point: this far in front of the player.
@@ -60,10 +60,16 @@ const LAST_STAND_WORLD_SCALE: float = 1.15
 @onready var world: Node3D = $World
 @onready var camera: FollowCamera3D = $Camera
 @onready var hud: Hud = $HUD
+## Conquest only: the M map.
+var conquest_map: ConquestMap
+## Conquest: the hero / supplies panel in the HUD's left column (made with the map).
+var conquest_panel: ConquestPanel
 @onready var pause_menu: PauseMenu = $PauseMenu
 
 var game_mode: GameMode
 var local_player: Player
+## Server, Conquest: peers whose hero is being swapped for one with a new weapon (rearm_player).
+var _rearming: Dictionary = {}
 var match_stats: MatchStats
 var world_events: WorldEvents
 var training_field: TrainingField
@@ -122,6 +128,8 @@ func _ready() -> void:
 		GameConfig.world_half = clampf(40.0 + sqrt(float(settings.band_count)) * 10.0, 60.0, 170.0)
 		if settings.mode == Net.Mode.LAST_STAND:
 			GameConfig.world_half *= LAST_STAND_WORLD_SCALE
+		elif settings.mode == Net.Mode.CONQUEST:
+			GameConfig.world_half = ConquestMode.world_half_for(map)
 	WorldBuilder.wave_entries = map.wave_entries
 	if not training_mode:
 		_apply_map(map)
@@ -154,7 +162,7 @@ func _ready() -> void:
 	else:
 		var builder := WorldBuilder.new()
 		builder.map = map
-		builder.band_count = settings.band_count
+		builder.band_count = settings.band_count * (ConquestMode.BAND_FACTOR if settings.mode == Net.Mode.CONQUEST else 1)
 		builder.spawn_points = game_mode.world_spawn_points()
 		builder.clear_areas = game_mode.world_clear_areas()
 		builder.clear_radius = game_mode.world_clear_radius()
@@ -271,12 +279,18 @@ func _spawn_unit(data: Dictionary) -> Node:
 			player.peer_id = data.peer
 			player.display_name = data.display_name
 			player.set_class(data.get("class", &""))
+			player.classless = data.get("classless", false)  # Conquest: buys its weapon, levels up by fighting
 			player.training_mode = data.get("training", false)
 			player.coins = data.get("start_coins", 0)
 			unit = player
 		&"ally":
 			var ally := ALLY_SCENE.instantiate() as Ally
 			ally.weapon = data.get("weapon", "sword")
+			ally.mustering = data.get("muster", false)  # Conquest: walks from its barracks to the General
+			ally.start_rank(data.get("rank", 0))  # Conquest: trained in its barracks
+			ally.rations = data.get("rations", -1)  # Conquest: the first ration it took from its barracks
+			ally.squad = data.get("squad", 0)  # Conquest: a squad taken on the map (ConquestSquads)
+			ally.squad_leader = data.get("squad_leader", false)
 			unit = ally
 		&"animal":
 			var animal := ANIMAL_SCENE.instantiate() as Animal
@@ -303,6 +317,7 @@ func _spawn_unit(data: Dictionary) -> Node:
 			enemy.max_health *= data.strength
 			enemy.melee_damage *= data.strength
 			enemy.coin_multiplier = data.coins
+			enemy.scale *= data.get("size", 1.0)  # Conquest: the Demon's Lair's lord stands taller
 			unit = enemy
 			if data.get("training_orc", false):
 				unit.add_to_group(&"training_orcs")
@@ -355,10 +370,14 @@ func _spawn_player(peer: int, class_override: StringName = &"", position_overrid
 		spawn_position = TrainingField.SPAWN_POINT
 	if position_override != Vector3.INF:
 		spawn_position = position_override
+	# Conquest heroes pick no class: they start Unarmed and buy a weapon (rearm_player).
+	var classless := game_mode is ConquestMode and not training_mode
+	var start_class := Player.START_CLASS if classless else Net.class_of(peer)
 	var player := NetSpawn.unit(&"player", spawn_position, {
 		"peer": peer,
 		"display_name": Net.name_of(peer),
-		"class": class_override if class_override != &"" else Net.class_of(peer),
+		"class": class_override if class_override != &"" else start_class,
+		"classless": classless,
 		"team": Net.team_of(peer),
 		"start_coins": int(Net.settings.start_coins),
 		"training": training_mode,
@@ -371,15 +390,52 @@ func _spawn_player(peer: int, class_override: StringName = &"", position_overrid
 	return player
 
 
+## Server, Conquest: `player` bought a weapon — the same hero again, of that weapon's class, at the same spot
+## (Player.carry_state / apply_carry: coins, health share, army, orders and the other upgrades carry over; its
+## level and weapon upgrades start over). The old node leaves every peer, then the new one spawns (its owner's
+## device binds it as its hero). Soldiers find their hero again by peer id.
+func rearm_player(player: Player, class_id: StringName) -> void:
+	if not multiplayer.is_server() or not is_instance_valid(player) or player.is_dead or _rearming.has(player.peer_id):
+		return
+	var peer := player.peer_id
+	_rearming[peer] = true
+	var carry := player.carry_state()
+	var at := player.global_position
+	if player == local_player:
+		_cancel_bow_rain()
+		local_player = null
+	player.queue_free()
+	await get_tree().process_frame
+	_rearming.erase(peer)
+	if game_mode.is_over or not Net.players.has(peer):
+		return
+	var hero := _spawn_player(peer, class_id, at)
+	if hero:
+		hero.apply_carry(carry)
+		if hero.is_local():
+			hud.show_toast("You fight with the %s now." % Player.WEAPONS[hero.current_weapon()].name, 3.0)
+
+
 func _bind_local_player(player: Player) -> void:
 	_cancel_bow_rain()
 	local_player = player
+	# The hero can be replaced (Conquest: a new weapon): forget it when it leaves, until the new one arrives.
+	player.tree_exiting.connect(func() -> void:
+		if local_player == player:
+			local_player = null)
 	if not multiplayer.is_server():
 		player.enable_prediction()  # move instantly on this device, the server corrects drift
 	camera.target = player
 	camera.snap()
 	hud.setup(player, _bands)
 	hud.set_training_mode(training_mode)
+	if game_mode is ConquestMode and conquest_map == null:
+		conquest_map = ConquestMap.new()  # M: the big map (places, routes, orders)
+		conquest_map.setup(self, game_mode)
+		hud.add_child(conquest_map)
+		conquest_panel = ConquestPanel.new()  # left column: your hero's level, the supplies and where they go
+		hud.left_column.add_child(conquest_panel)
+		conquest_panel.setup(self, game_mode, hud.root)
 	_last_coins = player.coins
 	player.coins_changed.connect(_on_local_coins_changed)
 	_last_health = player.health
@@ -425,8 +481,8 @@ func _on_peer_left(peer: int) -> void:
 
 
 # --- Input ---------------------------------------------------------------------
-# Desktop: WASD / arrows / left stick move. The class's weapon in hand (Spearman: E / Y switch thrust <-> throw):
-# left mouse swings / thrusts toward the cursor, or with a ranged weapon aims at the cursor (left or right
+# Desktop: WASD / arrows / left stick move. The class's weapon in hand:
+# left mouse swings toward the cursor, or with a ranged weapon aims at the cursor (left or right
 # mouse, release to shoot). J / RB and Space / K / RT use the weapon on the nearest enemy (ranged: at the
 # right-stick direction when aiming). Touch: HUD joystick + the stick of the weapon in hand + a switch button.
 
@@ -560,8 +616,15 @@ func _unhandled_input(event: InputEvent) -> void:
 		_dash()
 	elif event.is_action_pressed(&"upgrades") and not event.is_echo():
 		hud.toggle_upgrades()
+	elif event.is_action_pressed(&"map") and not event.is_echo() and conquest_map:
+		conquest_map.toggle()
+		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed(&"interact") and not event.is_echo() and training_mode:
 		_interact_training()
+		get_viewport().set_input_as_handled()
+	elif event.is_action_pressed(&"interact") and not event.is_echo() and game_mode is ConquestMode:
+		if local_player:
+			local_player.request_withdraw()  # Conquest: the treasury of the place you lord and stand in
 		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed(&"rotate_camera") and not event.is_echo():
 		camera.rotate_step(1)
@@ -634,8 +697,8 @@ func _cursor_direction() -> Vector3:
 	return direction.normalized() if direction.length() > 0.15 else local_player.facing()
 
 
-## Ranged aim from the mouse: the flat offset from the player to the cursor at shot height (so the arrow /
-## spear flies right under the cursor and hits what it points at), or a unit direction when the cursor is
+## Ranged aim from the mouse: the flat offset from the player to the cursor at shot height (so the arrow
+## flies right under the cursor and hits what it points at), or a unit direction when the cursor is
 ## too close to make a point (`Player.set_aim`).
 func _cursor_aim() -> Vector3:
 	if local_player == null or not is_instance_valid(local_player):
@@ -813,7 +876,7 @@ func _interact_training() -> void:
 	_switch_training_class()
 
 
-## Default zoom + a bit more with the bow / spear in hand; with the bow, Fire Range zooms out further
+## Default zoom + a bit more with the bow in hand; with the bow, Fire Range zooms out further
 ## (in step with the longer range, `RANGE_CAMERA_ZOOM` of it), so you see as far as you shoot.
 func _update_camera_zoom() -> void:
 	var extra := 0.0

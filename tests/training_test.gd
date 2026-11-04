@@ -25,6 +25,14 @@ func _check(ok: bool, what: String) -> void:
 		failures += 1
 
 
+## Where the class's pedestal stands in the gallery.
+func _station(class_id: StringName) -> Vector3:
+	for station in field._stations:
+		if station.id == class_id:
+			return station.position
+	return Vector3.ZERO
+
+
 func _press_f() -> void:
 	for pressed in [true, false]:
 		var key := InputEventKey.new()
@@ -96,7 +104,7 @@ func _process(delta: float) -> void:
 			target.take_damage(99999.0, player)
 			_check(not target.is_dead and target.is_inside_tree(), "damage target cannot be destroyed")
 			# Bowman stands on the right pedestal.
-			player.global_position = Vector3(5.5, 0.0, -13.0)
+			player.global_position = _station(&"bowman")
 			field.update_player(player)
 			main.call("_switch_training_class")
 			step = 5
@@ -113,8 +121,8 @@ func _process(delta: float) -> void:
 			if t < 1.0:
 				return
 			_check(target.total_damage() > damage_before, "an arrow damages a training target")
-			# Spearman stands on the middle pedestal.
-			player.global_position = Vector3(0.0, 0.0, -13.0)
+			# Back to the Swordsman on the left pedestal.
+			player.global_position = _station(&"swordsman")
 			field.update_player(player)
 			main.call("_switch_training_class")
 			step = 7
@@ -123,16 +131,13 @@ func _process(delta: float) -> void:
 			if t < 0.5:
 				return
 			player = main.get("local_player") as Player
-			_check(player != null and player.class_def.id == &"spearman", "F interaction switches to Spearman")
-			player.switch_weapon()
-			_check(player.current_weapon() == "javelin", "Spearman holds the javelin")
-			_shoot_at_target()
+			_check(player != null and player.class_def.id == &"swordsman", "F interaction switches back to Swordsman")
+			_check(player != null and player.current_weapon() == "sword", "Swordsman holds the sword")
 			step = 8
 			t = 0.0
 		8:
-			if t < 1.2:
+			if t < 0.2:
 				return
-			_check(target.total_damage() > damage_before, "a thrown spear damages a training target")
 			player.global_position = TrainingField.ORC_STATION
 			player.net_position = player.global_position
 			field.update_player(player)
