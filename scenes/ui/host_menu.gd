@@ -2,10 +2,10 @@ extends Node
 ## Host Game (main menu → Host Game): the server's options before it opens — server name, max players,
 ## password and whether it is listed in other players' server browser — then Create Lobby (`Net.host()`).
 ## The match settings (mode, warbands, difficulty, …) are picked in the lobby. The last options are remembered
-## (never the password).
+## (never the password), per section. In the Conquest section (`Net.conquest_section`) the page has Conquest's look
+## (ConquestLook), takes up to 16 players (four factions of four) and starts at 16; Back goes to the Conquest hub.
 
 const LOBBY_SCENE := "res://scenes/ui/lobby.tscn"
-const MENU_SCENE := "res://scenes/ui/main_menu.tscn"
 const FORM_WIDTH: float = 980.0
 const LABEL_WIDTH: float = 260.0
 
@@ -24,6 +24,7 @@ var _leaving: bool = false
 
 func _ready() -> void:
 	get_tree().paused = false
+	ConquestLook.apply(self)
 	_build()
 	_load_options()
 	get_viewport().size_changed.connect(_layout)
@@ -35,7 +36,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):
 		get_viewport().set_input_as_handled()
 		if _dialog.is_empty():
-			_go_to(MENU_SCENE)
+			_go_to(Net.menu_scene())
 		else:
 			MenuKit.close_dialog(_dialog)
 			_dialog = {}
@@ -64,7 +65,7 @@ func _build() -> void:
 	_max_slider = HSlider.new()
 	_max_slider.name = "MaxPlayersSlider"
 	_max_slider.min_value = Net.MIN_PLAYERS
-	_max_slider.max_value = Net.MAX_PLAYERS
+	_max_slider.max_value = Net.max_players_cap()
 	_max_slider.step = 1
 	_max_slider.custom_minimum_size = Vector2(0, 48)
 	_max_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -72,9 +73,9 @@ func _build() -> void:
 	players.add_child(_max_slider)
 	_max_label = MenuKit.label("", &"", 30)
 	_max_label.custom_minimum_size = Vector2(150, 0)
-	_max_label.add_theme_color_override("font_color", MenuKit.ACCENT)
+	_max_label.add_theme_color_override("font_color", MenuKit.accent_color)
 	players.add_child(_max_label)
-	_max_slider.value_changed.connect(func(value: float) -> void: _max_label.text = "%d players" % int(value))
+	_max_slider.value_changed.connect(func(value: float) -> void: _max_label.text = _players_text(int(value)))
 	rows.add_child(_row("Max players", players))
 
 	_password_edit = LineEdit.new()
@@ -103,6 +104,12 @@ func _build() -> void:
 	_listed_tab.toggled.connect(func(_on: bool) -> void: _update_hint())
 	rows.add_child(_row("Who can find it", visibility))
 
+	if Net.conquest_section:
+		var factions := MenuKit.label("Four factions start in the corners: players join the faction they pick in the lobby "
+				+ "(the same number in each). Map, warbands, difficulty and time limit are set in the lobby.", &"HintLabel", 22)
+		factions.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		rows.add_child(factions)
+
 	var info := PanelContainer.new()
 	info.theme_type_variation = &"PanelInset"
 	var info_text := MenuKit.label(_address_hint(), &"", 22)
@@ -113,7 +120,7 @@ func _build() -> void:
 	var bottom: HBoxContainer = _frame.bottom
 	var back := MenuKit.button("Back")
 	back.name = "BackButton"
-	back.pressed.connect(_go_to.bind(MENU_SCENE))
+	back.pressed.connect(func() -> void: _go_to(Net.menu_scene()))
 	bottom.add_child(back)
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -168,12 +175,19 @@ func _address_hint() -> String:
 
 
 func _load_options() -> void:
-	var saved: Dictionary = Net.profile.get("host", {})
+	var saved: Dictionary = Net.profile.get(Net.host_profile_key(), {})
 	_name_edit.text = str(saved.get("name", ""))
-	_max_slider.value = int(saved.get("max_players", Net.MAX_PLAYERS))
-	_max_label.text = "%d players" % int(_max_slider.value)
+	_max_slider.value = int(saved.get("max_players", Net.max_players_cap()))
+	_max_label.text = _players_text(int(_max_slider.value))
 	(_listed_tab if bool(saved.get("listed", true)) else _private_tab).button_pressed = true
 	_update_hint()
+
+
+## "16 players" (Conquest: "16 players · 4 per faction").
+func _players_text(count: int) -> String:
+	if Net.conquest_section:
+		return "%d players · %d per faction" % [count, ceili(float(count) / ConquestMode.FACTIONS)]
+	return "%d players" % count
 
 
 func _create() -> void:

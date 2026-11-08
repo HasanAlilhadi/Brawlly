@@ -12,6 +12,13 @@ const DIALOG_WIDTH: float = 720.0
 const ACCENT := Color("8a4b1c")  # values on parchment (class names, setting values)
 const GOOD := Color("2f7d32")
 const BAD := Color("a3361f")
+## The colors pages use for values / good / bad states (ConquestLook swaps them for its dark theme).
+static var accent_color: Color = ACCENT
+static var good_color: Color = GOOD
+static var bad_color: Color = BAD
+## The theme pages and dialogs get (null = the project's RPG theme; ConquestLook sets its own). A CanvasLayer
+## doesn't pass the window's theme on, so every page / dialog root carries it.
+static var page_theme: Theme
 const ICON_LOCK := preload("res://assets/ui/touch/icons/lock.png")
 const ICON_SEARCH := preload("res://assets/ui/touch/icons/search.png")
 const ICON_REFRESH := preload("res://assets/ui/touch/icons/arrow_rotate.png")
@@ -25,6 +32,7 @@ static func frame(ui: Node, title_text: String) -> Dictionary:
 	root.name = "Frame"
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.theme = page_theme
 	ui.add_child(root)
 	var column := VBoxContainer.new()
 	column.add_theme_constant_override("separation", 18)
@@ -82,6 +90,7 @@ static func dialog(ui: Node, title_text: String) -> Dictionary:
 	overlay.color = Color(0, 0, 0, 0.55)
 	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.theme = page_theme
 	ui.add_child(overlay)
 	var center := CenterContainer.new()
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)

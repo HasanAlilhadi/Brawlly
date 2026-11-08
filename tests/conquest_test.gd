@@ -36,6 +36,7 @@ func _ready() -> void:
 	Net.settings.score_limit = 100000  # the Lair decides this test, not the score
 	Net.settings.events = []
 	TerritoryNode.unguarded_falls = false  # places the test leaves alone stay held; phase 13 checks the countdown
+	ConquestDemons.campaigns_on = false  # no demon campaigns on them either (conquest_zones_test checks those)
 	get_tree().change_scene_to_file("res://scenes/main/main.tscn")
 
 
@@ -152,6 +153,8 @@ func _process(delta: float) -> void:
 				if pt < 5.0:
 					return
 			if step == 0:
+				if not village._spawn_queue.is_empty() and pt < 5.0:
+					return  # the garrison rises one a frame
 				_check(village._guards_spawned and village._guards.size() == roundi(TerritoryNode.INFO[TerritoryNode.Kind.VILLAGE].guards * TerritoryNode.ZONE_GUARDS[village.zone]), "a hero nearby wakes the garrison (%d)" % village._guards.size())
 				for guard in village._guards:
 					(guard as Unit).die()
@@ -656,9 +659,11 @@ func _process(delta: float) -> void:
 			# The Lair: held long enough, it wins.
 			var seat := mode.throne()
 			seat._spawn_guards()
+			while not seat._spawn_queue.is_empty():
+				seat._spawn_some()  # all of it now (the game raises one a frame)
 			var lord := seat._guards[0] as Enemy
-			_check(lord.scene_file_path.ends_with("vampire_lord.tscn") and lord.scale.x > 1.5 and lord.power > 3.0,
-					"a giant demon lord holds the Lair (x%.1f size, x%.1f power)" % [lord.scale.x, lord.power])
+			_check(lord.scene_file_path.ends_with("malakor.tscn") and lord.scale.x > 1.5 and lord.power > 3.0,
+					"Malakor holds the Lair (x%.1f size, x%.1f power)" % [lord.scale.x, lord.power])
 			_check(seat._guards.size() > TerritoryNode.INFO[TerritoryNode.Kind.THRONE].guards, "with the biggest garrison (%d)" % seat._guards.size())
 			for guard in seat._guards:
 				(guard as Unit).die()

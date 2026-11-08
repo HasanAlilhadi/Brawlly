@@ -10,6 +10,8 @@ extends Node
 ## - Blood Moon: night falls, every enemy rages (GameConfig.blood_moon: faster, harder hits) but drops double loot;
 ## - supply drop: a Legendary chest parachutes in (by the hill in King of the Hill), tracked on the minimap.
 ## Visuals go to every peer by RPC (`_net_*`); damage and loot only on the server. Off with the lobby's "World events" setting.
+## Only heroes where `GameMode.events_reach()` is true draw events (Conquest: the inner zones); an event that comes
+## due while none is there waits (`RETRY`). The storm / Blood Moon light only shows there (`Weather.area`).
 ## Created by main.gd (same name on every peer); announcements go through GameMode.
 
 ## Every event: [id, name, one-line description, Game Icon Pack glyph]. The lobby shows one checkbox each;
@@ -43,6 +45,8 @@ const CHEST_SCENE := preload("res://scenes/world/chest.tscn")
 const METEOR_COLOR := Color(1.0, 0.45, 0.1, 0.65)
 const LIGHTNING_COLOR := Color(0.6, 0.8, 1.0, 0.6)
 const SUPPLY_ICON := preload("res://assets/ui/icons/game/shop.svg")
+## Seconds until an event that came due with no hero where events reach tries again.
+const RETRY: float = 10.0
 
 ## Seconds until the first event, then between events (random in the range).
 @export var first_goblin: Vector2 = Vector2(60, 90)
@@ -140,6 +144,8 @@ func setup(main: Node, game_mode: GameMode, events: PackedStringArray) -> void:
 	_supply_timer = randf_range(first_supply.x, first_supply.y)
 	weather = Weather.new()
 	weather.setup(main)
+	if game_mode is ConquestMode:
+		weather.area = game_mode.events_reach
 	add_child(weather)
 
 
@@ -151,30 +157,49 @@ func _process(delta: float) -> void:
 	if not multiplayer.is_server() or _game_mode.is_over or not _main.get("_started"):
 		return
 	_run_weather(delta)
+	var anyone := _random_player() != null  # a hero where events reach
 	if is_on("meteors") and meteors_left <= 0.0:
 		_meteor_timer -= delta
 		if _meteor_timer <= 0.0:
-			start_meteor_shower()
+			if anyone:
+				start_meteor_shower()
+			else:
+				_meteor_timer = RETRY
 	if is_on("storm") and storm_left <= 0.0 and blood_moon_left <= 0.0:
 		_storm_timer -= delta
 		if _storm_timer <= 0.0:
-			start_storm()
+			if anyone:
+				start_storm()
+			else:
+				_storm_timer = RETRY
 	if is_on("blood_moon") and blood_moon_left <= 0.0 and storm_left <= 0.0:
 		_blood_moon_timer -= delta
 		if _blood_moon_timer <= 0.0:
-			start_blood_moon()
+			if anyone:
+				start_blood_moon()
+			else:
+				_blood_moon_timer = RETRY
 	if is_on("supply_drop"):
 		_supply_timer -= delta
 		if _supply_timer <= 0.0:
-			drop_supplies()
+			if anyone or get_tree().get_first_node_in_group(&"hill"):
+				drop_supplies()
+			else:
+				_supply_timer = RETRY
 	if is_on("goblin") and not is_instance_valid(goblin):
 		_goblin_timer -= delta
 		if _goblin_timer <= 0.0:
-			spawn_goblin()
+			if anyone:
+				spawn_goblin()
+			else:
+				_goblin_timer = RETRY
 	if is_on("warlord") and not is_instance_valid(warlord):
 		_warlord_timer -= delta
 		if _warlord_timer <= 0.0:
-			spawn_warlord()
+			if anyone:
+				spawn_warlord()
+			else:
+				_warlord_timer = RETRY
 	if wave_active:
 		if not _wave_spawning and _living_wave_enemies() == 0:
 			wave_active = false
@@ -338,9 +363,14 @@ func _on_warlord_died(unit: Unit) -> void:
 		_game_mode.announce("The Orc Warlord has fallen!")
 
 
+## A random living hero where events reach (`GameMode.events_reach`), or null.
 func _random_player() -> Player:
-	var alive := get_tree().get_nodes_in_group(&"players").filter(func(p: Node) -> bool: return not GameConfig.is_gone(p))
+	var alive := get_tree().get_nodes_in_group(&"players").filter(func(p: Node) -> bool: return _eligible(p))
 	return alive.pick_random() if not alive.is_empty() else null
+
+
+func _eligible(p: Node) -> bool:
+	return not GameConfig.is_gone(p) and _game_mode.events_reach((p as Node3D).global_position)
 
 
 ## Versus: the leader (player or a player of the leading team), so the boss helps whoever is behind.
@@ -355,7 +385,7 @@ func _pick_quarry() -> Player:
 			best = _game_mode.scores[key]
 			best_key = key
 	var candidates := get_tree().get_nodes_in_group(&"players").filter(func(p: Node) -> bool:
-		if GameConfig.is_gone(p):
+		if not _eligible(p):
 			return false
 		return (p as Player).team_id == best_key)
 	return candidates.pick_random() if not candidates.is_empty() else _random_player()

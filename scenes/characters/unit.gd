@@ -168,6 +168,17 @@ const XRAY_SHADER := preload("res://assets/shaders/xray_silhouette.gdshader")
 var _regen_pool: float = 0.0
 var _full_body_action: bool = false
 var _knockback: Vector3 = Vector3.ZERO
+## Conquest (ConquestDemons): what it wants lies behind a shut gate, so it walks to this spot in front of the gate
+## and hits the gate there (INF = none). Set by the server for monsters and soldiers alike.
+var breach_point: Vector3 = Vector3.INF
+## Slower than this (m/s) a unit doesn't move this frame (a crowd's tiny shoves cost the host a lot of collision work).
+const STILL_SPEED: float = 0.2
+## At most one hit splash (sparks, flash, squash) per unit this often (s).
+const HURT_FX_GAP: float = 0.12
+var _last_hurt_fx_ms: int = -100000
+## Physics level of detail (`_physics_step_frames`): time of the skipped frames, and which frame this unit runs on.
+var _skipped_time: float = 0.0
+var _step_phase: int = randi() % 12
 var _flash_material: StandardMaterial3D
 var _flash_tween: Tween
 var _live_hold: BonePoseOverride3D
@@ -214,6 +225,7 @@ func _ready() -> void:
 	play_anim("idle", 0.0)
 	anim.advance(0.0)  # take the idle pose now: a unit spawned paused would otherwise keep the model's rest (T) pose
 	_spawned = true
+	_add_gate_layers()
 	if _is_remote():
 		# Other peers only show what the server simulates (the predicted local player still
 		# bumps into trees / houses, see `enable_prediction()`).
@@ -226,8 +238,16 @@ func _ready() -> void:
 ## Client: make this (local player's) unit move immediately from local input.
 func enable_prediction() -> void:
 	is_predicted = true
-	collision_mask = GameConfig.LAYER_WORLD | GameConfig.LAYER_FENCE
+	collision_mask = GameConfig.LAYER_WORLD | GameConfig.LAYER_FENCE | GameConfig.hostile_gates(team_id)
 	global_position = net_position
+
+
+## Conquest gates: solid unless it's this unit's own side's (it walks through those), hittable in melee.
+func _add_gate_layers() -> void:
+	if collision_mask & GameConfig.LAYER_WORLD:  # (ghosts float through walls: through gates too)
+		collision_mask |= GameConfig.hostile_gates(team_id)
+	if melee_mask != 0:
+		melee_mask |= GameConfig.ALL_GATES
 
 
 ## True on clients: this unit is simulated by the server and only displayed here.
@@ -295,6 +315,14 @@ func _prediction_move_input(_delta: float) -> Vector3:
 func _physics_process(delta: float) -> void:
 	if is_dead or _is_remote():
 		return
+	# Level of detail: a unit with little to do runs every `_physics_step_frames()` frames (staggered), with the
+	# time of the frames it skipped.
+	var every := _physics_step_frames()
+	if every > 1 and (Engine.get_physics_frames() + _step_phase) % every != 0:
+		_skipped_time += delta
+		return
+	delta += _skipped_time
+	_skipped_time = 0.0
 	_action_time = maxf(_action_time - delta, 0.0)
 	_melee_timer = maxf(_melee_timer - delta, 0.0)
 	_target_lock = maxf(_target_lock - delta, 0.0)
@@ -316,8 +344,13 @@ func _physics_process(delta: float) -> void:
 		velocity *= 0.4
 	velocity += _knockback
 	_knockback = _knockback.move_toward(Vector3.ZERO, delta * 22.0)
-	move_and_slide()
-	global_position = GameConfig.clamp_to_world(Vector3(global_position.x, 0.0, global_position.z))
+	if velocity.length_squared() > STILL_SPEED * STILL_SPEED:  # (nearly) still: no collision work
+		var frame_time := get_physics_process_delta_time()
+		var stretch := delta / frame_time if frame_time > 0.0 else 1.0
+		velocity *= stretch  # move_and_slide moves one frame's worth: cover the skipped ones too
+		move_and_slide()
+		velocity /= stretch
+		global_position = GameConfig.clamp_to_world(Vector3(global_position.x, 0.0, global_position.z))
 	if look_override != Vector3.ZERO:
 		face(look_override, delta * 1.5)
 	elif strength > 0.05:
@@ -332,6 +365,12 @@ func _physics_process(delta: float) -> void:
 ## Virtual: desired movement on the XZ plane (length 0..1).
 func _get_move_input(_delta: float) -> Vector3:
 	return Vector3.ZERO
+
+
+## Virtual: run the physics frame (AI, movement) only every this many frames — 1 = every frame. Units with little
+## to do (calm enemies far from heroes) return more, which keeps big crowds cheap for the host.
+func _physics_step_frames() -> int:
+	return 1
 
 
 ## Idle / walk / run: a new clip only starts once it has been wanted for `_locomotion_settle()` seconds, so AI
@@ -373,6 +412,11 @@ func _roll_melee_damage() -> Array:
 
 ## Hit feedback on every peer: white flash, squash, sparks.
 func _hurt_visuals() -> void:
+	# A crowd fight lands dozens of blows a second: one splash per unit per HURT_FX_GAP, none far off screen.
+	var now := Time.get_ticks_msec()
+	if now - _last_hurt_fx_ms < int(HURT_FX_GAP * 1000.0) or not HitFx.near_view(global_position):
+		return
+	_last_hurt_fx_ms = now
 	_punch()
 	HitFx.burst(global_position + Vector3(0, health_bar_height * 0.55, 0), HitFx.Kind.FLESH, 9)
 	HitFx.flash(global_position + Vector3(0, health_bar_height * 0.55, 0), HitFx.HIT_SPARK, Color(1.0, 0.9, 0.6), 1.1 * sqrt(radius / 0.35), 0.18)
@@ -448,7 +492,7 @@ func facing() -> Vector3:
 # --- Animation ----------------------------------------------------------------
 
 func play_anim(anim_name: String, blend: float = 0.12) -> void:
-	if not _is_remote():
+	if anim_name != anim_state and not _is_remote():
 		anim_state = anim_name
 	if anim.current_animation != anim_name and anim.has_animation(anim_name):
 		anim.play(anim_name, blend)
@@ -899,6 +943,22 @@ static func target_radius(target: Node3D) -> float:
 
 # --- AI movement --------------------------------------------------------------
 
+## A blow at `point` (a gate): faces it and swings when its melee is ready (the caller deals the damage). Returns
+## whether it swung.
+func swing_at(point: Vector3) -> bool:
+	var dir := point - global_position
+	dir.y = 0.0
+	if dir.length() > 0.05:
+		face_now(dir.normalized())
+	if is_dead or _melee_timer > 0.0 or melee_anims.is_empty():
+		return false
+	_melee_timer = melee_cooldown
+	var anim_name := melee_anims[_melee_index % melee_anims.size()]
+	_melee_index += 1
+	play_action(anim_name, 0.4 / anim_speed, ARM_RIGHT if anim_name.ends_with("right") else ARM_BOTH)
+	return true
+
+
 ## Moves toward `target` and melee-attacks it once in reach (`attack` = false: only gets there, e.g. enemies
 ## whose attacks are separate components). Attackers spread around the target (each picks its own spot)
 ## instead of queueing behind each other. Returns the move vector.
@@ -968,7 +1028,7 @@ func _pick_steer_angle(want: Vector3, ignore: Node3D, min_angle: float = 0.0, ex
 		_probe_shape.radius = clampf(radius * 0.6, 0.24, 0.5)
 	var query := PhysicsShapeQueryParameters3D.new()
 	query.shape = _probe_shape
-	query.collision_mask = GameConfig.LAYER_WORLD | (collision_mask & GameConfig.LAYER_FENCE) | extra_mask
+	query.collision_mask = GameConfig.LAYER_WORLD | (collision_mask & (GameConfig.LAYER_FENCE | GameConfig.ALL_GATES)) | extra_mask
 	query.transform = Transform3D(Basis(), global_position + Vector3(0, 0.45, 0))
 	var exclude: Array[RID] = [get_rid()]
 	if is_instance_valid(ignore) and ignore is CollisionObject3D:

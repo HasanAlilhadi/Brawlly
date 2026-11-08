@@ -10,6 +10,8 @@ signal main_menu_requested
 signal pause_requested
 signal army_command_requested(order: int)
 signal ping_requested
+## The DEV button (main.gd toggles the DevPanel).
+signal dev_requested
 signal weapon_switch_requested
 signal ability_requested
 signal dash_requested
@@ -72,6 +74,7 @@ var _army_row: VBoxContainer
 var _army_buttons: Array[Button] = []
 var _kill_picking: bool = false
 var _ping_button: Button
+var _dev_button: Button
 var _switch_button: TouchButton
 ## Touch: hold to raise the shield (Swordsman with the shield upgrade).
 var shield_button: TouchButton
@@ -398,6 +401,15 @@ func _build_extras() -> void:
 	_ping_button.pressed.connect(ping_requested.emit)
 	_ping_button.visible = Net.is_online()
 	root.add_child(_ping_button)
+	_dev_button = Button.new()
+	_dev_button.name = "DevButton"
+	_dev_button.theme_type_variation = &"ButtonSquare"
+	_dev_button.focus_mode = Control.FOCUS_NONE
+	_dev_button.text = "DEV"
+	_dev_button.visible = not Platform.mobile_layout
+	_dev_button.tooltip_text = "What the game is doing (F3)"
+	_dev_button.pressed.connect(dev_requested.emit)
+	root.add_child(_dev_button)
 
 	# Class upgrades: a button next to pause / ping, and the bottom sheet it opens.
 	_upgrades_button = Button.new()
@@ -934,11 +946,12 @@ func _apply_design() -> void:
 	buttons.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	buttons.add_theme_constant_override("separation", int(HudStyle.GAP))
 	left.add_child(buttons)
-	for button: Button in [pause_button, _upgrades_button, _ping_button]:
+	for button: Button in [pause_button, _upgrades_button, _ping_button, _dev_button]:
 		button.reparent(buttons, false)
 		button.custom_minimum_size = Vector2(HudStyle.BUTTON, HudStyle.BUTTON)
 		button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 		button.add_theme_font_size_override("font_size", HudStyle.FONT_TITLE)
+	_dev_button.add_theme_font_size_override("font_size", HudStyle.FONT_SMALL)
 	health_bar.custom_minimum_size.y = HudStyle.BAR_HEIGHT
 	coins_label.add_theme_font_size_override("font_size", HudStyle.FONT_TITLE)
 	_size_icons(top_left, HudStyle.ICON)

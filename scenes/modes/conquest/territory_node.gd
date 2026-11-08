@@ -38,21 +38,21 @@ enum Specialty { NONE, IRON, LUMBER, FARM }
 ## (people per LogisticsManager.POOL_EVERY ticks, × ZONE_PEOPLE), the most people its barracks hold and wall pieces.
 const INFO: Dictionary = {
 	Kind.VILLAGE: {"name": "Village", "radius": 6.0, "guards": 4, "rows": 1, "capture": 8.0, "gate": 0.0,
-			"points": 1, "food": 3, "equipment": 0, "gold": 1, "supply": 16.0, "cap": 0, "pool": 0.5, "pool_cap": 20},
+			"points": 1, "food": 3, "equipment": 0, "gold": 1, "supply": 16.0, "cap": 2, "pool": 0.5, "pool_cap": 20},
 	Kind.OUTPOST: {"name": "Outpost", "radius": 7.0, "guards": 6, "rows": 2, "capture": 10.0, "gate": 0.0,
-			"points": 2, "food": 0, "equipment": 1, "gold": 2, "supply": 22.0, "cap": 2, "pool": 0.75, "pool_cap": 30},
+			"points": 2, "food": 0, "equipment": 1, "gold": 2, "supply": 22.0, "cap": 5, "pool": 0.75, "pool_cap": 30},
 	Kind.CITY: {"name": "City", "radius": 9.0, "guards": 10, "rows": 4, "capture": 15.0, "gate": 1200.0,
-			"points": 4, "food": 0, "equipment": 0, "gold": 3, "supply": 28.0, "cap": 5, "pool": 1.0, "pool_cap": 60,
+			"points": 4, "food": 0, "equipment": 0, "gold": 3, "supply": 28.0, "cap": 12, "pool": 1.0, "pool_cap": 60,
 			"walls": 14},
 	# A faction's home: a small baseline of everything, so a bigger army needs conquered production.
 	Kind.CITADEL: {"name": "Citadel", "radius": 11.0, "guards": 0, "rows": 0, "capture": 20.0, "gate": 2000.0,
-			"points": 3, "food": 3, "equipment": 2, "gold": 4, "supply": 32.0, "cap": 0, "pool": 1.0, "pool_cap": 100,
+			"points": 3, "food": 3, "equipment": 2, "gold": 4, "supply": 32.0, "cap": 10, "pool": 1.0, "pool_cap": 100,
 			"walls": 16},
 	# The prize: the strongest garrison (led by a demon lord), the most points, a big barracks.
 	Kind.THRONE: {"name": "Demon's Lair", "radius": 15.0, "guards": 18, "rows": 5, "capture": 30.0, "gate": 4000.0,
-			"points": 25, "food": 4, "equipment": 4, "gold": 8, "supply": 40.0, "cap": 20, "pool": 2.0, "pool_cap": 100,
+			"points": 25, "food": 4, "equipment": 4, "gold": 8, "supply": 40.0, "cap": 30, "pool": 2.0, "pool_cap": 100,
 			"walls": 22,
-			"boss": "vampire_lord", "strength": 1.5},
+			"boss": "malakor", "strength": 1.5},
 }
 const SPECIALTY_NAMES: PackedStringArray = ["", "Iron City", "Lumber City", "Farm City"]
 ## Per zone (0 = the Lair ... 6 = the corners): gate health share (0 = no walls, houses instead), production
@@ -88,6 +88,26 @@ const SPECIALTY_OUTPUT: Array[Dictionary] = [
 ]
 ## Most of each supply one place stores.
 const STORE_CAP: int = 300
+## Upgrades: [id, name, what a level does]; indexes UP_*.
+const UPGRADES: Array = [
+	[&"walls", "Walls", "+50% gate health a level"],
+	[&"workshops", "Workshops", "+25% food, weapons and gold a level"],
+	[&"barracks", "Barracks", "+50% room, +30% people, +1 armed a tick a level"],
+	[&"storehouse", "Storehouse", "+50% food / weapons it can hold a level"],
+]
+const UP_WALLS: int = 0
+const UP_WORKSHOPS: int = 1
+const UP_BARRACKS: int = 2
+const UP_STOREHOUSE: int = 3
+const UPGRADE_MAX: int = 3
+## Gold per level (1st, 2nd, 3rd), × UPGRADE_KIND_COST[kind] (Village … Lair).
+const UPGRADE_COST: Array[int] = [100, 220, 400]
+const UPGRADE_KIND_COST: Array[float] = [0.6, 0.8, 1.0, 1.2, 1.5]
+const WALL_BONUS: float = 0.5
+const WORKSHOP_BONUS: float = 0.25
+const BARRACKS_ROOM: float = 0.5
+const BARRACKS_GROWTH: float = 0.3
+const STOREHOUSE_BONUS: float = 0.5
 ## Most gold a treasury holds (production stops once it is full).
 const TREASURY_CAP: int = 600
 ## `route`: nowhere (goods stay), or its lord's army; >= 0 = the index of the place its goods go to.
@@ -96,6 +116,13 @@ const ROUTE_ARMY: int = -2
 const COURIER_MAX: int = 4
 ## The garrison appears when a hero is this close (and stays).
 const GARRISON_RANGE: float = 70.0
+## Garrison members spawned per frame (a big one over a few frames: no hitch when it rises).
+const SPAWN_PER_FRAME: int = 1
+## Seconds between label text updates.
+const LABEL_REFRESH: float = 0.25
+## The garrison sleeps (no AI, not targeted) while no hero or soldier is within this distance of the ring and none
+## of it is fighting, like a far warband.
+const GARRISON_WAKE: float = 50.0
 ## Capture progress drains this much faster than it builds when nobody is taking the place.
 const DECAY: float = 0.5
 ## A captured gate comes back at this share of its health.
@@ -124,6 +151,10 @@ var mode: ConquestMode
 var gate: TerritoryGate
 ## What it has made and not yet handed out (server; peers get the totals through LogisticsManager).
 var store: Dictionary = {&"food": 0, &"equipment": 0}
+## Upgrades (UPGRADES order, levels 0..UPGRADE_MAX): bought on the M map by its commander with this place's own
+## treasury (`ConquestMode.place_action` "upgrade"); buildings, so they stay with the place whoever holds it later.
+## Every peer gets them with the places' numbers (LogisticsManager `_net_stock`).
+var upgrades: Array[int] = [0, 0, 0, 0]
 ## Its barracks (server; every peer gets them with the logistics tick): unarmed people, armed soldiers per class
 ## (SOLDIER_KINDS order), the class new people are armed with (NO_TRAINING = none: they stay unarmed).
 var people: int = 0
@@ -160,8 +191,15 @@ var _lord_timer: float = 0.0
 
 var _guards: Array[Node] = []
 var _guards_spawned: bool = false
+## The gate's full health before Walls upgrades.
+var _gate_base: float = 0.0
+## Garrison members still to spawn: [scene path, spot, size].
+var _spawn_queue: Array = []
+var _guard_strength: float = 1.0
+var _guards_awake: bool = true
 var _sync_timer: float = 0.0
 var _check_timer: float = 0.0
+var _label_timer: float = randf() * 0.25
 var _material: StandardMaterial3D
 var _flag_material: StandardMaterial3D
 var _label: Label3D
@@ -180,15 +218,63 @@ func kind_name() -> String:
 	return SPECIALTY_NAMES[specialty] if kind == Kind.CITY else String(info().name)
 
 
-## Production per logistics tick (kind + specialty, × its zone's share), gold included.
+## Production per logistics tick (kind + specialty, × its zone's share, × its Workshops), gold included.
 func output() -> Dictionary:
 	var made := {&"food": int(info().food), &"equipment": int(info().equipment),
 			&"gold": int(info().get("gold", 0))}
 	for key in SPECIALTY_OUTPUT[specialty]:
 		made[StringName(key)] += int(SPECIALTY_OUTPUT[specialty][key])
+	var boost := 1.0 + WORKSHOP_BONUS * upgrades[UP_WORKSHOPS]
 	for key in made:
-		made[key] = roundi(made[key] * ZONE_OUTPUT[zone])
+		made[key] = roundi(made[key] * ZONE_OUTPUT[zone] * boost)
 	return made
+
+
+# --- Upgrades -------------------------------------------------------------------------------
+
+## Whether upgrade `i` fits this place (walls need a gate, barracks people) and isn't at its top level.
+func can_upgrade(i: int) -> bool:
+	if i < 0 or i >= UPGRADES.size() or upgrades[i] >= UPGRADE_MAX:
+		return false
+	if i == UP_WALLS and gate == null:
+		return false
+	if i == UP_BARRACKS and not has_barracks():
+		return false
+	return true
+
+
+## Gold (from this place's treasury) for the next level of upgrade `i`; bigger places cost more.
+func upgrade_cost(i: int) -> int:
+	var level := clampi(upgrades[i], 0, UPGRADE_MAX - 1)
+	return roundi(UPGRADE_COST[level] * UPGRADE_KIND_COST[kind])
+
+
+## Most food / weapons its store holds (Storehouse).
+func store_cap() -> int:
+	return roundi(STORE_CAP * (1.0 + STOREHOUSE_BONUS * upgrades[UP_STOREHOUSE]))
+
+
+## People armed with the trained class a logistics tick (Barracks).
+func arm_per_tick() -> int:
+	return LogisticsManager.ARM_PER_TICK + upgrades[UP_BARRACKS]
+
+
+## Share of its normal people growth (Barracks).
+func growth_boost() -> float:
+	return 1.0 + BARRACKS_GROWTH * upgrades[UP_BARRACKS]
+
+
+## Every peer: the Walls level on the gate (its full health; what was added is added to its health too).
+func apply_upgrades() -> void:
+	if gate == null or _gate_base <= 0.0:
+		return
+	var top := _gate_base * (1.0 + WALL_BONUS * upgrades[UP_WALLS])
+	if not is_equal_approx(top, gate.max_health):
+		if multiplayer.is_server() and top > gate.max_health and not gate.is_broken():
+			gate.health += top - gate.max_health
+		gate.max_health = top
+		gate.health = minf(gate.health, top)
+		gate._apply_look()
 
 
 ## A wall ring with a gate (walled kinds outside zone 1).
@@ -215,9 +301,9 @@ func has_barracks() -> bool:
 	return float(info().pool) > 0.0
 
 
-## The most people (armed or not) its barracks hold.
+## The most people (armed or not) its barracks hold (Barracks).
 func barracks_cap() -> int:
-	return int(info().get("pool_cap", 0))
+	return roundi(int(info().get("pool_cap", 0)) * (1.0 + BARRACKS_ROOM * upgrades[UP_BARRACKS]))
 
 
 ## Server: the barracks empty (a new holder, or demons): the old soldiers scatter.
@@ -271,7 +357,8 @@ func _build_walls() -> void:
 			gate = TerritoryGate.new()
 			gate.name = "Gate"
 			gate.territory = self
-			gate.max_health = float(info().gate) * ZONE_WALLS[zone]
+			_gate_base = float(info().gate) * ZONE_WALLS[zone]
+			gate.max_health = _gate_base
 			gate.health = gate.max_health
 			gate.size = Vector3(chord, TerritoryGate.HEIGHT, WALL_THICKNESS + 0.3)
 			gate.position = at
@@ -349,8 +436,12 @@ func start_owned(team: int) -> void:
 # --- Server rules ------------------------------------------------------------------
 
 func _process(delta: float) -> void:
-	if _label:
-		_label.text = _label_text()
+	_label_timer -= delta
+	if _label and _label_timer <= 0.0:
+		_label_timer = LABEL_REFRESH  # the text is built a few times a second, not every frame
+		var text := _label_text()
+		if text != _label.text:
+			_label.text = text
 	if unguarded_left > 0.0 and not multiplayer.is_server():
 		unguarded_left = maxf(unguarded_left - delta, 0.0)  # the server sends it when it starts / stops
 	if not multiplayer.is_server() or mode == null or mode.is_over:
@@ -383,6 +474,13 @@ func _update_infested(delta: float) -> bool:
 		if _hero_within(GARRISON_RANGE):
 			_spawn_guards()
 		return false
+	if not _spawn_queue.is_empty():
+		_spawn_some()
+		return false
+	_check_timer -= delta
+	if _check_timer <= 0.0:
+		_check_timer = 1.0
+		_wake_guards(_guards_needed())
 	for guard in _guards:
 		if not GameConfig.is_gone(guard):
 			return false
@@ -409,8 +507,8 @@ func _update_capture(delta: float) -> bool:
 	var open := gate == null or gate.is_broken()
 	if inside.size() == 1 and not inside.has(owner_team) and open:
 		taker = inside.keys()[0]
-	elif inside.is_empty() and state == State.OWNED and open and not _demons_inside().is_empty():
-		taker = DEMONS
+	elif inside.is_empty() and state == State.OWNED and open and kind != Kind.CITADEL and not _demons_inside().is_empty():
+		taker = DEMONS  # a faction's Citadel never falls to demons (its gate can be broken)
 	var before := progress
 	var before_capturer := capturer
 	if taker != -1:
@@ -521,6 +619,8 @@ func _abandon() -> void:
 	_reset_couriers()
 	_guards.clear()
 	_guards_spawned = false
+	_spawn_queue.clear()
+	_guards_awake = true
 	mode.announce("Demons took %s: {team:%d} left it unguarded!" % [display_name, previous])
 	mode.on_territory_captured(self, previous)
 
@@ -570,6 +670,7 @@ func _overrun() -> void:
 	var previous := owner_team
 	_guards = _demons_inside()
 	_guards_spawned = true
+	_guards_awake = true
 	owner_team = -1
 	state = State.INFESTED
 	capturer = -1
@@ -622,16 +723,61 @@ func _spawn_guards() -> void:
 	for i in count:
 		var types: Array = WorldEvents.WAVE_TYPES[randi() % maxi(rows, 1)]
 		scenes.append(WorldEvents.ENEMIES + str(types[randi() % types.size()]) + ".tscn")
+	if kind == Kind.THRONE:
+		mode.announce("Malakor, the Six-Armed Sovereign, awakens in the Lair!")
+	_guard_strength = strength
+	_guards_awake = true
 	for i in scenes.size():
 		var angle := TAU * i / scenes.size()
 		var spread := 0.0 if i == 0 and info().has("boss") else radius() * 0.6
 		var at := GameConfig.clamp_to_world(global_position + Vector3(cos(angle), 0.0, sin(angle)) * spread)
 		var boss := i == 0 and info().has("boss")
-		var guard := NetSpawn.unit(&"enemy", at, {"scene": scenes[i], "strength": strength, "coins": 1.0,
-				"size": BOSS_SIZE if boss else 1.0})
+		_spawn_queue.append([scenes[i], at, BOSS_SIZE if boss else 1.0])
+	_spawn_some()
+
+
+## Server: the next few of the garrison (SPAWN_PER_FRAME a frame).
+func _spawn_some() -> void:
+	for i in mini(SPAWN_PER_FRAME, _spawn_queue.size()):
+		var row: Array = _spawn_queue.pop_front()
+		var guard := NetSpawn.unit(&"enemy", row[1], {"scene": row[0], "strength": _guard_strength, "coins": 1.0,
+				"size": row[2]})
 		if guard:
 			guard.add_to_group(&"active_enemies")  # no warband wakes them: heroes and soldiers target them as is
 			_guards.append(guard)
+
+
+## A hero or soldier near the ring, or one of the garrison busy fighting / walking back.
+func _guards_needed() -> bool:
+	var reach := radius() + GARRISON_WAKE
+	for node in get_tree().get_nodes_in_group(&"player_units"):
+		var unit := node as Node3D
+		if GameConfig.is_gone(unit):
+			continue
+		if Vector2(unit.global_position.x - global_position.x, unit.global_position.z - global_position.z).length() < reach:
+			return true
+	for guard in _guards:
+		if not GameConfig.is_gone(guard) and (guard as Enemy).is_busy():
+			return true
+	return false
+
+
+## Server: the garrison sleeps (no AI, nobody targets it) or wakes up.
+func _wake_guards(awake: bool) -> void:
+	if awake == _guards_awake:
+		return
+	_guards_awake = awake
+	for node in _guards:
+		if not is_instance_valid(node):
+			continue  # (a freed guard can't even be cast)
+		var guard := node as Enemy
+		if GameConfig.is_gone(guard):
+			continue
+		guard.process_mode = Node.PROCESS_MODE_INHERIT if awake else Node.PROCESS_MODE_DISABLED
+		if awake and not guard.is_downed:
+			guard.add_to_group(&"active_enemies")
+		else:
+			guard.remove_from_group(&"active_enemies")
 
 
 func _send_state() -> void:
@@ -673,6 +819,9 @@ func _label_text() -> String:
 		text += "\nUNGUARDED: demons in %d:%02d" % [ceili(unguarded_left) / 60, ceili(unguarded_left) % 60]
 	if state == State.OWNED:
 		var parts := PackedStringArray()
+		var levels := upgrades[0] + upgrades[1] + upgrades[2] + upgrades[3]
+		if levels > 0:
+			parts.append("Upgrades %d" % levels)
 		if lord != 0:
 			parts.append("Lord " + Net.name_of(lord))
 		if treasury > 0:
@@ -728,6 +877,8 @@ func _build_visuals() -> void:
 
 
 func _apply_look() -> void:
+	if gate:
+		gate._apply_look()  # its gate layer follows the holder
 	if _material == null:
 		return
 	var c := color()

@@ -23,6 +23,22 @@ const LAYER_ALLIES: int = 8
 ## Walls that block everyone (every unit's mask includes it; nothing in the world uses it at the moment).
 const LAYER_FENCE: int = 16
 const LAYER_UNITS: int = LAYER_PLAYER | LAYER_ENEMIES | LAYER_ALLIES
+## Conquest gates: one layer per holder (factions 0..3, then the demons), so a standing gate is solid for every side
+## but its own — the holder's units walk through it, everyone else must break it (TerritoryGate). Units' masks get
+## every gate layer but their own team's (`hostile_gates`), melee and arrows hit every gate layer.
+const GATE_LAYER_FIRST: int = 256  # layer 9
+const GATE_DEMONS: int = 4096  # layer 13
+const ALL_GATES: int = 256 | 512 | 1024 | 2048 | 4096
+
+
+## The gate layer of `team`'s gates (factions 0..3; the demons / any other: GATE_DEMONS).
+static func gate_layer(team: int) -> int:
+	return GATE_LAYER_FIRST << team if team >= 0 and team < 4 else GATE_DEMONS
+
+
+## Every gate layer but `team`'s own.
+static func hostile_gates(team: int) -> int:
+	return ALL_GATES & ~gate_layer(team)
 ## Shots fly at 0.55 m (arrows) to 0.7 m (spears): anything hittable needs a collision shape from the
 ## ground up to at least this height, or arrows and spears pass over it (melee hits by distance).
 const HIT_HEIGHT: float = 1.0
@@ -32,9 +48,33 @@ static var orc_strength: float = 1.0
 static var orc_respawn_scale: float = 1.0
 ## Blood Moon event (WorldEvents): every enemy is faster and hits harder, and drops double loot.
 static var blood_moon: bool = false
+## The host's physics tick is running long (a big fight): units that fight think every other frame until it
+## calms down (`update_load`, called by main every physics frame; Enemy / Ally `_physics_step_frames`).
+static var overloaded: bool = false
+## Physics tick time (ms, smoothed) above which it counts as overloaded, and below which it stops.
+const LOAD_HIGH_MS: float = 11.0
+const LOAD_LOW_MS: float = 7.0
+static var _load_ms: float = 0.0
+
+
+## Server: one more physics tick took `tick_ms` (Performance.TIME_PHYSICS_PROCESS).
+static func update_load(tick_ms: float) -> void:
+	_load_ms = lerpf(_load_ms, tick_ms, 0.1)
+	if overloaded and _load_ms < LOAD_LOW_MS:
+		overloaded = false
+	elif not overloaded and _load_ms > LOAD_HIGH_MS:
+		overloaded = true
+## Where world events reach (GameMode.events_reach, set by main per match; empty = everywhere): the Blood Moon
+## only drives enemies standing there.
+static var event_area: Callable = Callable()
 const BLOOD_MOON_SPEED: float = 1.2
 const BLOOD_MOON_DAMAGE: float = 1.3
 const BLOOD_MOON_LOOT: float = 2.0
+
+
+## The Blood Moon is up and reaches `point` (see `event_area`).
+static func raging_at(point: Vector3) -> bool:
+	return blood_moon and (not event_area.is_valid() or event_area.call(point))
 ## Players at 0 health go down (teammates can revive them) instead of dying. Set by main.gd per match.
 static var downed_enabled: bool = false
 

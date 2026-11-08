@@ -7,6 +7,9 @@ extends Node
 ## The title is the server name; the invite address (with Copy) sits top right. Bottom: Leave, then Ready
 ## (joined players) or Start (host, with the ready count). Everything comes from Net.players / Net.settings /
 ## Net.server_info and refreshes on Net.lobby_changed.
+## A Conquest lobby has Conquest's look (ConquestLook) and instead of the list four faction cards (`_faction_board`):
+## each faction's heroes, its open seats (Net.faction_seats(): the max players shared by four) and Join; its
+## settings show what the mode is (`_conquest_info`) and no mode / team choice.
 
 ## Score limit range / default per mode (index = Net.Mode).
 const SCORE_LIMITS := [
@@ -33,6 +36,10 @@ var _player_count: Label
 var _player_list: VBoxContainer
 var _team_box: VBoxContainer
 var _team_row: HBoxContainer
+var _faction_board: GridContainer
+var _conquest_info: Label
+var _events_note: Label
+var _conquest_look: bool = false
 var _settings_box: VBoxContainer
 var _summary: VBoxContainer  # read-only settings for joined players
 var _status: Label
@@ -59,6 +66,8 @@ var _classless_note: Label
 
 func _ready() -> void:
 	get_tree().paused = false
+	_conquest_look = Net.mode() == Net.Mode.CONQUEST
+	ConquestLook.apply(self, _conquest_look)
 	_build()
 	_build_settings()
 	Net.lobby_changed.connect(_refresh)
@@ -131,6 +140,13 @@ func _build() -> void:
 	_team_row.name = "TeamRow"
 	_team_row.add_theme_constant_override("separation", 8)
 	_team_box.add_child(_team_row)
+	_faction_board = GridContainer.new()
+	_faction_board.name = "FactionBoard"
+	_faction_board.columns = 2
+	_faction_board.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_faction_board.add_theme_constant_override("h_separation", 10)
+	_faction_board.add_theme_constant_override("v_separation", 10)
+	players.add_child(_faction_board)
 
 	# Right: your hero + match settings
 	var right := PanelContainer.new()
@@ -160,6 +176,10 @@ func _build() -> void:
 	box.add_child(_classless_note)
 	box.add_child(HSeparator.new())
 	box.add_child(MenuKit.label("Match settings", &"HeaderLabel"))
+	_conquest_info = MenuKit.label("", &"HintLabel", 22)
+	_conquest_info.name = "ConquestInfo"
+	_conquest_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(_conquest_info)
 	_settings_box = VBoxContainer.new()
 	_settings_box.name = "SettingsBox"
 	_settings_box.add_theme_constant_override("separation", 14)
@@ -256,7 +276,7 @@ func _summary_row(label_text: String, value_text: String) -> void:
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(label)
 	var value := MenuKit.label(value_text, &"", 26)
-	value.add_theme_color_override("font_color", MenuKit.ACCENT)
+	value.add_theme_color_override("font_color", MenuKit.accent_color)
 	row.add_child(value)
 	_summary.add_child(row)
 
@@ -265,6 +285,10 @@ func _refresh_summary(settings: Dictionary) -> void:
 	for child in _summary.get_children():
 		child.queue_free()
 	var match_mode: int = settings.mode
+	if match_mode == Net.Mode.CONQUEST:
+		var about := MenuKit.label(_conquest_text(), &"HintLabel", 20)
+		about.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_summary.add_child(about)
 	_summary_row("Mode", Net.MODE_NAMES[match_mode])
 	var hint := MenuKit.label(Net.MODE_HINTS[match_mode], &"HintLabel", 20)
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -355,6 +379,10 @@ func _build_event_boxes() -> void:
 				Net.set_setting("events", _checked_events()))
 		grid.add_child(box)
 		_event_boxes[row[0]] = box
+	_events_note = MenuKit.label("In Conquest they strike only the inner zones (zone %d to the Lair)." % ConquestMode.EVENT_ZONE,
+			&"HintLabel", 20)
+	_events_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_settings_box.add_child(_events_note)
 
 
 func _checked_events() -> Array:
@@ -396,7 +424,7 @@ func _add_slider(key: String, label_text: String, min_value: float, max_value: f
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(label)
 	var value_label := MenuKit.label("")
-	value_label.add_theme_color_override("font_color", MenuKit.ACCENT)
+	value_label.add_theme_color_override("font_color", MenuKit.accent_color)
 	header.add_child(value_label)
 	var slider := HSlider.new()
 	slider.min_value = min_value
@@ -428,23 +456,35 @@ func _refresh() -> void:
 	_copy_button.visible = invite != ""
 	_lock_icon.visible = bool(Net.server_info.get("locked", false))
 
-	# Players: one slot per seat
+	var conquest := match_mode == Net.Mode.CONQUEST
+	if conquest != _conquest_look:
+		_conquest_look = conquest  # a client learns the mode with the first lobby update
+		ConquestLook.apply(self, conquest)
+	if conquest:
+		Net.conquest_section = true  # leaving goes back to the Conquest hub
+
+	# Players: one slot per seat (Conquest: a card per faction)
 	for child in _player_list.get_children():
 		child.queue_free()
 	var peers := Net.players.keys()
 	peers.sort()
-	for peer in peers:
-		_player_list.add_child(_player_row(peer, team_mode))
-	if not MenuKit.is_compact(_player_list):
-		for i in maxi(max_players - peers.size(), 0):
-			_player_list.add_child(_open_slot())
+	(_player_list.get_parent() as Control).visible = not conquest
+	_faction_board.visible = conquest
+	if conquest:
+		_refresh_factions(peers)
+	else:
+		for peer in peers:
+			_player_list.add_child(_player_row(peer, team_mode))
+		if not MenuKit.is_compact(_player_list):
+			for i in maxi(max_players - peers.size(), 0):
+				_player_list.add_child(_open_slot())
 	_player_count.text = "%d / %d" % [peers.size(), max_players]
 
 	# Team buttons
 	for child in _team_row.get_children():
 		child.queue_free()
-	_team_box.visible = team_mode
-	if team_mode:
+	_team_box.visible = team_mode and not conquest
+	if team_mode and not conquest:
 		for team in settings.team_count:
 			var button := Button.new()
 			var mine: bool = Net.players.get(Net.my_id(), {}).get("team", -1) == team
@@ -465,8 +505,12 @@ func _refresh() -> void:
 	_summary.visible = not editable
 	if not editable:
 		_refresh_summary(settings)
-	var conquest := match_mode == Net.Mode.CONQUEST
 	(_mode_option.get_parent() as Control).visible = not conquest
+	_conquest_info.visible = conquest
+	_mode_hint.visible = not conquest  # its info says it all
+	_events_note.visible = conquest
+	if conquest:
+		_conquest_info.text = _conquest_text()
 	if not conquest:
 		_mode_option.select(Net.CLASSIC_MODES.find(match_mode))
 	_mode_option.disabled = not editable
@@ -538,6 +582,86 @@ func _refresh() -> void:
 	_updating = false
 
 
+## Conquest at a glance (the lobby's settings column).
+func _conquest_text() -> String:
+	return ("Four factions of up to %d heroes · a %d m land in %d zones · heroes start unarmed and buy a weapon · "
+			+ "win: slay Malakor, hold the Lair %d minutes, take every Citadel, reach the score or lead at the time limit.") % [
+			Net.faction_seats(), roundi(ConquestMode.WORLD_HALF * 2.0), ConquestMode.ZONE_EDGES.size() + 1,
+			roundi(ConquestMode.THRONE_WIN_TICKS * LogisticsManager.TICK / 60.0)]
+
+
+## Conquest: one card per faction — its heroes, its open seats and Join.
+func _refresh_factions(peers: Array) -> void:
+	for child in _faction_board.get_children():
+		child.queue_free()
+	_faction_board.columns = 1 if MenuKit.is_compact(_faction_board) else 2
+	var seats := Net.faction_seats()
+	var mine: int = Net.players.get(Net.my_id(), {}).get("team", -1)
+	for team in ConquestMode.FACTIONS:
+		var members := peers.filter(func(peer: int) -> bool: return int(Net.players[peer].get("team", -1)) == team)
+		var card := PanelContainer.new()
+		card.name = "Faction_%d" % team
+		card.theme_type_variation = &"PanelInset"
+		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		card.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		_faction_board.add_child(card)
+		var column := VBoxContainer.new()
+		column.add_theme_constant_override("separation", 6)
+		card.add_child(column)
+		var header := HBoxContainer.new()
+		header.add_theme_constant_override("separation", 10)
+		column.add_child(header)
+		var swatch := ColorRect.new()
+		swatch.color = Net.team_color(team)
+		swatch.custom_minimum_size = Vector2(14, 34)
+		swatch.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		header.add_child(swatch)
+		var title := MenuKit.label("Your faction" if team == mine else "%s faction" % Net.team_label(team), &"", 26)
+		title.add_theme_color_override("font_color", Net.team_color(team).lightened(0.25))
+		title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		title.clip_text = true
+		header.add_child(title)
+		header.add_child(MenuKit.label("%d / %d" % [members.size(), seats], &"HintLabel", 22))
+		for peer in members:
+			column.add_child(_faction_member(peer))
+		for i in maxi(seats - members.size(), 0):
+			var seat := MenuKit.label("Open seat", &"HintLabel", 20)
+			seat.modulate.a = 0.6
+			column.add_child(seat)
+		if team != mine:
+			var join := MenuKit.button("Join", false, Vector2(0, 52))
+			join.name = "JoinFaction_%d" % team
+			join.add_theme_font_size_override("font_size", 22)
+			join.disabled = members.size() >= seats or Net.game_in_progress
+			join.pressed.connect(Net.request_team.bind(team))
+			column.add_child(join)
+
+
+## A hero on a faction card: host crown, name, ready state, Kick for the host.
+func _faction_member(peer: int) -> Control:
+	var row := HBoxContainer.new()
+	row.name = "Player_%d" % peer
+	row.add_theme_constant_override("separation", 8)
+	if peer == 1:
+		row.add_child(MenuKit.icon(MenuKit.ICON_CROWN, 26, CROWN_COLOR))
+	var name_label := MenuKit.label(Net.name_of(peer) + ("  (you)" if peer == Net.my_id() else ""), &"", 24)
+	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_label.clip_text = true
+	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	row.add_child(name_label)
+	var state := MenuKit.label("Host" if peer == 1 else ("Ready" if Net.is_ready(peer) else "Not ready"), &"", 20)
+	state.add_theme_color_override("font_color", MenuKit.accent_color if peer == 1
+			else (MenuKit.good_color if Net.is_ready(peer) else Color(MenuKit.bad_color, 0.85)))
+	row.add_child(state)
+	if Net.is_host() and peer != 1 and not Net.game_in_progress:
+		var kick := MenuKit.button("Kick", false, Vector2(0, 44))
+		kick.name = "Kick_%d" % peer
+		kick.add_theme_font_size_override("font_size", 20)
+		kick.pressed.connect(Net.kick.bind(peer))
+		row.add_child(kick)
+	return row
+
+
 func _player_row(peer: int, team_mode: bool) -> Control:
 	var slot := PanelContainer.new()
 	slot.name = "Player_%d" % peer
@@ -565,7 +689,7 @@ func _player_row(peer: int, team_mode: bool) -> Control:
 		var hero := ClassDef.find(Net.class_of(peer))
 		row.add_child(MenuKit.icon(load(UiKit.GLYPHS % hero.icon), 30, UiKit.PROMPT_INK))
 		var class_label := MenuKit.label(hero.display_name, &"", 22)
-		class_label.add_theme_color_override("font_color", MenuKit.ACCENT)
+		class_label.add_theme_color_override("font_color", MenuKit.accent_color)
 		class_label.visible = not MenuKit.is_compact(_player_list)  # phones: the class glyph only
 		row.add_child(class_label)
 	if team_mode:
@@ -578,13 +702,13 @@ func _player_row(peer: int, team_mode: bool) -> Control:
 	state.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	if peer == 1:
 		state.text = "Host"
-		state.add_theme_color_override("font_color", MenuKit.ACCENT)
+		state.add_theme_color_override("font_color", MenuKit.accent_color)
 	elif Net.is_ready(peer):
 		state.text = "Ready"
-		state.add_theme_color_override("font_color", MenuKit.GOOD)
+		state.add_theme_color_override("font_color", MenuKit.good_color)
 	else:
 		state.text = "Not ready"
-		state.add_theme_color_override("font_color", Color(MenuKit.BAD, 0.8))
+		state.add_theme_color_override("font_color", Color(MenuKit.bad_color, 0.8))
 	row.add_child(state)
 	if Net.is_host() and peer != 1 and not Net.game_in_progress:
 		var kick := Button.new()

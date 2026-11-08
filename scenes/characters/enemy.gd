@@ -27,6 +27,14 @@ const FX_COLLAPSE: int = 0
 const FX_RISE: int = 1
 ## Seconds a summoned / risen creature takes to climb out of the ground.
 const RISE_TIME: float = 0.8
+## Level of detail (host cost of big crowds): beyond this distance from every hero an enemy counts as far.
+## Physics frames per AI step (`_physics_step_frames`): calm and near / far, fighting far; fighting near = every frame.
+const LOD_FAR: float = 28.0
+const LOD_CALM_NEAR: int = 2
+const LOD_CALM_FAR: int = 4
+const LOD_BUSY_FAR: int = 2
+## The DEV panel can switch the level of detail off (to compare).
+static var lod_enabled: bool = true
 
 ## Shown in menus / tests / the boss bar.
 @export var enemy_name: String = "Orc"
@@ -90,6 +98,8 @@ var movement: EnemyMovement
 var _components: Array[EnemyComponent] = []
 var _actions: Array[EnemyAction] = []
 var _think_timer: float = 0.0
+## No hero within LOD_FAR (checked every think).
+var _far_from_heroes: bool = false
 var _wander_point: Vector3
 var _returning: bool = false
 var _provoked_time: float = 0.0
@@ -242,7 +252,9 @@ func take_damage(amount: float, attacker: Node3D = null, is_melee: bool = true, 
 			if now - _last_combo_ms > 350:
 				_last_combo_ms = now
 				HitFx.report_combo(self)
+	_pending_hit = [attacker, health]
 	super(amount, attacker, is_melee, crit)
+	_report_hit()  # (a killing blow was reported by _on_died, before the components' on_died)
 	if not is_dead and not is_downed:
 		for item in _components:
 			item.on_damaged(attacker, amount)
@@ -297,14 +309,30 @@ func _get_up() -> void:
 	fx(self, FX_RISE, global_position)
 
 
+## The hit being taken ([attacker, health before]) until the components heard of it (`on_hit_taken`).
+var _pending_hit: Array = []
+
+
+func _report_hit() -> void:
+	if _pending_hit.is_empty():
+		return
+	var hit := _pending_hit
+	_pending_hit = []
+	var dealt := maxf(float(hit[1]) - health, 0.0)
+	if dealt > 0.0:
+		for item in _components:
+			item.on_hit_taken(hit[0], dealt)
+
+
 func _on_died() -> void:
+	_report_hit()  # the killing blow counts before the components see the death
 	_alert_label.hide()
 	for item in _components:
 		item.on_died()
 	var world := get_parent()
 	if randf() < health_drop_chance:
 		Pickup.drop(world, global_position, Pickup.Kind.HEALTH, health_drop_amount)
-	var loot := GameConfig.BLOOD_MOON_LOOT if GameConfig.blood_moon else 1.0
+	var loot := GameConfig.BLOOD_MOON_LOOT if GameConfig.raging_at(global_position) else 1.0
 	var coins := roundi(randi_range(coin_drop_min, coin_drop_max) * coin_multiplier * loot)
 	if coins > 0:
 		Pickup.drop(world, global_position, Pickup.Kind.COIN, coins)
@@ -353,11 +381,13 @@ func _get_move_input(delta: float) -> Vector3:
 		_think_timer = 0.25 + randf() * 0.1
 		_think()
 	move_speed = _base_speed * (provoked_speed_multiplier if is_provoked() else 1.0) * speed_boost * rage_speed \
-			* (GameConfig.BLOOD_MOON_SPEED if GameConfig.blood_moon else 1.0)
+			* (GameConfig.BLOOD_MOON_SPEED if GameConfig.raging_at(global_position) else 1.0)
 
 	for action in _actions:
 		if action.is_active() and action.drives_movement():
 			return action.active_move(delta)
+	if breach_point != Vector3.INF:
+		return _to_breach(delta)  # what it wants is behind a gate: to the gate (ConquestDemons hits it)
 	if not GameConfig.is_gone(target):
 		if can_attack():
 			for action in _actions:
@@ -374,9 +404,27 @@ func _get_move_input(delta: float) -> Vector3:
 	return Vector3.ZERO
 
 
+## To the gate in front of its walled-in target, then stand there facing it (ConquestDemons batters the gate).
+func _to_breach(delta: float) -> Vector3:
+	var to := breach_point - global_position
+	to.y = 0.0
+	if to.length() > 0.7:
+		return movement.roam(breach_point, delta, 1.0)
+	return Vector3.ZERO
+
+
+## Conquest: where it wants to be — its target, else the place its band campaigns on (INF = nowhere special).
+func wanted_point() -> Vector3:
+	if not GameConfig.is_gone(target):
+		return target.global_position
+	if is_instance_valid(band) and band.siege_point != Vector3.INF:
+		return band.siege_point
+	return Vector3.INF
+
+
 ## Blood Moon: harder hits.
 func _roll_melee_damage() -> Array:
-	return [melee_damage * (GameConfig.BLOOD_MOON_DAMAGE if GameConfig.blood_moon else 1.0), false]
+	return [melee_damage * (GameConfig.BLOOD_MOON_DAMAGE if GameConfig.raging_at(global_position) else 1.0), false]
 
 
 func first_attack_ready() -> bool:
@@ -392,7 +440,31 @@ func melee() -> bool:
 	return super()
 
 
+## Calm enemies (no target, not provoked or walking home, no ability running) and those far from every hero think and
+## move less often; a fight near a hero runs every frame.
+func _physics_step_frames() -> int:
+	if not lod_enabled or _rise_left > 0.0 or is_downed or wave_enemy:
+		return 1
+	for action in _actions:
+		if action.is_active():
+			return 1
+	var calm := _provoked_time <= 0.0 and not _returning and GameConfig.is_gone(target)
+	if calm:
+		return LOD_CALM_FAR if _far_from_heroes else LOD_CALM_NEAR
+	return LOD_BUSY_FAR if _far_from_heroes or GameConfig.overloaded else 1  # a huge fight: every other frame
+
+
+func _update_far() -> void:
+	_far_from_heroes = true
+	for node in get_tree().get_nodes_in_group(&"players"):
+		var hero := node as Node3D
+		if hero and Vector2(hero.global_position.x - global_position.x, hero.global_position.z - global_position.z).length() < LOD_FAR:
+			_far_from_heroes = false
+			return
+
+
 func _think() -> void:
+	_update_far()
 	if wave_enemy:
 		var nearest := find_nearest(WAVE_TARGET_GROUPS, GameConfig.world_half * 3.0)
 		if nearest != target:

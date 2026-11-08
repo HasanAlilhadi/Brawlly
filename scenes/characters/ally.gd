@@ -42,6 +42,8 @@ const GUARD_BONUS: float = 2.0
 const BLOCKED_PENALTY: float = 3.0
 ## What blocks walking and arrows (trees, houses, camp walls, fences).
 const OBSTACLE_MASK: int = GameConfig.LAYER_WORLD | GameConfig.LAYER_FENCE
+## Physics frames an archer keeps its line-of-fire / step-back checks before looking again.
+const SHOT_CHECK_FRAMES: int = 12
 ## Weapon id (ClassDef.ally_weapon) -> stats over the scene's (the sword soldier). `damage` is per hit
 ## (an arrow for the bow).
 ## Every soldier's health and damage × this (on top of the weapon's stats and the Soldier Damage / Health upgrades).
@@ -71,6 +73,11 @@ const WEAPON_STATS: Dictionary = {
 @export var walk_share: float = 0.45
 ## Closer than this to its spot in the formation a soldier walks the rest of the way.
 @export var walk_distance: float = 2.0
+var _shot_node: Node3D
+var _shot_until: int = 0
+var _shot_clear: bool = true
+var _away_until: int = 0
+var _away := Vector3.ZERO
 ## > 0 this frame: move at exactly this share of move_speed (keeping pace with a moving hero).
 var _match_pace: float = -1.0
 ## Orders: soldiers fight hostiles within this distance of the charge / hold point.
@@ -133,7 +140,11 @@ var rations: int = -1
 ## The weapon it fights with (from the spawn data, every peer, before entering the tree).
 var weapon: String = "sword"
 ## Conquest: its squad (0 = in its hero's army) and whether it leads it (replicated: the banner, the map).
-var squad: int = 0
+var squad: int = 0:
+	set(value):
+		if value != squad:
+			squad = value
+			_forget_followers()
 var squad_leader: bool = false:
 	set(value):
 		squad_leader = value
@@ -159,7 +170,17 @@ var _via: Vector3 = Vector3.INF
 var _heading: Vector3 = Vector3.BACK
 
 
+## Its hero's cached follower list is out of date (it joined, left the army or fell).
+func _forget_followers() -> void:
+	if not is_inside_tree():
+		return
+	for player in get_tree().get_nodes_in_group(&"players"):
+		if (player as Player).peer_id == owner_peer:
+			(player as Player).forget_followers()
+
+
 func _ready() -> void:
+	_forget_followers()
 	_apply_weapon_stats()
 	super()
 	chase_avoid_mask = GameConfig.LAYER_ENEMIES  # go around orcs in the way to the one we're after
@@ -353,10 +374,7 @@ func _show_rank(promoted: bool) -> void:
 ## so followers stay packed instead of covering the screen.
 ## Archers stand apart: rows of five behind the hero (behind = against the way it walks).
 func _update_slot() -> void:
-	var squad: Array[Node] = []
-	if is_instance_valid(leader):
-		squad = leader.followers().filter(func(a: Node) -> bool: return a.is_ranged() == is_ranged())
-	var index := maxi(squad.find(self), 0)
+	var index := leader.follower_index(self) if is_instance_valid(leader) else 0
 	if is_ranged():
 		var row := index / 5
 		var spread := (index % 5 - 2) * 0.42 + (0.21 if row % 2 == 1 else 0.0)
@@ -395,6 +413,8 @@ func _desired_move(delta: float) -> Vector3:
 
 	if is_healer() and not GameConfig.is_gone(_patient):
 		return _heal_move(delta)
+	if breach_point != Vector3.INF:
+		return _nav_move(breach_point, delta, 0.5)  # behind a shut gate: to the gate (ConquestDemons hits it)
 	if not GameConfig.is_gone(target):
 		return _shoot_at(delta) if shoots() else engage(target, delta)
 	if mustering and is_instance_valid(leader):
@@ -441,7 +461,7 @@ func _leader_speed() -> float:
 func _shoot_at(delta: float) -> Vector3:
 	var to := target.global_position - global_position
 	to.y = 0.0
-	if to.length() - Unit.target_radius(target) > shoot_range or not _clear_shot(target):
+	if to.length() - Unit.target_radius(target) > shoot_range or not _clear_shot_cached(target):
 		return steer(to, delta, target, true)
 	look_override = to.normalized()
 	face(to, delta * 2.0)
@@ -452,10 +472,29 @@ func _shoot_at(delta: float) -> Vector3:
 		else:
 			play_action("holding-right-shoot", 0.4, ARM_RIGHT)
 		get_tree().create_timer(0.12).timeout.connect(_release_arrow)
-	var away := _keep_away()
+	var away := _keep_away_cached()
 	if away != Vector3.ZERO:
 		return steer(away, delta)
 	return _separation * 0.5
+
+
+## `_clear_shot(node)`, looked at again every SHOT_CHECK_FRAMES frames (a ray every frame per archer was a big share of a fight).
+func _clear_shot_cached(node: Node3D) -> bool:
+	var now := Engine.get_physics_frames()
+	if node != _shot_node or now >= _shot_until:
+		_shot_node = node
+		_shot_until = now + SHOT_CHECK_FRAMES
+		_shot_clear = _clear_shot(node)
+	return _shot_clear
+
+
+## `_keep_away()`, looked at again every SHOT_CHECK_FRAMES frames.
+func _keep_away_cached() -> Vector3:
+	var now := Engine.get_physics_frames()
+	if now >= _away_until:
+		_away_until = now + SHOT_CHECK_FRAMES
+		_away = _keep_away()
+	return _away
 
 
 ## Away from the closest enemy within ARCHER_KEEP_AWAY (a little toward the hero), or ZERO.
@@ -496,7 +535,7 @@ func _clear_walk(point: Vector3) -> bool:
 		_probe_shape.radius = clampf(radius * 0.6, 0.24, 0.5)
 	var query := PhysicsShapeQueryParameters3D.new()
 	query.shape = _probe_shape
-	query.collision_mask = OBSTACLE_MASK
+	query.collision_mask = OBSTACLE_MASK | (collision_mask & GameConfig.ALL_GATES)  # (its own side's gates: open)
 	query.transform = Transform3D(Basis(), global_position + Vector3(0, 0.45, 0))
 	query.motion = motion
 	query.exclude = [get_rid()]
@@ -551,7 +590,7 @@ func _heal_move(delta: float) -> Vector3:
 		if progression and _heals % HEALS_PER_KILL == 0:
 			kills += 1
 			_check_rank()
-	var away := _keep_away()
+	var away := _keep_away_cached()
 	return steer(away, delta) if away != Vector3.ZERO else _separation * 0.5
 
 
@@ -601,7 +640,12 @@ func _think() -> void:
 		if walking.length() > 0.8:
 			_heading = _heading.slerp(walking.normalized(), 0.5).normalized()
 	_via = Vector3.INF
+	var before := target
 	_think_orders()
+	if target != before and not is_ranged() and is_instance_valid(leader) and squad == 0:
+		leader.crowd_moved(before, target)
+	if breach_point != Vector3.INF and _nav:
+		_nav.target_position = breach_point
 	if is_healer():
 		target = null  # healers never fight: they follow the orders and heal (`_heal_move`)
 		_patient = _find_patient()
@@ -690,6 +734,41 @@ func squad_ordered() -> void:
 	_think_timer = 0.0
 
 
+## Soldiers standing still with nothing to fight or heal (an army waiting around its hero) think every other frame
+## (nobody sees a standing soldier step); so does every soldier not using an action in a huge fight
+## (GameConfig.overloaded) until it calms down.
+func _physics_step_frames() -> int:
+	if _action_time > 0.0:
+		return 1
+	if GameConfig.overloaded:
+		return 2
+	var idle := GameConfig.is_gone(target) and GameConfig.is_gone(_patient) and not mustering 			and velocity.length_squared() < 0.01
+	return 2 if idle else 1
+
+
+## Conquest: where it wants to be — its target, its squad's spot or its hero's ordered point (INF = with the hero).
+func wanted_point() -> Vector3:
+	if is_healer() or mustering:
+		return Vector3.INF
+	if not GameConfig.is_gone(target):
+		return target.global_position
+	if squad > 0:
+		return _squad_spot
+	if is_instance_valid(leader) and _order() != Player.Order.FOLLOW:
+		return leader.army_point
+	return Vector3.INF
+
+
+## Server (ConquestDemons): go hit the gate at `point` (INF: done, back to the orders).
+func set_breach(point: Vector3) -> void:
+	if point == breach_point:
+		return
+	breach_point = point
+	if point != Vector3.INF:
+		_ensure_nav()
+		_nav.target_position = point
+
+
 ## The leader's army order (FOLLOW without a leader).
 func _order() -> int:
 	return leader.army_order if is_instance_valid(leader) else Player.Order.FOLLOW
@@ -724,38 +803,81 @@ func _defending(enemy: Node3D) -> bool:
 ## DEFEND_BONUS m closer (hitting a squadmate: GUARD_BONUS); melee soldiers add CROWD_PENALTY per squadmate
 ## already on it (they spread over the enemies); archers prefer the wounded and a clear line of fire.
 func _best_enemy(origin: Vector3, max_range: float) -> Node3D:
-	var squad: Array[Node] = []
-	if is_instance_valid(leader):  # (a hero being swapped for a new weapon is gone for a frame)
-		squad = leader.followers()
+	# Near its hero (the usual case): pick from the hero's shared list of threats (worked out once for the army).
+	if is_instance_valid(leader) and squad == 0 \
+			and _flat(origin - leader.global_position).length() + max_range < Player.THREAT_RANGE:
+		return _best_threat(origin, max_range)
+	var ranged := is_ranged()
+	# (a hero being swapped for a new weapon is gone for a frame)
+	var crowded := not ranged and is_instance_valid(leader)
+	var range_sq := max_range * max_range
 	var best: Node3D = null
 	var best_score := INF
 	for group in TARGET_GROUPS:
 		for node in get_tree().get_nodes_in_group(group):
-			if GameConfig.is_gone(node) or node == self or not GameConfig.is_hostile(self, node):
-				continue
 			var enemy := node as Node3D
-			var d := Vector2(enemy.global_position.x - origin.x, enemy.global_position.z - origin.z).length()
-			if d > max_range:
+			if enemy == null or enemy == self:
 				continue
-			var score := d
+			var dx := enemy.global_position.x - origin.x
+			var dz := enemy.global_position.z - origin.z
+			if dx * dx + dz * dz > range_sq:
+				continue  # far: nothing else to look at
+			if GameConfig.is_gone(enemy) or not GameConfig.is_hostile(self, enemy):
+				continue
+			var score := sqrt(dx * dx + dz * dz)
 			if _defending(enemy):
 				score -= DEFEND_BONUS if enemy.get("target") == leader else GUARD_BONUS
-			if is_ranged():
+			if enemy == target:
+				score -= 1.0  # no flip-flopping between two close ones
+			if ranged:
 				var hp: Variant = enemy.get("health")
 				var top: Variant = enemy.get("max_health")
 				if hp is float and top is float and top > 0.0:
 					score -= 2.0 * (1.0 - hp / top)
-				if not _clear_shot(enemy):
+				if score >= best_score:
+					continue
+				if not _clear_shot(enemy):  # a ray only for one that would win
 					score += BLOCKED_PENALTY
-			else:
-				for mate in squad:
-					if mate != self and not mate.is_ranged() and mate.target == enemy:
-						score += CROWD_PENALTY
-			if enemy == target:
-				score -= 1.0  # no flip-flopping between two close ones
+			elif crowded:
+				# Melee squadmates already on it (counted once for the whole army by the hero; not us).
+				score += CROWD_PENALTY * maxi(leader.crowd_on(enemy) - (1 if enemy == target else 0), 0)
 			if score < best_score:
 				best_score = score
 				best = enemy
+	return best
+
+
+## `_best_enemy` from the hero's `threats()` rows (same scoring: closest, bonuses, crowd / hurt and line of fire).
+func _best_threat(origin: Vector3, max_range: float) -> Node3D:
+	var ranged := is_ranged()
+	var range_sq := max_range * max_range
+	var best: Node3D = null
+	var best_score := INF
+	for row: Array in leader.threats():
+		var item: Variant = row[0]
+		if not is_instance_valid(item) or item == self:
+			continue  # (freed since the list was made: a typed variable can't even hold it)
+		var enemy := item as Node3D
+		var dx := enemy.global_position.x - origin.x
+		var dz := enemy.global_position.z - origin.z
+		if dx * dx + dz * dz > range_sq:
+			continue
+		var score := sqrt(dx * dx + dz * dz) - float(row[1])
+		if enemy == target:
+			score -= 1.0  # no flip-flopping between two close ones
+		if ranged:
+			score -= 2.0 * float(row[2])
+			if score >= best_score:
+				continue
+			if not _clear_shot(enemy):  # a ray only for one that would win
+				score += BLOCKED_PENALTY
+		else:
+			if score >= best_score:
+				continue
+			score += CROWD_PENALTY * maxi(leader.crowd_on(enemy) - (1 if enemy == target else 0), 0)
+		if score < best_score and not GameConfig.is_gone(enemy):
+			best_score = score
+			best = enemy
 	return best
 
 
@@ -866,5 +988,6 @@ func _think_order(order: int) -> void:
 
 
 func _on_died() -> void:
+	_forget_followers()
 	remove_from_group(&"allies")
 	remove_from_group(&"player_units")

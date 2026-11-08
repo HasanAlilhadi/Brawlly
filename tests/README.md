@@ -10,10 +10,30 @@ Run from the project folder (`G` = the Godot binary). Tests start the game norma
 # Conquest heroes: start Unarmed, buy a weapon (swapped in place: coins, Vitality, health, soldiers carry over), levels
 # from kills reset by a new weapon, the wizard's bolts and healer's heals; the left supplies panel, its flows and card
 "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/conquest_hero_test.gd
+# Conquest zones: the outer zone only has small plain warbands far apart, world events only reach the inner zones
+# (due with every hero outside they wait; the Blood Moon spares the outside), no invasion waves; demons: respawn
+# by zone (2 min outside, wiped-out bands come back), full bands campaign (a village falls, a Citadel's gate is
+# hammered but it never falls), a walled-in target sends a grunt to batter the gate, the King's four lieutenants
+# (strong armies, the Mender heals), their rally to the Lair and home again
+"$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/conquest_zones_test.gd
+# Conquest frame cost: the hero walks to the Lair, then stands in a horde (100 monsters, 30 soldiers); the host's frame
+# and the worst frame stay in budget (--probe / --kinds=a,b --window=s: what each kind of node costs; a window, no
+# --headless: also the renderer's CPU / GPU time)
+"$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/conquest_perf_test.gd
+# Conquest gates: a held gate opens for its soldier with demons at it; soldiers ordered into a rival's walled Citadel
+# go to its gate and hit it (no pressing against the wall), and march in once it is down
+"$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/conquest_gates_test.gd
+# Conquest place upgrades: Walls / Workshops / Barracks / Storehouse bought with a place's treasury, three levels,
+# refused without gold or where they don't fit, sent with the places' numbers, kept when the place changes hands
+"$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/conquest_upgrades_test.gd
+# Malakor, the Six-Armed Sovereign: rules the Lair (4.8 m, six arms, clips), his four phases, the red-X arrow rain and
+# dark meteors, Blood Totems at 66% that heal him, the phase-4 life siphon; the four risen champions lead the armies
+"$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/malakor_test.gd
 # Conquest screenshots (window): HUD + supplies panel with its Weapons card, walls + siege engines at an enemy gate,
-# Army tab, Hero tab with the weapons to buy
+# Army tab, Hero tab with the weapons to buy, the King's four lieutenants, one lieutenant's army, Malakor up close
 "$G" --path . res://tests/test_runner.tscn -- --test=res://tests/conquest_shots_test.gd --out=/tmp/shots
-# Conquest's own main-menu section: Conquest → Host Conquest Game → its lobby; classic lobbies have no Conquest
+# Conquest's own main-menu section: its hub page (own look + Lair backdrop) → Host Conquest Game (16 players) → its
+# lobby (four faction cards, Join) → Leave back to the hub; classic lobbies have no Conquest (--out=<dir>: screenshots)
 "$G" --headless --path . res://tests/test_runner.tscn -- --test=res://tests/conquest_menu_test.gd
 # Menus: presses the real buttons (Host Game → Create Lobby → Leave, Find Game → Back, Host Game → Create Lobby → Start; no Play button)
 # Every test plays a Swordsman unless --class=<swordsman|bowman> (test_runner.gd)

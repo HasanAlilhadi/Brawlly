@@ -44,7 +44,7 @@ const MUSTER_EQUIPMENT: int = 1
 const REARM_AT: int = Ally.WEAR_STEP
 ## Army cap the held places add to each hero, at most: base 30 + Command 20 + this = 80 (each soldier costs the
 ## host ~0.15 ms a frame, measured headless).
-const CAP_BONUS_MAX: int = 30
+const CAP_BONUS_MAX: int = 100
 ## Barracks grow every this many ticks (10 s).
 const POOL_EVERY: int = 2
 ## A muster brings at most this many soldiers at once; the map takes MAP_TAKE of one class.
@@ -177,7 +177,7 @@ func tick() -> void:
 			var source := source_name(territory)
 			for key in KEYS:
 				var before := int(territory.store[key])
-				territory.store[key] = mini(before + int(made[key]), TerritoryNode.STORE_CAP)
+				territory.store[key] = mini(before + int(made[key]), territory.store_cap())
 				income[key] += int(made[key])
 				note(team, key, source, int(territory.store[key]) - before)  # a full store wastes the rest
 			_train(territory)
@@ -210,7 +210,7 @@ func _train(territory: TerritoryNode) -> void:
 			territory.drill[k] += TICK
 	var k := territory.train_kind
 	if k >= 0 and k < TerritoryNode.SOLDIER_KINDS.size():
-		var count := mini(mini(ARM_PER_TICK, territory.people), int(territory.store[&"equipment"]) / MUSTER_EQUIPMENT)
+		var count := mini(mini(territory.arm_per_tick(), territory.people), int(territory.store[&"equipment"]) / MUSTER_EQUIPMENT)
 		if count > 0:
 			territory.people -= count
 			territory.store[&"equipment"] = int(territory.store[&"equipment"]) - count * MUSTER_EQUIPMENT
@@ -218,7 +218,7 @@ func _train(territory: TerritoryNode) -> void:
 			territory.drill[k] *= float(territory.armed[k]) / (territory.armed[k] + count)  # untrained newcomers
 			territory.armed[k] += count
 	if territory.has_barracks() and _ticks % POOL_EVERY == 0:
-		territory.growth += float(territory.info().pool) * TerritoryNode.ZONE_PEOPLE[territory.zone]
+		territory.growth += float(territory.info().pool) * TerritoryNode.ZONE_PEOPLE[territory.zone] * territory.growth_boost()
 		var whole := int(territory.growth)
 		territory.growth -= whole
 		var came := clampi(whole, 0, maxi(territory.barracks_cap() - territory.barracks, 0))
@@ -229,9 +229,10 @@ func _train(territory: TerritoryNode) -> void:
 
 
 ## Per place, in plan order: people, armed and rank per class, its class, treasury, couriers at home / in all,
-## route, then its store (KEYS order) — PLACE_FIELDS ints each.
+## route, then its store (KEYS order), then its upgrade levels — PLACE_FIELDS ints each.
 const PLACE_BARRACKS: int = 1 + 4 + 4 + 1
-const PLACE_FIELDS: int = PLACE_BARRACKS + 4 + 2
+const PLACE_UPGRADES: int = PLACE_BARRACKS + 4 + 2
+const PLACE_FIELDS: int = PLACE_UPGRADES + 4
 
 
 func _places() -> PackedInt32Array:
@@ -247,6 +248,7 @@ func _places() -> PackedInt32Array:
 		places.append(territory.route)
 		for key in KEYS:
 			places.append(int(territory.store[key]))
+		places.append_array(PackedInt32Array(territory.upgrades))
 	return places
 
 
@@ -424,7 +426,7 @@ static func muster_kind(territory: TerritoryNode, index: int) -> String:
 func _repair_gates(team: int) -> void:
 	for territory in held(team):
 		var gate := territory.gate
-		if gate == null or gate.health >= gate.max_health or territory.contested():
+		if gate == null or gate.health >= gate.max_health or territory.contested() or not gate.is_calm():
 			continue
 		var parts := mini(ceili((gate.max_health - gate.health) / GATE_REPAIR_PER_EQUIPMENT),
 				mini(GATE_REPAIR_PARTS, int(territory.store[&"equipment"])))
@@ -557,7 +559,7 @@ func store(team: int, supplies: Dictionary, at: Vector3 = Vector3.INF, reason: S
 				best = territory
 	for key in KEYS:
 		var before := int(best.store[key])
-		best.store[key] = mini(before + int(supplies.get(key, 0)), TerritoryNode.STORE_CAP)
+		best.store[key] = mini(before + int(supplies.get(key, 0)), best.store_cap())
 		if reason != "":
 			note(team, key, reason, int(best.store[key]) - before)
 
@@ -624,7 +626,7 @@ func _run_routes(team: int) -> void:
 func unload(territory: TerritoryNode, supplies: Dictionary) -> Dictionary:
 	var rest := {}
 	for key in KEYS:
-		var room := TerritoryNode.STORE_CAP - int(territory.store[key])
+		var room := territory.store_cap() - int(territory.store[key])
 		var put := clampi(int(supplies.get(key, 0)), 0, maxi(room, 0))
 		territory.store[key] = int(territory.store[key]) + put
 		rest[key] = int(supplies.get(key, 0)) - put
@@ -702,4 +704,8 @@ func _net_stock(new_stock: Dictionary, places: PackedInt32Array) -> void:
 		territory.couriers = places[at + PLACE_BARRACKS + 1]
 		territory.courier_total = places[at + PLACE_BARRACKS + 2]
 		territory.route = places[at + PLACE_BARRACKS + 3]
+		if not multiplayer.is_server():
+			for u in TerritoryNode.UPGRADES.size():
+				territory.upgrades[u] = places[at + PLACE_UPGRADES + u]
+			territory.apply_upgrades()
 	stock_changed.emit()

@@ -42,6 +42,7 @@ var _hit_ids: Dictionary = {}  # instance ids already damaged (piercing shots hi
 
 
 func _ready() -> void:
+	hit_mask |= GameConfig.hostile_gates(team_id)  # Conquest: other sides' gates stop it, its own side's let it through
 	global_position = start
 	direction = direction.normalized()
 	var up := Vector3.FORWARD if absf(direction.dot(Vector3.UP)) > 0.98 else Vector3.UP

@@ -5,7 +5,6 @@ extends Node
 ## are remembered). Joining shows a Connecting… window; refusals ("That game is full.") show why.
 
 const LOBBY_SCENE := "res://scenes/ui/lobby.tscn"
-const MENU_SCENE := "res://scenes/ui/main_menu.tscn"
 const HOST_SCENE := "res://scenes/ui/host_menu.tscn"
 const CONNECT_TIMEOUT: float = 8.0
 const ROW_HEIGHT: float = 72.0
@@ -41,6 +40,7 @@ var _leaving: bool = false
 
 func _ready() -> void:
 	get_tree().paused = false
+	ConquestLook.apply(self)  # the Conquest section's own look (Back then goes to its hub)
 	_build()
 	Net.servers_changed.connect(_refresh_list)
 	Net.connection_failed.connect(_on_connection_failed)
@@ -349,7 +349,7 @@ func _style_row(row: Button) -> void:
 		var label := cell as Label
 		label.theme_type_variation = &"LabelLight" if light else &""
 		if not light and label.name == "Status":
-			label.add_theme_color_override("font_color", MenuKit.GOOD if row.get_meta(&"joinable", true) else MenuKit.BAD)
+			label.add_theme_color_override("font_color", MenuKit.good_color if row.get_meta(&"joinable", true) else MenuKit.bad_color)
 		else:
 			label.remove_theme_color_override("font_color")
 	var lock := row.get_node("Cells/NameBox/Lock") as TextureRect
@@ -441,7 +441,7 @@ func _ask_address() -> void:
 	address.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_URL
 	body.add_child(address)
 	var error := MenuKit.label("", &"", 24)
-	error.add_theme_color_override("font_color", MenuKit.BAD)
+	error.add_theme_color_override("font_color", MenuKit.bad_color)
 	error.visible = false
 	body.add_child(error)
 	var recent: Array = Net.profile.get("recent", [])
@@ -491,7 +491,7 @@ func _ask_password(target: Dictionary, error_text: String) -> void:
 	body.add_child(password)
 	if error_text != "":
 		var error := MenuKit.label(error_text, &"", 24)
-		error.add_theme_color_override("font_color", MenuKit.BAD)
+		error.add_theme_color_override("font_color", MenuKit.bad_color)
 		body.add_child(error)
 	password.text_submitted.connect(func(text: String) -> void: _connect(target, text))
 	var cancel := MenuKit.button("Cancel")
@@ -529,7 +529,7 @@ func _close_dialog() -> void:
 
 func _back() -> void:
 	_cancel_connect()
-	_go_to(MENU_SCENE)
+	_go_to(Net.menu_scene())
 
 
 ## Changes scene once (the tree is gone right after a change starts).

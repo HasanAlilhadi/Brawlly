@@ -1,7 +1,8 @@
 extends Node
 ## Conquest screenshots: the match HUD (score + stock lines), a zone 1 place (houses), the Demon's Lair, the M map (with
 ## a squad on the road), a squad's leader with its banner, an enemy Citadel's walls and gate with the
-## battering ram and catapult at work (zoomed out, then close), and the Army tab with the siege engines.
+## battering ram and catapult at work (zoomed out, then close), the Army tab with the siege engines, the King's
+## four lieutenants side by side, one lieutenant's army, and Malakor (the King of the Lair) up close.
 ## Needs a window (not --headless):
 ##   "$G" --path . res://tests/test_runner.tscn -- --test=res://tests/conquest_shots_test.gd --out=/tmp/shots
 
@@ -144,10 +145,42 @@ func _process(delta: float) -> void:
 			if t < 20.0:
 				return
 			_shot("map")
+			# Zoomed in on the hero's Citadel: names show.
+			var map: ConquestMap = main.conquest_map
+			map._zoom_at(map._to_map(mode.territories[player.team_id].position), 3.0)
+			map._update_panel()
+			_step = 71
+		71:
+			if t < 21.0:
+				return
+			_shot("map_zoomed")
+			# The card's Upgrades page.
+			var place := mode.territories[player.team_id]
+			place.treasury = 400
+			place.upgrades[TerritoryNode.UP_WALLS] = 2
+			place.upgrades[TerritoryNode.UP_WORKSHOPS] = 1
+			place.apply_upgrades()
+			main.conquest_map._page = 1
+			main.conquest_map._update_panel()
+			_step = 711
+		711:
+			if t < 21.5:
+				return
+			_shot("map_upgrades")
+			main.conquest_map._page = 0
 			main.conquest_map.toggle()
+			main.dev_panel.toggle()
+			_step = 72
+		72:
+			if t < 22.0:
+				return
+			_shot("dev_panel")
+			main.dev_panel.toggle()
 			main.camera.zoom = 0.6
 			_step = 8
 		8:
+			if t < 22.5:
+				return
 			# Close to the squad on the road: its leader carries the banner.
 			var ids := mode.squads.of_player(player.peer_id)
 			var head := mode.squads.leader_of(ids[0]) if not ids.is_empty() else null
@@ -157,4 +190,48 @@ func _process(delta: float) -> void:
 			if t < 23.0:
 				return
 			_shot("squad_banner")
+			_step = 19
+		19:
+			# A lieutenant's army in formation (the Warlock's: skeletons, ghosts, necromancers at the back).
+			var band := mode.demons.lieutenants[2]
+			player.global_position = band.global_position + Vector3(0.0, 0.0, 11.0)
+			player.net_position = player.global_position
+			main.camera.zoom = 1.4
+			if t < 24.5:
+				return
+			_shot("lieutenant_army")
+			_step = 20
+		20:
+			# The King's four lieutenants side by side (Blademaster, Marksman, Warlock, Mender).
+			var spot := mode.demons.lieutenants[0].global_position + Vector3(0.0, 0.0, 9.0)
+			player.global_position = spot + Vector3(0.0, 0.0, 4.0)
+			player.net_position = player.global_position
+			main.camera.zoom = 0.75
+			for i in mode.demons.lieutenants.size():
+				var lord := mode.demons.lieutenants[i].leader
+				if lord:
+					lord.global_position = spot + Vector3(-3.3 + 2.2 * i, 0.0, 0.0)
+					lord.face_now(Vector3.BACK)
+			if t < 25.5:
+				return
+			_shot("lieutenants")
+			_step = 22
+		22:
+			# Malakor, the Six-Armed Sovereign, up close by his Lair (its garrison rose for the Lair shot).
+			var king: Enemy = null
+			for node in get_tree().get_nodes_in_group(&"bosses"):
+				if (node as Node).scene_file_path.ends_with("malakor.tscn"):
+					king = node
+			if king == null:
+				player.global_position = Vector3(0.0, 0.0, 22.0)
+				player.net_position = player.global_position
+				return
+			king.global_position = Vector3(0.0, 0.0, 0.0)
+			king.face_now(Vector3.BACK)
+			player.global_position = king.global_position + Vector3(2.0, 0.0, 1.0)
+			player.net_position = player.global_position
+			main.camera.zoom = 1.7
+			if t < 28.0:
+				return
+			_shot("malakor")
 			get_tree().quit()

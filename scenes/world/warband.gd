@@ -12,6 +12,9 @@ extends Node3D
 ## Fallen members come back (one by one, while no hero is near and the band is calm) until the whole band
 ## is wiped out: then it is `defeated` for good. With a `quarry` (the Warlord's event band) it marches on
 ## that player instead, picking up reinforcements on the way.
+## Conquest (ConquestDemons) sets `steady_respawn` (one member back every `respawn_delay` s, by zone), `revives`
+## (a wiped-out band comes back the same way: never defeated) and `goal` (march there and stay: a campaign on a
+## held place, or the rally to the King).
 ##
 ## Bands far from every hero are paused (their members neither think nor replicate); the band then keeps
 ## walking on its own and moves the members along, cheaply. Nothing floats over a band in the world — only
@@ -36,6 +39,8 @@ enum State { MARCH, REST, FIGHT }
 ## Members are only simulated while a player is within this distance — farther than the widest view (desktop,
 ## zoomed out for the bow), so nobody ever sees a paused band standing frozen.
 @export var activation_range: float = 50.0
+## A band marching on a goal (Conquest campaigns and rallies) wakes within this distance of it.
+const GOAL_WAKE_RANGE: float = 30.0
 ## Waypoints are picked within this distance of where the band started.
 @export var territory: float = 30.0
 ## Seconds resting at each waypoint.
@@ -54,6 +59,8 @@ enum State { MARCH, REST, FIGHT }
 var size: int = 4
 ## 0 = smallest band … 1 = biggest (stats and loot grow with it).
 var tier: float = 0.0
+## Only `roster.filler` (grunts / skeleton warriors): no specialists, leaders or ranged (Conquest's outer zone).
+var plain: bool = false
 ## Orc / undead (for the minimap badge).
 var faction: StringName = &"orc"
 ## Points the band never marches within `avoid_radius` of (spawn areas).
@@ -69,6 +76,15 @@ var leader_scene: PackedScene
 var track_leader: bool = false
 ## > 0: members' stat multiplier instead of the one from `tier` (event bands).
 var strength_override: float = 0.0
+## Conquest: one fallen member comes back every `respawn_delay` s (instead of each after its own delay).
+var steady_respawn: bool = false
+## Conquest: wiped out, it is not defeated: its members keep coming back (steady_respawn).
+var revives: bool = false
+## Conquest: march to this point (faster; paused on the way while far from heroes, awake within GOAL_WAKE_RANGE of
+## it) and stay there instead of patrolling (INF = none).
+var goal: Vector3 = Vector3.INF
+## Conquest: the walled place it campaigns on (its members go for that place's gate; INF = none).
+var siege_point: Vector3 = Vector3.INF
 ## Event bands: 2 reinforcements every this many seconds (0 = none), up to `reinforce_max` members.
 var reinforce_interval: float = 0.0
 var reinforce_max: int = 0
@@ -104,6 +120,7 @@ var _last_hit_peer: int = 0
 var _march_speed: float = 1.4
 var _lag_time: float = 0.0
 var _coordinate_timer: float = 0.0
+var _steady_left: float = 0.0
 ## At most this many melee members on one foe; the others take on the next one close by.
 const MAX_ON_ONE: int = 5
 
@@ -125,7 +142,7 @@ func _compose() -> void:
 	var rear: Array[PackedScene] = []
 	if leader_scene:
 		leaders.append(leader_scene)
-	for entry in roster.entries:
+	for entry in ([] if plain else roster.entries):
 		for i in entry.count_for(size):
 			if entry.leader:
 				if leader_scene == null:
@@ -263,8 +280,28 @@ func _on_member_died(unit: Unit, slot: int) -> void:
 	_update_alive()
 	if unit == leader:
 		_pick_leader()
-	if alive <= 0 and not is_dead:
+	if alive <= 0 and not is_dead and not revives:
 		_defeat()
+
+
+## Every member of its formation stands (Conquest: a full band goes on campaign).
+func is_full() -> bool:
+	if is_dead:
+		return false
+	for enemy in _members:
+		if not is_instance_valid(enemy) or enemy.is_dead:
+			return false
+	return true
+
+
+## Conquest: patrol around `at` from now on (after a campaign took a place, or a rally ended).
+func settle(at: Vector3) -> void:
+	goal = Vector3.INF
+	_origin = Vector3(at.x, 0.0, at.z)
+
+
+func _hurry() -> float:
+	return 1.6 if quarry != null or goal != Vector3.INF else 1.0
 
 
 func _update_alive() -> void:
@@ -372,6 +409,9 @@ func _think(step: float) -> void:
 	elif _state == State.FIGHT:
 		if Time.get_ticks_msec() - _last_fight_ms > 2500:
 			_regroup()
+	elif goal != Vector3.INF:
+		_waypoint = goal
+		_state = State.MARCH if _flat(global_position, goal) > 1.5 else State.REST
 	elif quarry != null or reinforce_interval > 0.0:
 		_march_on_quarry()
 	else:
@@ -387,7 +427,7 @@ func _think(step: float) -> void:
 	var marching := _state == State.MARCH
 	var band_velocity := Vector3.ZERO
 	if marching and _waypoint != Vector3.INF and _lag_time <= 0.0 and _flat(global_position, _waypoint) > 0.5:
-		band_velocity = _heading * _march_speed * (1.6 if quarry != null else 1.0)
+		band_velocity = _heading * _march_speed * _hurry()
 	for i in size:
 		var enemy := _members[i]
 		if is_instance_valid(enemy) and not enemy.is_dead:
@@ -427,7 +467,7 @@ func _advance(delta: float) -> void:
 	to.y = 0.0
 	if to.length() < 0.05:
 		return
-	var speed := _march_speed * (1.6 if quarry != null else 1.0)
+	var speed := _march_speed * _hurry()
 	_heading = _heading.slerp(to.normalized(), minf(1.0, delta * 2.0)).normalized()
 	global_position = GameConfig.clamp_to_world(global_position + to.normalized() * minf(speed * delta, to.length()))
 
@@ -534,7 +574,7 @@ func _slot_point(slot: int) -> Vector3:
 ## Members walk at the band's speed (the walk clip), whoever is faster or slower.
 func _pace_for(enemy: Enemy) -> float:
 	var speed: float = maxf(enemy._base_speed, 0.1)
-	return clampf(_march_speed * (1.6 if quarry != null else 1.0) / speed, 0.25, 1.0)
+	return clampf(_march_speed * _hurry() / speed, 0.25, 1.0)
 
 
 func _slowest_speed() -> float:
@@ -596,6 +636,9 @@ func _is_open(spot: Vector3, clearance: float) -> bool:
 # --- Respawns / reinforcements -------------------------------------------------------------
 
 func _respawn(step: float) -> void:
+	if steady_respawn:
+		_respawn_steady(step)
+		return
 	if _active or _state == State.FIGHT or reinforce_interval > 0.0 \
 			or Time.get_ticks_msec() - _last_fight_ms < calm_before_respawn * 1000.0:
 		return
@@ -605,6 +648,38 @@ func _respawn(step: float) -> void:
 			if _respawn_timers[i] <= 0.0 and _is_open(_slot_point(i), 0.45):
 				_spawn(i, _slot_point(i))
 				return  # one at a time
+
+
+## One empty slot filled every `respawn_delay` s (the clock runs whether or not heroes are near; the new one
+## waits while the band fights or a hero is close to the spot: nobody sees a monster pop out of thin air).
+func _respawn_steady(step: float) -> void:
+	var empty := -1
+	for i in size:
+		if not is_instance_valid(_members[i]) or _members[i].is_dead:
+			empty = i
+			break
+	if empty < 0:
+		_steady_left = 0.0
+		return
+	if _steady_left <= 0.0:
+		_steady_left = respawn_delay * GameConfig.orc_respawn_scale
+	_steady_left -= step
+	if _steady_left > 0.0 or _state == State.FIGHT or _watched(_slot_point(empty)):
+		return
+	if not _is_open(_slot_point(empty), 0.45):
+		return
+	_steady_left = respawn_delay * GameConfig.orc_respawn_scale
+	_spawn(empty, _slot_point(empty))
+	if not is_instance_valid(leader) or leader.is_dead:
+		_pick_leader()
+
+
+func _watched(spot: Vector3) -> bool:
+	for node in get_tree().get_nodes_in_group(&"players"):
+		var player := node as Player
+		if is_instance_valid(player) and not player.is_dead and _flat(spot, player.global_position) < 18.0:
+			return true
+	return false
 
 
 ## Event bands pick up 2 more on the way every `reinforce_interval` seconds.
@@ -632,6 +707,8 @@ func _reinforce(step: float) -> void:
 func _is_player_near() -> bool:
 	if quarry != null or reinforce_interval > 0.0:
 		return true  # event bands always run
+	if goal != Vector3.INF and _flat(global_position, goal) < GOAL_WAKE_RANGE:
+		return true  # at its goal (a gate to batter, a place to take): awake; on the way it walks paused
 	for node in get_tree().get_nodes_in_group(&"players"):
 		var player := node as Player
 		if is_instance_valid(player) and not player.is_dead and _flat(global_position, player.global_position) < activation_range:

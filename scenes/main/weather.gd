@@ -6,6 +6,8 @@ extends Node
 ## - meteors falling from the sky and their impacts (scorch marks);
 ## - the supply crate drifting down under its parachute (tracked on the minimap while it falls).
 ## Light changes blend from the match's own sun / environment and back.
+## `area` (Conquest: GameMode.events_reach): the storm's rain and dark and the Blood Moon's red night show only while
+## this device's camera looks at a spot there; elsewhere the sky stays clear.
 
 const SCORCH := preload("res://assets/vfx/particles/scorch_01.png")
 const FIRE := preload("res://assets/vfx/particles/fire_01.png")
@@ -22,6 +24,10 @@ const RAIN_MOBILE: int = 260
 
 var storm: bool = false
 var blood_moon: bool = false
+## Where the storm / Blood Moon show (empty = everywhere); `_here` = the camera's spot is in it.
+var area: Callable = Callable()
+var _here: bool = true
+var _area_timer: float = 0.0
 
 var _main: Node
 var _sun: DirectionalLight3D
@@ -59,12 +65,21 @@ func _exit_tree() -> void:
 		_environment.background_color = _base_sky
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	var camera := HitFx.camera
+	var center: Vector3 = camera.target.global_position if is_instance_valid(camera) and is_instance_valid(camera.target) \
+			else Vector3.ZERO
 	if _rain:
-		var camera := HitFx.camera
-		var center: Vector3 = camera.target.global_position if is_instance_valid(camera) and is_instance_valid(camera.target) \
-				else Vector3.ZERO
 		_rain.global_position = center + Vector3(0, 11.0, 0)
+	_area_timer -= delta
+	if area.is_valid() and _area_timer <= 0.0:
+		_area_timer = 0.5
+		var here: bool = area.call(center)
+		if here != _here:
+			_here = here
+			_blend_light(2.0)
+			if _rain:
+				_rain.emitting = _here
 
 
 # --- Storm / Blood Moon -------------------------------------------------------------------------
@@ -74,6 +89,7 @@ func set_storm(on: bool) -> void:
 	_blend_light(2.5)
 	if on and _rain == null:
 		_rain = _make_rain()
+		_rain.emitting = _here
 		_main.world.add_child(_rain)
 	elif not on and _rain:
 		_rain.emitting = false
@@ -96,13 +112,13 @@ func _blend_light(seconds: float) -> void:
 	var ambient_energy := _base_ambient_energy
 	var ambient_color := _base_ambient_color
 	var sky := _base_sky
-	if blood_moon:
+	if blood_moon and _here:
 		sun_energy = _base_sun_energy * 0.35
 		sun_color = BLOOD_SUN
 		ambient_energy = _base_ambient_energy * 0.75
 		ambient_color = BLOOD_AMBIENT
 		sky = BLOOD_SKY
-	elif storm:
+	elif storm and _here:
 		sun_energy = _base_sun_energy * 0.45
 		sun_color = STORM_SUN
 		ambient_energy = _base_ambient_energy * 0.8

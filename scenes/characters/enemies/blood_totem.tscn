@@ -1,0 +1,72 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scenes/characters/enemy.gd" id="1_enemy"]
+[ext_resource type="Script" path="res://scenes/characters/enemies/blood_totem_model.gd" id="2_model"]
+[ext_resource type="Script" path="res://scripts/enemies/heal_aura_trait.gd" id="3_heal"]
+
+[sub_resource type="CylinderShape3D" id="Shape_body"]
+radius = 0.4
+height = 2.2
+
+[sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_sync"]
+properties/0/path = NodePath(".:net_position")
+properties/0/spawn = true
+properties/0/replication_mode = 1
+properties/1/path = NodePath(".:net_yaw")
+properties/1/spawn = true
+properties/1/replication_mode = 1
+properties/2/path = NodePath(".:health")
+properties/2/spawn = true
+properties/2/replication_mode = 2
+properties/3/path = NodePath(".:max_health")
+properties/3/spawn = true
+properties/3/replication_mode = 2
+properties/4/path = NodePath(".:anim_state")
+properties/4/spawn = true
+properties/4/replication_mode = 2
+properties/5/path = NodePath(".:action_token")
+properties/5/spawn = true
+properties/5/replication_mode = 2
+properties/6/path = NodePath(".:is_dead")
+properties/6/spawn = true
+properties/6/replication_mode = 2
+properties/7/path = NodePath(".:alert_seq")
+properties/7/spawn = true
+properties/7/replication_mode = 2
+
+[node name="BloodTotem" type="CharacterBody3D"]
+collision_layer = 4
+collision_mask = 31
+motion_mode = 1
+script = ExtResource("1_enemy")
+enemy_name = "Blood Totem"
+faction = &"undead"
+max_health = 260
+move_speed = 0.0
+melee_damage = 0
+knockback_taken = 0.0
+radius = 0.45
+health_bar_color = Color(0.9, 0.05, 0.12, 1)
+health_bar_height = 2.5
+aggro_range = 14
+provoked_leash = 1000
+coin_drop_min = 4
+coin_drop_max = 8
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.1, 0)
+shape = SubResource("Shape_body")
+
+[node name="Model" type="Node3D" parent="."]
+script = ExtResource("2_model")
+
+[node name="Sync" type="MultiplayerSynchronizer" parent="."]
+replication_interval = 0.05
+delta_interval = 0.05
+replication_config = SubResource("SceneReplicationConfig_sync")
+
+[node name="Heal" type="Node" parent="."]
+script = ExtResource("3_heal")
+interval = 1.5
+radius = 16.0
+amount = 30.0

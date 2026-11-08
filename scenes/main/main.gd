@@ -64,6 +64,10 @@ const LAST_STAND_WORLD_SCALE: float = 1.15
 var conquest_map: ConquestMap
 ## Conquest: the hero / supplies panel in the HUD's left column (made with the map).
 var conquest_panel: ConquestPanel
+## DEV button / F3 (every mode).
+var dev_panel: DevPanel
+## Far characters animate less often (follows what the camera follows).
+var animation_lod: AnimationLod
 @onready var pause_menu: PauseMenu = $PauseMenu
 
 var game_mode: GameMode
@@ -110,6 +114,7 @@ var _spectating: Player
 
 
 func _ready() -> void:
+	ConquestLook.reset(self)  # the match (HUD, pause menu) keeps the RPG theme, even after Conquest's menu pages
 	if Net.players.is_empty():
 		# Scene run directly (e.g. from the editor): offline with default settings.
 		Net.open_offline_lobby()
@@ -152,8 +157,10 @@ func _ready() -> void:
 	match_stats.awards_ready.connect(hud.show_awards)
 	world_events = WorldEvents.new()
 	var events := PackedStringArray() if training_mode else WorldEvents.ids_from_setting(settings.get("events", true))
-	if settings.mode == Net.Mode.LAST_STAND:
-		events.erase("waves")  # squads assault the circles instead of the border waves
+	if settings.mode == Net.Mode.LAST_STAND or settings.mode == Net.Mode.CONQUEST:
+		events.erase("waves")  # squads assault the circles / demons raid the places instead of the border waves
+	# Conquest: events only reach the inner zones (GameMode.events_reach), the Blood Moon only drives enemies there.
+	GameConfig.event_area = game_mode.events_reach if game_mode is ConquestMode else Callable()
 	world_events.setup(self, game_mode, events)
 	add_child(world_events)
 	if training_mode:
@@ -168,6 +175,7 @@ func _ready() -> void:
 		builder.clear_radius = game_mode.world_clear_radius()
 		builder.vein_spots = game_mode.world_vein_spots()
 		builder.bands_avoid_clear_areas = settings.mode != Net.Mode.LAST_STAND
+		builder.band_rule = game_mode.band_rule_at
 		_bands = builder.build(world)
 		game_mode.build_objectives(world)
 	_bands_left = _bands.size()
@@ -187,6 +195,13 @@ func _ready() -> void:
 	hud.ability_requested.connect(_use_ability)
 	hud.army_command_requested.connect(_on_army_button)
 	hud.ping_requested.connect(func() -> void: _ping(_ahead_point(0.0)))
+	animation_lod = AnimationLod.new()
+	animation_lod.name = "AnimationLod"
+	add_child(animation_lod)
+	dev_panel = DevPanel.new()  # DEV button / F3: what the game is doing (+ host tools)
+	dev_panel.setup(self)
+	hud.add_child(dev_panel)
+	hud.dev_requested.connect(dev_panel.toggle)
 	hud.set_mode_label(game_mode.score_text())
 	pause_menu.online = Net.is_online()
 	if training_mode:
@@ -464,8 +479,8 @@ func _on_world_ready(peer: int) -> void:
 	_started = true
 	for p in Net.players:
 		_spawn_player(p)
-	for band in _bands:
-		band.start()
+	for band in get_tree().get_nodes_in_group(&"warbands"):
+		(band as Warband).start()  # the world's bands + the mode's own (Conquest: the King's lieutenants)
 	for herd in get_tree().get_nodes_in_group(&"herds"):
 		(herd as AnimalHerd).start()
 
@@ -487,6 +502,8 @@ func _on_peer_left(peer: int) -> void:
 # right-stick direction when aiming). Touch: HUD joystick + the stick of the weapon in hand + a switch button.
 
 func _physics_process(delta: float) -> void:
+	if multiplayer.is_server():
+		GameConfig.update_load(Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0)
 	if _game_over or local_player == null or not is_instance_valid(local_player):
 		_show_bow_cursor(false)
 		return
@@ -616,6 +633,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		_dash()
 	elif event.is_action_pressed(&"upgrades") and not event.is_echo():
 		hud.toggle_upgrades()
+	elif event.is_action_pressed(&"dev_panel") and not event.is_echo():
+		dev_panel.toggle()
+		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed(&"map") and not event.is_echo() and conquest_map:
 		conquest_map.toggle()
 		get_viewport().set_input_as_handled()
@@ -826,6 +846,8 @@ func _on_paused() -> void:
 # --- Per-frame ---------------------------------------------------------------------
 
 func _process(delta: float) -> void:
+	if animation_lod:
+		animation_lod.focus = camera.target
 	_vibrate_cooldown -= delta
 	_update_bow_rain_target()
 	_update_respawn_display(delta)

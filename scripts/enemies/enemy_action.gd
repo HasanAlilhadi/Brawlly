@@ -16,6 +16,9 @@ extends EnemyComponent
 ## Cooldown left when the enemy appears (abilities shouldn't all open a fight at once).
 @export var first_use_delay: float = 0.0
 
+## Off: never starts (a boss's phases switch its actions on and off, MalakorTrait).
+var enabled: bool = true
+
 var _cooldown_left: float = 0.0
 var _active: bool = false
 var _target: Node3D
@@ -36,7 +39,7 @@ func server_tick(delta: float) -> void:
 
 
 func can_start(target: Node3D) -> bool:
-	if _active or _cooldown_left > 0.0 or enemy._action_time > 0.0:
+	if not enabled or _active or _cooldown_left > 0.0 or enemy._action_time > 0.0:
 		return false
 	var dist := enemy.flat_distance_to(target)
 	return dist >= min_range and dist <= max_range and _wants(target)

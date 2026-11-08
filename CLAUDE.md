@@ -68,7 +68,7 @@ by touch index so the joystick and buttons work together with multi-touch.
   (720×1280 portrait UI, touch controls). `Platform` (autoload) picks the layout: `Platform.mobile_layout`,
   `Platform.touch_mode` (+ `touch_mode_changed`). Test the phone layout on a PC with `-- --mobile`.
 - Input goes through Input Map actions (`move_*`, `aim_*`, `attack`, `aim_bow`, `block`, `shoot`, `switch_weapon`, `interact`, `pause`,
-  `toggle_fullscreen`, `rotate_camera`, `army_*`, `ping*`, `dash` C / L3, `upgrades` T / View) — add new bindings there, not as hard-coded keys, and list them on the
+  `toggle_fullscreen`, `rotate_camera`, `army_*`, `ping*`, `dash` C / L3, `upgrades` T / View, `map` M, `dev_panel` F3) — add new bindings there, not as hard-coded keys, and list them on the
   Controls page (`scenes/ui/controls_menu.gd`, main menu → Controls). Mouse clicks for gameplay are taken in
   `_unhandled_input` (so clicks on HUD buttons don't attack); ignore events with `device == DEVICE_ID_EMULATION`.
 - `interact` is F on keyboard (LB on gamepad); only the Training Field uses it (switch hero at a pedestal, Orc Practice)
@@ -126,15 +126,68 @@ by touch index so the joystick and buttons work together with multi-touch.
   in `GameMode` (bump `Net.GAME_ID`: older builds can't show it).
 - **Conquest** (PC only; `ConquestMode` extends GameMode, `scenes/modes/conquest/`; main.gd creates it only for
   this mode, GameMode itself is untouched; test `tests/conquest_test.gd`, screenshots `tests/conquest_shots_test.gd`).
-  **Its own section of the main menu**: the Conquest button opens a page (what it is; Find / Host Conquest Game →
-  `Net.conquest_section`); `Net.host()` then makes a Conquest lobby (four factions, `ConquestMode.DEFAULT_TIME` /
-  `DEFAULT_SCORE`, no mode choice); the classic Find / Host and their lobby offer only `Net.CLASSIC_MODES`; the
+  **Its own section of the main menu, with its own look** (scenes/modes/conquest/menu/): the Conquest button opens
+  the hub page `conquest_menu.tscn` (`Net.CONQUEST_MENU_SCENE`: the story in short, cards for the land / factions /
+  the King, Find / Host Conquest Game → `Net.conquest_section`, Back → main menu; `Net.menu_scene()` = where Back /
+  Leave go, so leaving a Conquest game comes back here). Every Conquest page (hub, Find / Host, its lobby) calls
+  `ConquestLook.apply(page)`: a dark iron-and-blood theme built over the RPG theme (`ConquestLook.theme()`, carried by
+  `MenuKit.page_theme` on every frame / dialog root — a CanvasLayer doesn't pass the window's theme on), gold
+  `MenuKit.accent_color` / `good_color` / `bad_color`, and `ConquestBackdrop` (the Lair at a red dusk: Malakor, his
+  champions, demons, built in code) instead of the classic camp; the main menu and main.gd `reset()` it.
+  `Net.host()` then makes a Conquest lobby (four factions, `ConquestMode.DEFAULT_TIME` / `DEFAULT_SCORE`, no mode
+  choice) for up to `Net.CONQUEST_MAX_PLAYERS` 16 (`Net.max_players_cap()`; the host page starts at 16 and keeps its
+  own options, `Net.host_profile_key()`); its lobby shows four faction cards (`_faction_board`: heroes, open seats =
+  `Net.faction_seats()`, Join → `Net.request_team`, a full faction refuses in `set_team`) and Conquest's info
+  (`_conquest_info`); the classic Find / Host and their lobby offer only `Net.CLASSIC_MODES` (8 players); the
   server browser lists only the section's games (`Net.in_section`). Test `tests/conquest_menu_test.gd`.
   Demons infest the land; 4 factions (`FACTIONS`, forced in `setup()` and `Net.set_setting`) start from Citadels in
   the corners of a `WORLD_HALF` 300 (600 m) procedural map (`world_half_for()`, main.gd; designed maps keep their size
   and bases) with `BAND_FACTOR` × the lobby's warbands, and push toward the **Demon's Lair** in the middle (Kind.THRONE: walled, a `BOSS_SIZE` Vampire Lord + the
   biggest garrison). **Zones**: seven square rings (`ConquestMode.zone_of`, `ZONE_EDGES`; `TerritoryNode.zone`):
-  zone 6 by the corners (Citadels, `CORNER` 0.86) down to zone 1 and the Lair (0); per zone `TerritoryNode.ZONE_*`
+  zone 6 by the corners (Citadels, `CORNER` 0.86) down to zone 1 and the Lair (0). **The outer zone is calm**:
+  roaming warbands by zone (`GameMode.band_rule_at` → `WorldBuilder.band_rule`: `ZONE_BAND_TIER` size,
+  `ZONE_BAND_SPACING` apart; zone 6 only `OUTER_BAND_SIZE` 2-3 `Warband.plain` bands = filler only, 80 m apart), and
+  world events reach only zones 0..`EVENT_ZONE` 3 (`GameMode.events_reach`: `WorldEvents._random_player()` picks only
+  heroes there, a due event waits `RETRY` while none is; the Blood Moon drives only enemies there,
+  `GameConfig.raging_at` / `event_area`; the storm / Blood Moon sky shows only where the camera is inside,
+  `Weather.area`; no invasion waves — raids instead). **Demons** (`ConquestDemons`, scenes/modes/conquest/demons.gd,
+  the mode's `demons` child, `setup(world)` after the world is built): every roaming band gets one fallen monster
+  back every `ZONE_RESPAWN[zone]` s (120 in zone 6 … 30 in the Lair; `Warband.steady_respawn`, the clock runs
+  unseen, a spawn waits while a hero is within 18 m), wiped-out bands come back (`Warband.revives`); a full band
+  (`Warband.is_full`) campaigns (`start_campaign`: `Warband.goal`, faster, always awake) on the nearest held place
+  within `CAMPAIGN_RANGE` (≤ `CAMPAIGN_MAX`, `CAMPAIGN_REST` between), hammers a standing gate, goes in and takes it
+  (`settle` there); a Citadel never falls to demons (TerritoryNode `_update_capture`): after `CAMPAIGN_TIME` they
+  go home. **Breaching** (monsters and soldiers alike; `ConquestDemons._breach_slice`, a slice of the awake units a
+  frame, each about once a second): a unit whose `wanted_point()` (Enemy: its target, else its band's campaign
+  place `Warband.siege_point`; Ally: its target, squad spot or hero's ordered point) lies inside a walled place it is
+  outside of, behind a standing gate of another side (`walled_off`), gets `Unit.breach_point` (its own spot in front
+  of the gate, `gate_spot`; soldiers walk there on the navigation mesh, `Ally.set_breach`) instead of pressing
+  against the wall, and hits the gate there when its swing is ready (`_hammer` + `Unit.swing_at`: a monster
+  `BATTER_DAMAGE` × power, a soldier its weapon × `SOLDIER_GATE_BLOW`, then the gate's `HAND_SHARE`). Test
+  `tests/conquest_gates_test.gd`. **The King's
+  lieutenants** (`LIEUTENANTS`: the four champions who fell defending King Malakor's realm, risen as his servants —
+  enemy scenes `lieutenant_blade` Sir Eldor (sword, cleave, charge) / `_marksman` Vaira (bow volleys + a small red-X
+  `BarrageAbility` rain) / `_warlock` Valendor (bolts, blood-bolt storm, Phantom Blink) / `_mender` Mother Tyressa
+  (`HealAuraTrait` heals the most wounded of her army, life steal); vampire models recolored, BossTrait: one falls,
+  his army is routed for good): four `Lieutenant_<n>` bands (every peer, same names) in zone 1 on the
+  diagonals (`LIEUTENANT_SHARE`), `LIEUTENANT_ARMY` demons each at `LIEUTENANT_POWER`; main starts every band in
+  group `warbands`. While the Lair is the demons' and a faction's unit is near it (`RALLY_ALARM`) or its gate is
+  hit (`king_attacked`), the lieutenants left and every band of zones ≤ `RALLY_ZONE` march to its gate (`_rally`),
+  home again `RALLY_CALM` s after. Test `tests/conquest_zones_test.gd`. **The King: Malakor, the Six-Armed
+  Sovereign** (the Lair garrison's boss, INFO THRONE "boss"; lore + design in `docs/lore/malakor.md`, Conquest
+  only): `malakor.tscn` — the model is built in code (`MalakorModel`, malakor_model.gd: ~3 m × BOSS_SIZE 1.6 = 4.8 m,
+  crowned skull, ribcage + Soul Core, cape, six arms = shoulder / elbow / hand pivots holding greatsword + cleaver,
+  bow + arrow, grimoire with orbiting runes + chalice; its own AnimationPlayer clips idle / walk / sprint /
+  attack-melee-right / -left / holding-right-shoot / holding-both-shoot / interact-right / cast / die — swap the
+  Model node for a GLB with these clips later). `MalakorTrait` (scripts/enemies/malakor_trait.gd) runs his four
+  phases by health (75 / 50 / 25 %): 1 sword pair (Charge, chasing), 2 bow pair (Kite movement, `ArrowRain` = 3 red
+  X zones × 40 arrows, `Volley`), 3 grimoire pair (`Blink` behind a ranged foe it turns on, `Meteors` dark meteor
+  barrage, `VoidBolt`), 4 everything + a life-siphon aura and LifeSteal 200 %; actions switched by node name
+  (`EnemyAction.enabled`), shout + shockwave per phase; Blood Totems (`blood_totem.tscn`, built in code, heal him)
+  rise at 66 / 33 % (`Totems` summon). **Slaying him wins the match**: `MalakorTrait.damage_by_team` / `last_team`
+  (from `EnemyComponent.on_hit_taken`, every hit incl. the killing blow — `Enemy._report_hit` runs before the
+  components' `on_died`) → `ConquestMode.king_slain()`: the faction with the most damage to him wins, the killing
+  blow counting `KING_BLOW_SHARE` (25%) of his health extra. Test `tests/malakor_test.gd`. Per zone `TerritoryNode.ZONE_*`
   rows — walls / gate health (none in zone 1: `_build_houses()` instead), production (`output()`), demon strength,
   garrison size, capture time (`capture_time()`), extra wave rows: outside strong walls, rich, weak demons; inside
   no walls, poor, strong demons. **Raids** (`ConquestMode._raid`, server timer `RAID_EVERY`): every held place but
@@ -157,9 +210,13 @@ by touch index so the joystick and buttons work together with multi-touch.
   (one faction's standing units in the ring, none of the owner's, the gate broken → captured, `_net_state`).
   Cities (outside zone 1), Citadels and the Lair are walled (`_build_walls`: INFO "walls" box pieces at `radius()`, group
   `conquest_walls`, alternating heights so crossing tops never z-fight); the piece facing the map's middle is a
-  `TerritoryGate` (group `breakable`; own faction can't hurt it, non-`siege` attackers deal `HAND_SHARE`; solid
-  (`shut`, `_net_shut`) while held or INFESTED (the demons bar it: walled places are stormed) and standing; a held
-  one opens for the holder's units while no foe is within `FOE_RANGE`). The navigation mesh is baked with the walls, without the gates (`hide_from_navigation`).
+  `TerritoryGate` (group `breakable`; own faction can't hurt it, non-`siege` attackers deal `HAND_SHARE`; while
+  it stands and the place is held or INFESTED it sits on its holder's gate layer (`GameConfig.gate_layer(team)`, layers
+  9–12 factions, 13 demons; `_layer()`): every unit's mask has every gate layer but its own team's
+  (`Unit._add_gate_layers`, `hostile_gates`; steering / `Ally._clear_walk` see only hostile gates; melee and arrows hit
+  every gate layer), so the holder's units walk through it and nobody else gets in until it is broken — it can be
+  hit at any time; it only looks raised (`shut` false, `_net_shut`) while one of its own side is within
+  `OPEN_RANGE`; it is not rebuilt (`LogisticsManager._repair_gates`) until `REPAIR_CALM` s after its last blow (`is_calm()`)). The navigation mesh is baked with the walls, without the gates (`hide_from_navigation`).
   **Supplies** (`LogisticsManager`, server tick 5 s, `_net_stock` totals + barracks to all): every held place adds
   its `output()` (kind + `SPECIALTY_OUTPUT`) to its OWN `store` (no shared stockpile; `KEY_NAMES` food / weapons =
   keys food / equipment; no arrows: bows and staffs are weapons; Iron and Lumber Cities both make weapons, zone
@@ -173,7 +230,13 @@ by touch index so the joystick and buttons work together with multi-touch.
   stands near (`supply_source()`: a held place with food, else a caravan with cargo, else a held place); no ration
   left → `STARVE_SPEED`. Soldiers leaving a barracks take `MUSTER_FOOD` food each from its store, an unarmed one
   also `MUSTER_EQUIPMENT` weapons (`_available` caps how many leave; spawn data "rations"). HUD: "Meal in m:ss", "N WITHOUT FOOD".
-  Gates rebuild from their place's own weapons. **Gold & lords**: every place also makes gold (INFO "gold" ×
+  Gates rebuild from their place's own weapons. **Place upgrades** (`TerritoryNode.UPGRADES` / `upgrades[]`, `UP_*`,
+  `UPGRADE_MAX` 3 levels; the M map card's Upgrades page → place_action "upgrade" → `ConquestMode.upgrade_place`,
+  paid from that place's treasury: `upgrade_cost()` = `UPGRADE_COST[level]` × `UPGRADE_KIND_COST[kind]`; they stay
+  with the place whoever takes it; sent to every peer as the last 4 `PLACE_FIELDS`, `PLACE_UPGRADES`): Walls (gate
+  +`WALL_BONUS` a level, `apply_upgrades()`), Workshops (`output()` +`WORKSHOP_BONUS`), Barracks (`barracks_cap()`
+  +`BARRACKS_ROOM`, growth `growth_boost()`, `arm_per_tick()` +1), Storehouse (`store_cap()` +`STOREHOUSE_BONUS`; use
+  it, never STORE_CAP, for a place's room). Test `tests/conquest_upgrades_test.gd`. **Gold & lords**: every place also makes gold (INFO "gold" ×
   zone) into its own `treasury` (≤ `TREASURY_CAP`); its `lord` (peer id, in `_net_state`) is the hero who took it;
   `_update_lord()` (server, every second): the lord keeps it while they or their soldiers stand in the ring, an
   unguarded place goes to the faction's hero who walks in, a lord who left the faction / game loses it. F
@@ -187,8 +250,11 @@ by touch index so the joystick and buttons work together with multi-touch.
   delivers (`_deliver` → `LogisticsManager.unload`, store cap), walks home on the navigation mesh (`_drive_to`) and is
   a courier at home again (`courier_home`); killed → `courier_lost`. **The M map** (`ConquestMap`,
   scenes/modes/conquest/conquest_map.gd, made by main.gd `_bind_local_player` in Conquest, action `map` = M): zone
-  rings, every place in its holder's color (gold ring = yours to lord), routes as arrows, couriers, you; click a place
-  for its card (or a squad's shield for the squad's card); its lord / the General / anyone while it has no lord gives orders through
+  rings, every place in its holder's color (gold ring = yours to lord), routes as arrows, couriers, you; closes with
+  M / Esc (its own `_input`, so it closes whatever the hero is doing) or its Close button; zoom with the
+  wheel (toward the cursor) or + / − / Fit, drag to pan (`_zoom`, `_view`; drawn in the clipping `_canvas`; names
+  from `NAMES_ZOOM`); click a place for its short card (holder, store + per-minute output, where goods go; the
+  barracks part says step by step how training works; the hint how weapons travel) (or a squad's shield for the squad's card); its lord / the General / anyone while it has no lord gives orders through
   `Player.request_place_action` → `ConquestMode.place_action` (withdraw — the lord, from anywhere; muster — `arg` a
   class: `MAP_TAKE` of it from that barracks, `LogisticsManager.muster_from`; train — `arg` the class its people are
   armed with or `NO_TRAINING`; route; courier). **Caravans** (`CaravanUnit`, NetSpawn kind `caravan`, "cargo", owner
@@ -219,8 +285,8 @@ by touch index so the joystick and buttons work together with multi-touch.
   becomes HOLD), hold (a point), join (`_join`: they muster back to the hero). A fallen leader → the best ranked
   left leads (`_check`, server, every second; also `_net_squads` to every peer). The M map draws them as shields at
   their leader (count inside, yours outlined, a dashed line to the goal) with their own card. Held places raise every faction hero's army cap (`INFO.cap`, added to
-  the replicated `follower_cap` as a change only, ≤ `CAP_BONUS_MAX` 30: max army 80 — measured headless, a soldier
-  costs the host ~0.15 ms a frame, a paused warband ~0.1 ms) and score points (the Lair 25 a tick). **Ranks**
+  the replicated `follower_cap` as a change only, ≤ `CAP_BONUS_MAX` 100: max army 150 with Command — measured headless,
+  150 soldiers in a 100-monster fight cost the host ~41 ms a frame against ~20 with 30) and score points (the Lair 25 a tick). **Ranks**
   (`Ally.progression`, every mode): `Unit.take_damage` calls `attacker.credit_kill()` on a killing blow;
   `RANK_KILLS` 2 / 5 / 10 / 20 → ranks I–IV (`RANK_NAMES`), each +`RANK_BONUS` 15% health and damage
   (`refresh_army_bonus`); `rank` is in ally.tscn's Sync (badge Label3D + sparkle). **Siege engines** (`SiegeEngine`,
@@ -229,7 +295,7 @@ by touch index so the joystick and buttons work together with multi-touch.
   hero on the navigation mesh (`_drive_to`); target = the gate of the walled place the hero's army order points at
   (within `ORDER_REACH` of its ring, any distance: `_ordered_gate`), else the nearest within `seek` — a rival's or
   an infested one; the ram rams it (`_net_ram`), the catapult lobs boulders from `reach`
-  (`_net_boulder`, splash on hostile units). Win: hold the Lair `THRONE_WIN_TICKS` (60 = 5 min) in a row
+  (`_net_boulder`, splash on hostile units). Win: slay Malakor (above), hold the Lair `THRONE_WIN_TICKS` (60 = 5 min) in a row
   (`on_logistics_tick`), every Citadel, the score limit (lobby 500–6000, default 2500), or lead at the time limit
   (lobby default `CONQUEST_TIME` 45 min). HUD: `score_text()` = the score line, "F: take N gold" and the Lair's
   holder; everything else is in **`ConquestPanel`** (scenes/modes/conquest/conquest_panel.gd, made by main.gd with
@@ -337,7 +403,7 @@ by touch index so the joystick and buttons work together with multi-touch.
   **Army** = the `sheet == &"army"` items (`Player.sheet_items(tab)`): Recruit (a wide card with the army size and
   the training countdown), Soldier Damage / Soldier Health (3 levels each × +25% `ally_damage` / `ally_health`) and
   Command. A recruit trains `SOLDIER_TRAIN_TIME`, then spawns behind the player and follows (`_finish_training`,
-  `soldier_ready`). New sheet item = a catalog row with `sheet` + its effect in `Player._apply_upgrade`.
+  `soldier_ready`); in Conquest it spawns at once (`_apply_upgrade` calls `_finish_training` right away). New sheet item = a catalog row with `sheet` + its effect in `Player._apply_upgrade`.
 - **Class upgrades** (`UpgradeDef.classes` set; in `upgrade_catalog.tres`, Hero tab): their effects are recomputed from the replicated `upgrade_levels` on every
   peer (`Player._apply_class_upgrades()`: damage, Fire Rate = shorter cooldowns + `anim_speed`, `aim_range`, `arrow_pierce`,
   `knockback_power`, `sword_wave`, `dash_damage`, `knife_damage`, the carried `weapons`); `_apply_upgrade` only refills a
@@ -410,7 +476,9 @@ by touch index so the joystick and buttons work together with multi-touch.
   Skeleton Archer (kites, arrows), Zombie (shambles, lunges, bursts on death), Ghost (floats through walls, phases
   through hits), Vampire (elite: stalks, blinks behind you, life steal), Necromancer (elite: kites, bolts, raises
   skeletons), and the bosses Orc Warlord (charge, stomp, rally at half health, enrage) and Vampire Lord (stalks,
-  blinks, blood-bolt volleys, raises the dead at 66 / 33 %, life steal, enrage). **New enemy type** = a scene in
+  blinks, blood-bolt volleys, raises the dead at 66 / 33 %, life steal, enrage); Conquest adds Malakor and his four
+  risen champions (see Conquest). `BarrageAbility` (marked zones, then an arrow rain or meteors), `HealAuraTrait`
+  (heals the most wounded demon near), `MalakorTrait` (phases); `EnemyAction.enabled` switches an action off. **New enemy type** = a scene in
   scenes/characters/enemies/ (Unit exports + components; copy one) + a RosterEntry. **New behavior** = a component
   in scripts/enemies/. Test: `tests/enemy_test.gd`.
 - Targeting uses group `active_enemies` (members of awake bands only) — keep it that way for performance.
@@ -490,7 +558,8 @@ by touch index so the joystick and buttons work together with multi-touch.
   `GameConfig.blood_moon` → enemies `BLOOD_MOON_SPEED` / `_DAMAGE`, ×2 loot), supply_drop (`drop_supplies()`: a
   Legendary `SupplyDrop_<n>` chest made on every peer by RPC, by the hill in KotH, tracked). Visuals: `Weather`
   (scenes/main/weather.gd, every peer: light blends, rain particles, bolts, meteors, scorch marks, parachute
-  crate). New event = an EVENTS row + its timer in `_process` + a `start_*` function. `spawn_goblin()` /
+  crate). New event = an EVENTS row + its timer in `_process` (start it only when `_random_player()` finds a hero
+  where `events_reach`) + a `start_*` function. Enemy Blood Moon checks use `GameConfig.raging_at(pos)`. `spawn_goblin()` /
   `spawn_warlord()` (server; tests call them directly). `TreasureGoblin` (NetSpawn kind `goblin`, orc team, flees); the Orc Warlord event = a server-only
   `Warband` (`warlord_band`, its leader `warlord` = orc_warlord.tscn, tracked on the minimap) that marches on a player
   and grows on the way; routed when the Warlord falls. Waves: `WAVE_TYPES` rows join wave by wave.
@@ -557,7 +626,31 @@ by touch index so the joystick and buttons work together with multi-touch.
   never past its own run) — otherwise it flips run / walk at the slot's edge and stutters behind.
 - Far-away bands pause their members (`Warband.activation_range`; downed players still count as near, only dead ones
   don't) — keep this for mobile performance; a paused band keeps walking and moves its members along
-  (`_snap_members`, no simulation). Members that are provoked or walking back (`Enemy.is_busy()`) stay awake. Damage
+  (`_snap_members`, no simulation). A band marching on a `goal` (Conquest campaigns, the King's rally) stays paused on
+  the way and wakes within `GOAL_WAKE_RANGE` of it or near a hero. Conquest garrisons rise one member a frame
+  (`TerritoryNode.SPAWN_PER_FRAME`: a big one at once was a 60+ ms hitch) and sleep like a far band while no hero or
+  soldier is within `GARRISON_WAKE` of the ring (`_wake_guards`). **AI level of detail** (`Unit._physics_step_frames()`,
+  staggered, the skipped frames' time added; a still unit skips `move_and_slide`): an enemy runs its physics frame every
+  `LOD_CALM_NEAR` 2 frames when calm, `LOD_CALM_FAR` 4 when calm and beyond `Enemy.LOD_FAR` of every hero,
+  `LOD_BUSY_FAR` 2 when fighting far away, every frame when fighting near a hero or using an ability. Measured by
+  `tests/conquest_perf_test.gd` (the hero walks to the Lair: the host's frame at the gate 13.9 → ~7 ms, worst frame on
+  the way 64 → 16 ms; then 100 monsters on the hero and 30 soldiers: 37.5 → ~20 ms; `--probe` / `--kinds=a,b
+  --window=s` print what each kind of node costs). In a big fight **`GameConfig.overloaded`** (main.gd feeds the
+  physics tick time to `update_load`: on above `LOAD_HIGH_MS`, off below `LOAD_LOW_MS`) makes fighting enemies and
+  soldiers think every other frame and shrinks the animation range. `physics/common/max_physics_steps_per_frame` = 2
+  (project setting): a heavy tick slows the game a little instead of running up to 8 catch-up ticks a frame (that was
+  7 fps in a horde, now ~25). **Animation level of detail** (`AnimationLod`, scripts/components/, made by main.gd,
+  `focus` = what the camera follows): beyond `near_range` 30 m (`overloaded_range` 12 m) a character's AnimationPlayer
+  goes to manual and is advanced every `SLOW_EVERY` frames. Soldier AI: `_best_enemy` counts the crowd once and casts
+  a line only for a winner, archers re-check their line of fire / step-back every `SHOT_CHECK_FRAMES`, the hero shares
+  one list of followers / their slots (`follower_index`), crowd counts (`crowd_on`, `crowd_moved`) and nearby threats
+  (`threats()`: `_best_threat`) per `FOLLOWERS_CACHE_FRAMES` (physics frames, game time). Hit splashes: one per unit per `Unit.HURT_FX_GAP`, none beyond `HitFx.FX_RANGE` of the
+  camera (`near_view`). A unit slower than `Unit.STILL_SPEED` doesn't move that frame (crowd shoves).
+- **Dev panel** (`DevPanel`, scenes/ui/dev_panel.gd; the HUD's DEV button / F3, action `dev_panel`): frame time
+  (worst of the last seconds), monsters awake, bands awake, draw calls, and in Conquest where you are (zone, the
+  nearest place's holder / garrison awake or asleep / gate / store / training), the demons (campaigns, rally) and the
+  next supply tick; host tools: god mode, +1000 coins, kill monsters near, go to the place picked on the map, AI and
+  animation level of detail on / off. Members that are provoked or walking back (`Enemy.is_busy()`) stay awake. Damage
   calls `Unit._on_damaged(attacker)`; enemies forward it to `Warband.alert(attacker)`, which provokes the whole band
   (tuning in `enemy.gd` → "Provoked" exports).
 

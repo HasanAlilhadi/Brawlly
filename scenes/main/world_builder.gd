@@ -71,6 +71,9 @@ var clear_radius: float = 9.0
 ## Warbands also keep `spawn_band_distance` away from the clear areas (the hill; not the many Last Stand circles).
 var bands_avoid_clear_areas: bool = true
 var min_band_spacing: float = 20.0
+## The mode's say on a band at a point (GameMode.band_rule_at: "tier" / "size" / "spacing" / "plain"); empty Callable
+## or {} = sized by the distance to the spawns, `min_band_spacing` apart.
+var band_rule: Callable = Callable()
 var min_squad: int = 3
 var max_squad: int = 24
 
@@ -388,38 +391,54 @@ func _make_herd(pos: Vector3, species: String) -> AnimalHerd:
 func _add_warbands() -> Array[Warband]:
 	var bands: Array[Warband] = []
 	var positions: Array[Vector3] = []
+	var spacings: Array[float] = []
 	for yard in _graveyards:
 		if bands.size() >= band_count:
 			break
 		var gate := yard + Vector3(0.0, 0.0, GRAVEYARD_HALF + 3.0)
+		var rule := _band_rule(gate)
 		positions.append(gate)
-		bands.append(_make_band(bands.size(), gate, &"undead"))
+		spacings.append(float(rule.get("spacing", min_band_spacing)))
+		bands.append(_make_band(bands.size(), gate, &"undead", -1, -1.0, rule))
 	var tries := 0
 	while bands.size() < band_count and tries < 5000:
 		tries += 1
 		var pos := _random_point(8.0)
 		if _distance_to_spawn(pos) < spawn_band_distance or not _is_free(pos, 3.0):
 			continue
+		var rule := _band_rule(pos)
+		var spacing := float(rule.get("spacing", min_band_spacing))
 		var too_close := false
-		for other in positions:
-			if pos.distance_to(other) < min_band_spacing:
+		for i in positions.size():
+			if pos.distance_to(positions[i]) < maxf(spacing, spacings[i]):
 				too_close = true
 				break
 		if too_close:
 			continue
 		positions.append(pos)
+		spacings.append(spacing)
 		var undead := _distance_to_graveyard(pos) < 34.0 or randf() < map.stray_undead
-		bands.append(_make_band(bands.size(), pos, &"undead" if undead else &"orc"))
+		bands.append(_make_band(bands.size(), pos, &"undead" if undead else &"orc", -1, -1.0, rule))
 	return bands
 
 
-## `size` / `territory` < 0: from the distance to the spawns.
-func _make_band(index: int, pos: Vector3, faction: StringName, size: int = -1, territory: float = -1.0) -> Warband:
+func _band_rule(pos: Vector3) -> Dictionary:
+	return band_rule.call(pos) if band_rule.is_valid() else {}
+
+
+## `size` / `territory` < 0: from the distance to the spawns, or the mode's `rule` (see `band_rule`).
+func _make_band(index: int, pos: Vector3, faction: StringName, size: int = -1, territory: float = -1.0,
+		rule: Dictionary = {}) -> Warband:
 	_occupy(pos, 3.0)
 	var band := Warband.new()
 	band.name = "Warband_%d" % index
 	band.faction = faction
 	band.roster = UNDEAD_ROSTER if faction == &"undead" else ORC_ROSTER
+	band.plain = bool(rule.get("plain", false))
+	if size <= 0 and rule.has("size"):
+		size = int(rule.size)
+	elif size <= 0 and rule.has("tier"):
+		size = _band_size_for(float(rule.tier))
 	band.size = size if size > 0 else _band_size_at(pos)
 	band.tier = clampf(float(band.size - min_squad) / float(max_squad - min_squad), 0.0, 1.0)
 	band.territory = territory if territory > 0.0 else 22.0 + band.size * 0.8
@@ -496,7 +515,11 @@ func _tier_at(pos: Vector3) -> float:
 
 ## Bands grow with distance from the start: 3-4 nearby, 20-25 at the far edges.
 func _band_size_at(pos: Vector3) -> int:
-	var t := _tier_at(pos)
+	return _band_size_for(_tier_at(pos))
+
+
+## A band size for `t` (0 small .. 1 big).
+func _band_size_for(t: float) -> int:
 	# Curved so most of the map is small/medium bands; the big ones roam near the edges.
 	return clampi(roundi(lerpf(min_squad, max_squad, pow(t, 1.5))) + randi_range(-1, 1), min_squad, max_squad + 1)
 

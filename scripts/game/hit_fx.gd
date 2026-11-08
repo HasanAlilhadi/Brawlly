@@ -34,6 +34,20 @@ static var hit_stop_enabled: bool = true
 static var _kick_frame: int = -1
 
 
+## Effects farther than this from what the camera follows are skipped (nobody sees them).
+const FX_RANGE: float = 45.0
+
+
+## Whether effects at `at` can be seen here: near what the camera follows (no camera yet: yes).
+static func near_view(at: Vector3) -> bool:
+	if not is_instance_valid(camera):
+		return true
+	var focus := camera.target
+	if not is_instance_valid(focus):
+		return true
+	return Vector2(at.x - focus.global_position.x, at.z - focus.global_position.z).length() < FX_RANGE
+
+
 ## Server: a hit landed on `target` for `amount`. Numbers go to the attacking player's device.
 static func report_hit(target: Node3D, amount: float, attacker: Node, crit: bool, is_melee: bool) -> void:
 	if not is_instance_valid(target):

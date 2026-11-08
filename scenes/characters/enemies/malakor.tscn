@@ -1,0 +1,224 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scenes/characters/enemy.gd" id="1_enemy"]
+[ext_resource type="Script" path="res://scenes/characters/enemies/malakor_model.gd" id="2_model"]
+[ext_resource type="Script" path="res://scripts/enemies/chase_movement.gd" id="3_chase"]
+[ext_resource type="Script" path="res://scripts/enemies/kite_movement.gd" id="4_kite"]
+[ext_resource type="Script" path="res://scripts/enemies/melee_attack.gd" id="5_melee"]
+[ext_resource type="Script" path="res://scripts/enemies/charge_ability.gd" id="6_charge"]
+[ext_resource type="Script" path="res://scripts/enemies/barrage_ability.gd" id="7_barrage"]
+[ext_resource type="Script" path="res://scripts/enemies/projectile_attack.gd" id="8_projectile"]
+[ext_resource type="Script" path="res://scripts/enemies/blink_ability.gd" id="9_blink"]
+[ext_resource type="Script" path="res://scripts/enemies/summon_ability.gd" id="10_summon"]
+[ext_resource type="PackedScene" path="res://scenes/characters/enemies/blood_totem.tscn" id="11_totem"]
+[ext_resource type="Script" path="res://scripts/enemies/life_steal_trait.gd" id="12_life_steal"]
+[ext_resource type="Script" path="res://scripts/enemies/enrage_trait.gd" id="13_enrage"]
+[ext_resource type="Script" path="res://scripts/enemies/boss_trait.gd" id="14_boss"]
+[ext_resource type="Script" path="res://scripts/enemies/malakor_trait.gd" id="15_malakor"]
+[ext_resource type="Texture2D" path="res://assets/ui/icons/game/boss.svg" id="16_icon"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
+radius = 0.55
+height = 2.8
+
+[sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_sync"]
+properties/0/path = NodePath(".:net_position")
+properties/0/spawn = true
+properties/0/replication_mode = 1
+properties/1/path = NodePath(".:net_yaw")
+properties/1/spawn = true
+properties/1/replication_mode = 1
+properties/2/path = NodePath(".:health")
+properties/2/spawn = true
+properties/2/replication_mode = 2
+properties/3/path = NodePath(".:max_health")
+properties/3/spawn = true
+properties/3/replication_mode = 2
+properties/4/path = NodePath(".:anim_state")
+properties/4/spawn = true
+properties/4/replication_mode = 2
+properties/5/path = NodePath(".:action_token")
+properties/5/spawn = true
+properties/5/replication_mode = 2
+properties/6/path = NodePath(".:is_dead")
+properties/6/spawn = true
+properties/6/replication_mode = 2
+properties/7/path = NodePath(".:alert_seq")
+properties/7/spawn = true
+properties/7/replication_mode = 2
+
+[node name="Malakor" type="CharacterBody3D"]
+collision_layer = 4
+collision_mask = 31
+motion_mode = 1
+script = ExtResource("1_enemy")
+enemy_name = "Malakor"
+faction = &"undead"
+max_health = 2200
+move_speed = 3.0
+melee_damage = 32
+melee_range = 2.4
+melee_cooldown = 1.1
+melee_mask = 15
+melee_anims = PackedStringArray("attack-melee-right", "attack-melee-left")
+melee_cleave = true
+hold_right_arm = false
+knockback_taken = 0.0
+radius = 0.8
+anim_speed = 0.9
+health_bar_color = Color(0.8, 0.05, 0.15, 1)
+health_bar_height = 3.4
+health_bar_width = 1.8
+health_bar_hide_delay = 0
+steer_lookahead = 2
+separation_radius = 1.8
+aggro_range = 11
+provoked_leash = 1000
+provoked_sight_range = 18
+health_drop_chance = 1
+health_drop_amount = 80
+coin_drop_min = 40
+coin_drop_max = 55
+xp_value = 60
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.4, 0)
+shape = SubResource("CapsuleShape3D_body")
+
+[node name="Model" type="Node3D" parent="."]
+script = ExtResource("2_model")
+
+[node name="Sync" type="MultiplayerSynchronizer" parent="."]
+replication_interval = 0.05
+delta_interval = 0.05
+replication_config = SubResource("SceneReplicationConfig_sync")
+
+[node name="Chase" type="Node" parent="."]
+script = ExtResource("3_chase")
+shoulders_through = true
+
+[node name="Kite" type="Node" parent="."]
+script = ExtResource("4_kite")
+keep_min = 8
+keep_max = 13
+strafe_pace = 0.3
+
+[node name="Melee" type="Node" parent="."]
+script = ExtResource("5_melee")
+
+[node name="Charge" type="Node" parent="."]
+script = ExtResource("6_charge")
+priority = 3
+cooldown = 9
+min_range = 5
+max_range = 13
+damage = 30
+speed_multiplier = 2.6
+dash_time = 1.1
+shout = "Fall!"
+lane_width = 2.2
+first_use_delay = 2
+
+[node name="ArrowRain" type="Node" parent="."]
+script = ExtResource("7_barrage")
+priority = 4
+cooldown = 9
+max_range = 16
+style = 0
+zones = 3
+radius = 2.6
+warning = 1.4
+arrows = 40
+rain_time = 2.0
+damage = 9.0
+animation = "holding-both-shoot"
+shout = "Rain upon them!"
+first_use_delay = 1
+
+[node name="Volley" type="Node" parent="."]
+script = ExtResource("8_projectile")
+priority = 2
+projectile = &"enemy_arrow"
+damage = 12
+cooldown = 2.6
+min_range = 3
+max_range = 15
+windup = 0.5
+animation = "holding-right-shoot"
+count = 5
+spread_degrees = 40
+lead = 0.2
+release_height = 2.6
+
+[node name="Blink" type="Node" parent="."]
+script = ExtResource("9_blink")
+priority = 4
+cooldown = 7
+min_range = 4
+max_range = 16
+behind_distance = 2.0
+first_use_delay = 1
+
+[node name="Meteors" type="Node" parent="."]
+script = ExtResource("7_barrage")
+priority = 3
+cooldown = 8
+max_range = 16
+style = 1
+zones = 4
+radius = 2.8
+warning = 1.6
+damage = 34.0
+color = Color(0.65, 0.25, 1, 0.75)
+animation = "cast"
+shout = "Darkness falls!"
+first_use_delay = 2
+
+[node name="VoidBolt" type="Node" parent="."]
+script = ExtResource("8_projectile")
+priority = 1
+projectile = &"blood_bolt"
+damage = 16
+cooldown = 2.2
+min_range = 3
+max_range = 14
+windup = 0.5
+animation = "holding-both-shoot"
+arms = 3
+count = 3
+spread_degrees = 25
+lead = 0.3
+release_height = 2.2
+
+[node name="Totems" type="Node" parent="."]
+script = ExtResource("10_summon")
+priority = 5
+count = 3
+max_alive = 3
+spread = 6
+minions = Array[PackedScene]([ExtResource("11_totem")])
+health_thresholds = PackedFloat32Array(0.66, 0.33)
+only_at_thresholds = true
+shout = "Blood for the Sovereign!"
+animation = "interact-right"
+mark_color = Color(0.9, 0.05, 0.12, 1)
+
+[node name="LifeSteal" type="Node" parent="."]
+script = ExtResource("12_life_steal")
+share = 0.35
+
+[node name="Enrage" type="Node" parent="."]
+script = ExtResource("13_enrage")
+below_share = 0.25
+shout = "I am an army!"
+
+[node name="Phases" type="Node" parent="."]
+script = ExtResource("15_malakor")
+
+[node name="Boss" type="Node" parent="."]
+script = ExtResource("14_boss")
+title = "Malakor, the Six-Armed Sovereign"
+marker_color = Color(0.8, 0.05, 0.15, 1)
+marker_icon = ExtResource("16_icon")
+title_color = Color(1, 0.3, 0.3, 1)
+bounty_coins = 250

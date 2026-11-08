@@ -209,6 +209,17 @@ const WAVE_PIERCE: int = 3
 @export_range(0.0, 1.0) var crit_chance: float = 0.15
 @export var crit_multiplier: float = 1.8
 
+## `followers()` / `threats()` / `crowd_on()` keep their lists this many physics frames (game time).
+const FOLLOWERS_CACHE_FRAMES: int = 15
+var _followers: Array[Node] = []
+var _followers_until: int = 0
+var _follower_slots: Dictionary = {}
+var _crowd: Dictionary = {}
+var _crowd_until: int = 0
+var _threats: Array = []
+var _threats_until: int = 0
+## `threats()` reach (m around the hero).
+const THREAT_RANGE: float = 40.0
 ## Network id of the player controlling this hero (set at spawn).
 var peer_id: int = 1
 var display_name: String = "Player"
@@ -1770,7 +1781,100 @@ func collect(kind: Pickup.Kind, amount: int) -> bool:
 
 ## This player's soldiers following them in the army (Conquest squads are out on their own: `soldiers()`).
 func followers() -> Array[Node]:
-	return soldiers().filter(func(ally: Node) -> bool: return int(ally.get("squad")) == 0)
+	# Every soldier asks this a few times a second: one list per FOLLOWERS_CACHE_FRAMES frames, not a walk over every soldier
+	# in the world each time.
+	_refresh_followers()
+	return _followers.duplicate()  # a copy: callers may keep it while the army changes
+
+
+## Where `ally` stands among the followers of its kind (melee / ranged): its formation slot.
+func follower_index(ally: Node) -> int:
+	_refresh_followers()
+	return int(_follower_slots.get(ally, 0))
+
+
+## How many of this hero's melee followers are after `enemy` right now (soldiers spread over the enemies).
+func crowd_on(enemy: Node) -> int:
+	_refresh_followers()
+	if Engine.get_physics_frames() >= _crowd_until:
+		_crowd_until = Engine.get_physics_frames() + FOLLOWERS_CACHE_FRAMES
+		_crowd.clear()
+		for ally in _followers:
+			var on: Variant = ally.get("target")
+			if is_instance_valid(on) and not ally.is_ranged():
+				_crowd[on] = int(_crowd.get(on, 0)) + 1
+	return int(_crowd.get(enemy, 0))
+
+
+## The hostiles near this hero for its soldiers to pick from, worked out once per FOLLOWERS_CACHE_FRAMES frames for the whole
+## army: [enemy, bonus (m closer it counts: hitting the hero / a soldier of ours), hurt share (0 whole .. 1)] rows
+## within THREAT_RANGE. Soldiers within reach of it pick from this instead of every unit in the world.
+func threats() -> Array:
+	var now := Engine.get_physics_frames()
+	if now < _threats_until:
+		return _threats
+	_threats_until = now + FOLLOWERS_CACHE_FRAMES
+	_threats.clear()
+	var range_sq := THREAT_RANGE * THREAT_RANGE
+	for group in Ally.TARGET_GROUPS:
+		for node in get_tree().get_nodes_in_group(group):
+			var enemy := node as Node3D
+			if enemy == null:
+				continue
+			var dx := enemy.global_position.x - global_position.x
+			var dz := enemy.global_position.z - global_position.z
+			if dx * dx + dz * dz > range_sq or GameConfig.is_gone(enemy) or not GameConfig.is_hostile(self, enemy):
+				continue
+			var bonus := 0.0
+			var victim: Variant = enemy.get("target")
+			if victim is Node3D and is_instance_valid(victim):
+				if victim == self:
+					bonus = Ally.DEFEND_BONUS
+				elif victim is Ally and (victim as Ally).owner_peer == peer_id:
+					bonus = Ally.GUARD_BONUS
+			var hurt := 0.0
+			var unit := enemy as Unit
+			if unit and unit.max_health > 0.0:
+				hurt = 1.0 - unit.health / unit.max_health
+			_threats.append([enemy, bonus, hurt])
+	return _threats
+
+
+## A melee follower went from `old` to `new` target: the counts follow at once (the next soldier to pick sees it).
+func crowd_moved(old: Variant, new: Variant) -> void:
+	crowd_on(null)  # (fresh counts first if they are due)
+	if is_instance_valid(old) and _crowd.has(old):
+		_crowd[old] = maxi(int(_crowd[old]) - 1, 0)
+	if is_instance_valid(new):
+		_crowd[new] = int(_crowd.get(new, 0)) + 1
+
+
+## One list of the followers (and their slots) per FOLLOWERS_CACHE_FRAMES frames or army change, shared by all of them.
+func _refresh_followers() -> void:
+	var now := Engine.get_physics_frames()
+	if now < _followers_until:
+		return
+	_followers_until = now + FOLLOWERS_CACHE_FRAMES
+	_crowd_until = 0
+	_followers.clear()
+	_follower_slots.clear()
+	var melee := 0
+	var ranged := 0
+	for ally in soldiers():
+		if int(ally.get("squad")) != 0:
+			continue
+		_followers.append(ally)
+		if ally.is_ranged():
+			_follower_slots[ally] = ranged
+			ranged += 1
+		else:
+			_follower_slots[ally] = melee
+			melee += 1
+
+
+## The army changed (a soldier joined, left for a squad or fell): `followers()` builds its list again.
+func forget_followers() -> void:
+	_followers_until = 0
 
 
 ## Every soldier of this player in the world: the army and their Conquest squads.
@@ -1833,7 +1937,8 @@ func _physics_process(delta: float) -> void:
 		_update_ability_xp_lockout(delta)
 
 
-## The oldest soldier in training is ready: it appears right behind you and follows at once.
+## The oldest soldier in training is ready: it appears right behind you and follows at once. (Conquest calls it
+## right away when a recruit is bought: no SOLDIER_TRAIN_TIME there.)
 func _finish_training() -> void:
 	soldiers_training -= 1
 	var kind := "sword"
@@ -2322,6 +2427,8 @@ func _apply_upgrade(def: UpgradeDef) -> void:
 			for i in int(def.amount):
 				_training_kinds.append(RECRUIT_WEAPONS[def.id])
 				soldiers_training += 1
+				if Net.mode() == Net.Mode.CONQUEST:
+					_finish_training()  # Conquest: a bought soldier is there at once (no training queue)
 		&"potion":
 			heal(def.amount)
 		&"arm_sword", &"arm_bow", &"arm_wizard", &"arm_healer":

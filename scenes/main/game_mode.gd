@@ -170,6 +170,18 @@ func world_clear_radius() -> float:
 	return HoldCircle.RADIUS + 5.0 if match_mode == Net.Mode.LAST_STAND else 9.0
 
 
+## Where world events (meteors, storm, Blood Moon, goblin, Warlord, supply drops) may happen: everywhere here;
+## Conquest keeps them to its inner zones.
+func events_reach(_point: Vector3) -> bool:
+	return true
+
+
+## How the world builder makes a warband at `point` (procedural maps): {} = by the distance to the spawns.
+## Keys: "tier" (0 small .. 1 big), "size" (exact), "spacing" (m to the next band), "plain" (filler only).
+func band_rule_at(_point: Vector3) -> Dictionary:
+	return {}
+
+
 ## Gold veins the mode wants: one inside the edge of every circle (mine while you hold it).
 func world_vein_spots() -> Array[Vector3]:
 	var spots: Array[Vector3] = []

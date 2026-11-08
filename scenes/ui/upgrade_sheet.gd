@@ -281,7 +281,8 @@ func _add_card(def: UpgradeDef, grid: GridContainer) -> void:
 func _add_recruit_card(def: UpgradeDef) -> void:
 	var frame := _card_frame(def, _army_grid, "Recruit Soldier")
 	var box: VBoxContainer = frame.box
-	box.add_child(_description("Trains for %d s, then joins you right here." % int(GameConfig.SOLDIER_TRAIN_TIME)))
+	box.add_child(_description("Joins you right here, at once." if Net.mode() == Net.Mode.CONQUEST
+			else "Trains for %d s, then joins you right here." % int(GameConfig.SOLDIER_TRAIN_TIME)))
 	var status := Label.new()
 	status.name = "RecruitStatus"
 	status.add_theme_font_size_override("font_size", HudStyle.FONT_SMALL)

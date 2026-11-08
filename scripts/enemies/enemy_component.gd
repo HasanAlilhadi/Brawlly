@@ -34,6 +34,12 @@ func on_damaged(_attacker: Node3D, _amount: float) -> void:
 	pass
 
 
+## Server: a hit took `dealt` health from the enemy (every hit, the killing blow included; after on_damaged's
+## checks, before death is handled by the components).
+func on_hit_taken(_attacker: Node, _dealt: float) -> void:
+	pass
+
+
 ## Server: one of the enemy's melee swings hit `victim` for `amount`.
 func on_hit_dealt(_victim: Node3D, _amount: float) -> void:
 	pass
@@ -64,4 +70,4 @@ func show_fx(_event: int, _at: Vector3, _value: float) -> void:
 func power() -> float:
 	if enemy == null:
 		return 1.0
-	return enemy.power * (GameConfig.BLOOD_MOON_DAMAGE if GameConfig.blood_moon else 1.0)
+	return enemy.power * (GameConfig.BLOOD_MOON_DAMAGE if GameConfig.raging_at(enemy.global_position) else 1.0)

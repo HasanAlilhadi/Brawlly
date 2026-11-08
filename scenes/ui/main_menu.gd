@@ -1,7 +1,8 @@
 extends Node
 ## Main menu: game title (from Project Settings → Application → Name), your name ("Playing as", saved in the
-## profile), Find Game (server browser), Host Game (host screen), Conquest (its own section: a page with what it
-## is, Find / Host a Conquest game — `Net.conquest_section`), Training Field, Controls and Quit.
+## profile), Find Game (server browser), Host Game (host screen), Conquest (its own section: the Conquest hub page,
+## scenes/modes/conquest/menu/, with its own look, Find / Host a Conquest game — `Net.conquest_section`), Training
+## Field, Controls and Quit.
 ## Quit is hidden on iOS / web, where apps shouldn't quit themselves.
 ## When a game dropped you (`Net.leave_reason`: host left, removed from the game), a notice says why.
 ## Portrait (phones): title on top, menu at the bottom. Landscape (desktop): title and menu on the left,
@@ -24,11 +25,12 @@ const CONTROLS_SCENE := "res://scenes/ui/controls_menu.tscn"
 var _notice: Dictionary = {}
 var _leaving: bool = false
 var _conquest_button: Button
-var _conquest: Dictionary = {}
 
 
 func _ready() -> void:
 	get_tree().paused = false
+	Net.conquest_section = false
+	ConquestLook.reset(self)
 	_title.text = ProjectSettings.get_setting("application/config/name", "Game")
 	_name_edit.text = Net.profile.name
 	_name_edit.text_changed.connect(func(text: String) -> void: Net.set_profile(text))
@@ -38,7 +40,7 @@ func _ready() -> void:
 	_conquest_button = MenuKit.button("Conquest", true)
 	_conquest_button.name = "ConquestButton"
 	_conquest_button.custom_minimum_size = _host_button.custom_minimum_size
-	_conquest_button.pressed.connect(_open_conquest)
+	_conquest_button.pressed.connect(_go_to.bind(Net.CONQUEST_MENU_SCENE, true))
 	_host_button.add_sibling(_conquest_button)
 	_training_button.pressed.connect(_start_training)
 	_controls_button.pressed.connect(_go_to.bind(CONTROLS_SCENE))
@@ -57,9 +59,6 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel") and not _notice.is_empty():
 		get_viewport().set_input_as_handled()
 		_close_notice()
-	elif event.is_action_pressed("ui_cancel") and not _conquest.is_empty():
-		get_viewport().set_input_as_handled()
-		_close_conquest()
 
 
 ## `conquest`: the page belongs to the Conquest section (Find / Host list and make only Conquest games).
@@ -69,38 +68,6 @@ func _go_to(path: String, conquest: bool = false) -> void:
 	_leaving = true
 	Net.conquest_section = conquest
 	get_tree().change_scene_to_file(path)
-
-
-## The Conquest section: what the mode is, then Find / Host a Conquest game.
-func _open_conquest() -> void:
-	_conquest = MenuKit.dialog($UI, "Conquest")
-	var text := MenuKit.label("Four factions start in the corners of a huge land overrun by demons. Take villages, "
-			+ "cities and fortresses zone by zone, keep your armies fed and armed with couriers, and storm the "
-			+ "Demon's Lair in the middle. Hold it five minutes to rule.", &"", 26)
-	text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	text.custom_minimum_size = Vector2(760, 0)
-	(_conquest.body as Control).add_child(text)
-	var hint := MenuKit.label("A long game (about 45 minutes) for PC: mouse, keyboard and the M map.", &"HintLabel", 22)
-	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	(_conquest.body as Control).add_child(hint)
-	var back := MenuKit.button("Back")
-	back.pressed.connect(_close_conquest)
-	var find := MenuKit.button("Find Conquest Game")
-	find.name = "ConquestFindButton"
-	find.pressed.connect(_go_to.bind(BROWSER_SCENE, true))
-	var host := MenuKit.button("Host Conquest Game", true)
-	host.name = "ConquestHostButton"
-	host.pressed.connect(_go_to.bind(HOST_SCENE, true))
-	for button in [back, find, host]:
-		(_conquest.buttons as Control).add_child(button)
-	host.grab_focus.call_deferred()
-
-
-func _close_conquest() -> void:
-	MenuKit.close_dialog(_conquest)
-	_conquest = {}
-	if not OS.has_feature("mobile"):
-		_conquest_button.grab_focus.call_deferred()
 
 
 func _start_training() -> void:

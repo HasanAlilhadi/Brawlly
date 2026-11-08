@@ -42,12 +42,20 @@ const RAID_BASE: int = 3
 const RAID_STEP: int = 2
 const RAID_DISTANCE: float = 32.0
 const RAID_MAX: int = 4
+## World events reach zones 0..EVENT_ZONE only (`events_reach`); no invasion waves (raids instead, main.gd).
+const EVENT_ZONE: int = 3
+## Roaming warbands per zone (`band_rule_at`): size share (0 small .. 1 big) and the spacing between bands.
+const ZONE_BAND_TIER: Array[float] = [1.0, 0.85, 0.68, 0.5, 0.32, 0.12, 0.0]
+const ZONE_BAND_SPACING: Array[float] = [20.0, 20.0, 22.0, 25.0, 32.0, 45.0, 80.0]
+const OUTER_BAND_SIZE: Vector2i = Vector2i(2, 3)
 ## Places stay this far apart, this far from a Citadel / the Throne, and from the map border.
 const TERRITORY_SPACING: float = 26.0
 const STRONGHOLD_SPACING: float = 60.0
 const BORDER: float = 14.0
 ## Holding the Throne this many logistics ticks in a row (5 minutes) wins.
 const THRONE_WIN_TICKS: int = 60
+## Slaying Malakor wins: the killing blow counts this share of his health on top of a faction's damage to him.
+const KING_BLOW_SHARE: float = 0.25
 const THRONE_INDEX: int = FACTIONS
 ## Lowest score limit Conquest accepts (the lobby's range starts here; tests may leave the default).
 const SCORE_LIMIT_MIN: int = 500
@@ -72,6 +80,8 @@ const NAV_CELL_HEIGHT: float = 0.25
 var territories: Array[TerritoryNode] = []
 var logistics: LogisticsManager
 var squads: ConquestSquads
+## The demons of the open land: respawn by zone, campaigns, breaching gates, the King's lieutenants.
+var demons: ConquestDemons
 ## Server: the baked world for marching soldiers (navigation_ready once the bake thread is done).
 var navigation: NavigationRegion3D
 var navigation_ready: bool = false
@@ -92,6 +102,24 @@ static func zone_of(point: Vector3) -> int:
 		if share < ZONE_EDGES[i]:
 			return i
 	return ZONES - 1
+
+
+## World events (meteors, storm, Blood Moon, goblin, Warlord, supply drops) only reach zones 0..EVENT_ZONE: the
+## outer lands where the factions start stay calm.
+func events_reach(point: Vector3) -> bool:
+	return zone_of(point) <= EVENT_ZONE
+
+
+## Roaming warbands by zone: ZONE_BAND_TIER (size, and so power: 0 = 3-4 members .. 1 = 20+), at least
+## ZONE_BAND_SPACING m apart; the outermost zone only has a few small plain bands (OUTER_BAND_SIZE, filler only:
+## grunts / skeleton warriors, no throwers, brutes or archers) far apart.
+func band_rule_at(point: Vector3) -> Dictionary:
+	var zone := zone_of(point)
+	var rule := {"tier": ZONE_BAND_TIER[zone], "spacing": ZONE_BAND_SPACING[zone]}
+	if zone == ZONES - 1:
+		rule["size"] = randi_range(OUTER_BAND_SIZE.x, OUTER_BAND_SIZE.y)
+		rule["plain"] = true
+	return rule
 var _throne_holder: int = -1
 
 
@@ -257,6 +285,10 @@ func build_objectives(world: Node3D) -> void:
 	squads = ConquestSquads.new()
 	squads.mode = self
 	add_child(squads)
+	demons = ConquestDemons.new()
+	demons.mode = self
+	add_child(demons)
+	demons.setup(world)
 
 
 ## Server: a navigation mesh of the whole world (ground minus trees, rocks, walls and fences) for soldiers on a
@@ -470,9 +502,46 @@ func place_action(player: Player, index: int, action: StringName, arg: int) -> b
 				done = true
 		&"courier":
 			done = logistics.buy_courier(player, place)
+		&"upgrade":
+			done = upgrade_place(place, arg)
 	if done:
 		logistics.send_places()
 	return done
+
+
+## Server (MalakorTrait.on_died): the King fell. The faction that slew him wins the match: the most damage to him,
+## where the killing blow (`killer`) counts KING_BLOW_SHARE of his health extra. Nothing happens when no faction
+## hurt him (tests killing him outright).
+func king_slain(damage: Dictionary, killer: int, king_health: float) -> int:
+	if is_over or damage.is_empty():
+		return -1
+	var total := 0.0
+	for team in damage:
+		total += float(damage[team])
+	var best := -1
+	var best_score := -1.0
+	for team in damage:
+		var score := float(damage[team]) + (KING_BLOW_SHARE * king_health if team == killer else 0.0)
+		if score > best_score:
+			best_score = score
+			best = team
+	var share := roundi(float(damage[best]) / maxf(total, 1.0) * 100.0)
+	var blow := "and the killing blow" if best == killer else "{label:%d} struck the killing blow" % killer
+	finish("{team:%d} wins!" % best, "They slew Malakor, the Six-Armed Sovereign: %d%% of his wounds, %s." % [share, blow])
+	return best
+
+
+## Server: the next level of upgrade `i` at `place`, paid from its own treasury. Returns whether it was bought.
+func upgrade_place(place: TerritoryNode, i: int) -> bool:
+	if not place.can_upgrade(i) or place.treasury < place.upgrade_cost(i):
+		return false
+	var cost := place.upgrade_cost(i)
+	place.treasury -= cost
+	place.upgrades[i] += 1
+	place.apply_upgrades()
+	logistics.note(place.owner_team, &"gold", "Upgrades", -cost)
+	announce("%s: %s level %d" % [place.display_name, TerritoryNode.UPGRADES[i][1], place.upgrades[i]])
+	return true
 
 
 ## Server (Player.request_withdraw, F): the hero empties the treasury of the place they lord and stand in.

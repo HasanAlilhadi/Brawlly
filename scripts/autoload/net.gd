@@ -19,6 +19,8 @@ const GAME_ID := "brawlly-lan-v5"
 const PORT: int = 24565
 const DISCOVERY_PORT: int = 24566
 const MAX_PLAYERS: int = 8
+## Conquest (its own section): four factions of four.
+const CONQUEST_MAX_PLAYERS: int = 16
 const MIN_PLAYERS: int = 2
 ## How many direct-connect addresses the profile remembers.
 const RECENT_ADDRESSES: int = 5
@@ -30,6 +32,8 @@ const PROFILE_PATH := "user://profile.cfg"
 const GAME_SCENE := "res://scenes/main/main.tscn"
 const LOBBY_SCENE := "res://scenes/ui/lobby.tscn"
 const MENU_SCENE := "res://scenes/ui/main_menu.tscn"
+## The Conquest section's hub page (its Find / Host, the lore); leaving a Conquest game comes back here.
+const CONQUEST_MENU_SCENE := "res://scenes/modes/conquest/menu/conquest_menu.tscn"
 
 enum Mode { COOP, KING_OF_THE_HILL, LAST_STAND, CONQUEST }
 enum Difficulty { EASY, NORMAL, HARD, BRUTAL }
@@ -269,11 +273,11 @@ func open_offline_lobby() -> void:
 
 
 ## Opens a game on this device. `options`: "name" (server name, default "<your name>'s game"),
-## "max_players" (2..8), "password" ("" = open), "listed" (false = not in other players' server browser).
+## "max_players" (2..8, Conquest 2..16), "password" ("" = open), "listed" (false = not in other players' server browser).
 func host(options: Dictionary = {}) -> Error:
 	_reset()
 	var peer := ENetMultiplayerPeer.new()
-	var err := peer.create_server(port, MAX_PLAYERS)
+	var err := peer.create_server(port, max_players_cap())
 	if err != OK:
 		return err
 	multiplayer.multiplayer_peer = peer
@@ -282,7 +286,7 @@ func host(options: Dictionary = {}) -> Error:
 	var server_name := str(options.get("name", "")).strip_edges().substr(0, 32)
 	server_info = {
 		"name": server_name if server_name != "" else default_server_name(),
-		"max_players": clampi(int(options.get("max_players", MAX_PLAYERS)), MIN_PLAYERS, MAX_PLAYERS),
+		"max_players": clampi(int(options.get("max_players", max_players_cap())), MIN_PLAYERS, max_players_cap()),
 		"locked": _password != "",
 		"listed": bool(options.get("listed", true)),
 	}
@@ -296,6 +300,21 @@ func host(options: Dictionary = {}) -> Error:
 		_start_broadcast()
 	lobby_changed.emit()
 	return OK
+
+
+## Most players a game of the current section takes (Conquest 16, the classic modes 8).
+func max_players_cap() -> int:
+	return CONQUEST_MAX_PLAYERS if conquest_section else MAX_PLAYERS
+
+
+## Where Back / Leave go: the Conquest hub in its section, else the main menu.
+func menu_scene() -> String:
+	return CONQUEST_MENU_SCENE if conquest_section else MENU_SCENE
+
+
+## Conquest: seats per faction (the host's max players shared by the four).
+func faction_seats() -> int:
+	return ceili(float(int(server_info.get("max_players", CONQUEST_MAX_PLAYERS))) / ConquestMode.FACTIONS)
 
 
 ## A discovered game belongs to the section the player browses (Conquest or the classic modes).
@@ -360,9 +379,14 @@ func add_recent_address(address: String) -> void:
 
 ## The host screen's last options (never the password), so the next game starts with them.
 func remember_host_options(options: Dictionary) -> void:
-	profile["host"] = {"name": str(options.get("name", "")), "max_players": int(options.get("max_players", MAX_PLAYERS)),
-			"listed": bool(options.get("listed", true))}
+	profile[host_profile_key()] = {"name": str(options.get("name", "")),
+			"max_players": int(options.get("max_players", max_players_cap())), "listed": bool(options.get("listed", true))}
 	_save_profile()
+
+
+## Each section remembers its own host options (Conquest starts at 16 players, not the classic game's choice).
+func host_profile_key() -> String:
+	return "conquest_host" if conquest_section else "host"
 
 
 ## Drops any connection without changing scene (e.g. cancelling a join attempt).
@@ -375,7 +399,7 @@ func leave(reason: String = "") -> void:
 	leave_reason = reason
 	get_tree().paused = false
 	left_game.emit(reason)
-	Transition.change_scene(MENU_SCENE)
+	Transition.change_scene(menu_scene())
 
 
 func _reset() -> void:
@@ -400,7 +424,7 @@ func set_setting(key: String, value: Variant) -> void:
 		return
 	settings[key] = value
 	if mode() == Mode.CONQUEST:
-		settings.team_count = ConquestMode.FACTIONS  # always three factions
+		settings.team_count = ConquestMode.FACTIONS  # always four factions
 	if key == "mode" or key == "team_count":
 		_balance_teams()
 	_broadcast_lobby()
@@ -409,8 +433,20 @@ func set_setting(key: String, value: Variant) -> void:
 func set_team(peer: int, team: int) -> void:
 	if not is_host() or not players.has(peer):
 		return
-	players[peer]["team"] = clampi(team, 0, settings.team_count - 1)
+	team = clampi(team, 0, settings.team_count - 1)
+	if mode() == Mode.CONQUEST and team_size(team) >= faction_seats() and players[peer].get("team", -1) != team:
+		return  # that faction is full
+	players[peer]["team"] = team
 	_broadcast_lobby()
+
+
+## Players on `team` in the lobby.
+func team_size(team: int) -> int:
+	var count := 0
+	for p in players:
+		if int(players[p].get("team", -1)) == team:
+			count += 1
+	return count
 
 
 ## Ready up (or not) in the lobby.
