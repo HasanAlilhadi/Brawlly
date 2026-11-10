@@ -36,6 +36,7 @@ func _ready() -> void:
 	Net.settings.score_limit = 100000  # the Lair decides this test, not the score
 	Net.settings.events = []
 	TerritoryNode.unguarded_falls = false  # places the test leaves alone stay held; phase 13 checks the countdown
+	ConquestMode.sizes_on = false  # the numbers checked here are the kinds' own (sizes: conquest_needs_test)
 	ConquestDemons.campaigns_on = false  # no demon campaigns on them either (conquest_zones_test checks those)
 	get_tree().change_scene_to_file("res://scenes/main/main.tscn")
 
@@ -208,7 +209,8 @@ func _process(delta: float) -> void:
 			hungry._wear_weapon(Ally.BATTLE_END + 0.1)
 			_check(hungry.weapon_uses == 2 and is_equal_approx(hungry.upkeep_damage, 1.0 - Ally.WEAR_LOSS), "two battles: weaker (%.2f)" % hungry.upkeep_damage)
 			hungry.weapon_uses = Ally.WEAPON_LIFE
-			_check(is_equal_approx(hungry.upkeep_damage, Ally.BROKEN_POWER), "eight battles: broken")
+			_check(hungry.weapon_broken() and hungry.hit_damage(hungry.melee_damage) == Ally.BROKEN_DAMAGE and hungry._roll_melee_damage()[0] == 1.0,
+					"eight battles: broken — every blow deals 1")
 			var weapons_before: int = village.store[&"equipment"]
 			village.store[&"equipment"] = weapons_before + 1
 			logistics.tick()

@@ -190,7 +190,13 @@ by touch index so the joystick and buttons work together with multi-touch.
   blow counting `KING_BLOW_SHARE` (25%) of his health extra. Test `tests/malakor_test.gd`. Per zone `TerritoryNode.ZONE_*`
   rows — walls / gate health (none in zone 1: `_build_houses()` instead), production (`output()`), demon strength,
   garrison size, capture time (`capture_time()`), extra wave rows: outside strong walls, rich, weak demons; inside
-  no walls, poor, strong demons. **Raids** (`ConquestMode._raid`, server timer `RAID_EVERY`): every held place but
+  no walls, poor, strong demons. **Place sizes** (`TerritoryNode.place_size`: `Size` SMALL / MEDIUM / LARGE, from
+  the seed in `ConquestMode._plan_sizes` — its own random stream, weights `MapDef.conquest_sizes`; Citadels and the
+  Lair are always MEDIUM): `info()` returns the kind's INFO row sized — ring, supply range and wall pieces ×
+  `SIZE_REACH` (0.8 / 1 / 1.3), garrison, gate, capture time, army cap, people and barracks room × `SIZE_AMOUNT`
+  (0.7 / 1 / 1.45); `output()`, `store_cap()` and `upgrade_cost()` × `SIZE_AMOUNT` too. **Read a place's numbers
+  from `info()`, never from `INFO[kind]`.** `full_name()` = "Large Iron City" (label, map card); the M map's dot
+  grows with it. `ConquestMode.sizes_on` = false in tests written for the kinds' own numbers. **Raids** (`ConquestMode._raid`, server timer `RAID_EVERY`): every held place but
   the Citadels, guarded or not, rolls `ZONE_RAID` (the Lair / zone 1 most, zone 6 least); `raid_place()` sends demons
   from the middle's side that walk to the place (`Enemy.follow_point` → `_raid_goal`: the gate's `outside_point()`
   while it stands); `_batter()` (server, every second) has raiders at a standing gate hit it (`TerritoryGate.batter`,
@@ -222,7 +228,8 @@ by touch index so the joystick and buttons work together with multi-touch.
   keys food / equipment; no arrows: bows and staffs are weapons; Iron and Lumber Cities both make weapons, zone
   output `ZONE_OUTPUT` 0.5 in zone 1 up to 2.2 in zone 6).
   Weapons wear by battle (`Ally.weapon_uses`: a battle ends `BATTLE_END` s after the soldier's last attack, then
-  counts once; −`WEAR_LOSS` damage every `WEAR_STEP`, broken after `WEAPON_LIFE` = 8 → `BROKEN_POWER`); by a supply
+  counts once; −`WEAR_LOSS` damage every `WEAR_STEP`, broken after `WEAPON_LIFE` = 8 → the soldier is useless: every blow, shot or heal deals `BROKEN_DAMAGE` 1,
+  `Ally.hit_damage(base)` / `weapon_broken()` / `weapon_left()`); by a supply
   point a soldier worn `REARM_AT` (2) or more gets a new weapon for one weapons supply (`_rearm`); HUD "N need new
   weapons". Soldiers carry rations (`Ally.rations`, ≤ `MAX_RATIONS`, a
   recruit `START_RATIONS`): every `MEAL_TICKS` (40 ticks = 200 s) each eats one; one with none dies of hunger (10
@@ -253,8 +260,10 @@ by touch index so the joystick and buttons work together with multi-touch.
   rings, every place in its holder's color (gold ring = yours to lord), routes as arrows, couriers, you; closes with
   M / Esc (its own `_input`, so it closes whatever the hero is doing) or its Close button; zoom with the
   wheel (toward the cursor) or + / − / Fit, drag to pan (`_zoom`, `_view`; drawn in the clipping `_canvas`; names
-  from `NAMES_ZOOM`); click a place for its short card (holder, store + per-minute output, where goods go; the
-  barracks part says step by step how training works; the hint how weapons travel) (or a squad's shield for the squad's card); its lord / the General / anyone while it has no lord gives orders through
+  from `NAMES_ZOOM`); click a place for its short card (holder, store against its room + per-minute output, who eats
+  there and how long that food lasts — `_eating_text`: its faction's soldiers within its supply range —, where
+  goods go; the barracks part says step by step how training works, what arming everybody waiting takes (weapons,
+  time) and what a soldier leaving takes; the hint how weapons travel) (or a squad's shield for the squad's card); its lord / the General / anyone while it has no lord gives orders through
   `Player.request_place_action` → `ConquestMode.place_action` (withdraw — the lord, from anywhere; muster — `arg` a
   class: `MAP_TAKE` of it from that barracks, `LogisticsManager.muster_from`; train — `arg` the class its people are
   armed with or `NO_TRAINING`; route; courier). **Caravans** (`CaravanUnit`, NetSpawn kind `caravan`, "cargo", owner
@@ -301,7 +310,11 @@ by touch index so the joystick and buttons work together with multi-touch.
   holder; everything else is in **`ConquestPanel`** (scenes/modes/conquest/conquest_panel.gd, made by main.gd with
   the map, in `Hud.left_column`): the hero (weapon, level, kills to the next), the faction's food / weapons / gold
   (treasuries) / people (barracks) with "+in −out a minute", status lines (General, cap bonus, next meal) and red
-  warnings (hungry, worn weapons, unguarded). Hovering a row (a tap on touch) opens a card beside it: where it comes
+  warnings (hungry, worn weapons, unguarded), and the **Army row** — this hero's soldiers (the stock entry's
+  "armies": {peer: `ARMY_*` ints}, counted in `LogisticsManager._upkeep`): "food m:ss · weapons N%" = how long
+  until the first starves with no more food coming (`_starve_times`: a soldier with r rations dies at meal r + 1)
+  and the share of weapon life left; its card: rations needed a meal / carried, the next meal, when the first and
+  the last starve, battles left, worn and broken weapons, new weapons needed. Hovering a row (a tap on touch) opens a card beside it: where it comes
   from and where it goes. The numbers come from `LogisticsManager.note(team, key, reason, amount)` (+ in, − out;
   moves between a faction's own places / caravans are not noted), kept for the last `FLOW_TICKS` (12 = a minute)
   and sent per minute as the stock entry's "flow" ({key: {"in": {reason: n}, "out": {reason: n}}}); a new spending
@@ -531,8 +544,12 @@ by touch index so the joystick and buttons work together with multi-touch.
   id; **every map is playable in every mode** — keep `MapDef.modes` empty; test `tests/maps_test.gd` = every map ×
   every mode, screenshots `tests/map_shots_test.gd`): **Wildlands** (procedural forest, rock outcrops), **Gravemoor**
   (procedural: Graveyard Kit pines, misty dusk light, `graveyard_share` 2.5 → many graveyards, mostly undead),
-  **Sunstone Ruins** (procedural: sand, Mini Arena ruined courtyards + colonnades, few graveyards, orc country) and
-  **Crown Ruins** (designed). A procedural map is looks + landmarks: MapDef "Look" (sky / ambient / sun / fog,
+  **Sunstone Ruins** (procedural: sand, Mini Arena ruined courtyards + colonnades, few graveyards, orc country),
+  **Ashen Wastes** (procedural: scorched earth, a red sky, fallen pines and black rock, many undead), **Frostmere**
+  (procedural: snow and thick pine woods), **Goldmead** (procedural: open golden farmland, hay bales, hardly a
+  tree) and **Crown Ruins** (designed). A land also shapes Conquest: `MapDef.conquest_places` (Cities / Outposts /
+  Villages × ConquestMode's counts: the Wastes are forts, Frostmere hamlets, Goldmead rich towns) and
+  `conquest_sizes` (small / medium / large weights). A procedural map is looks + landmarks: MapDef "Look" (sky / ambient / sun / fog,
   minimap color → `main._apply_map`, which the Weather blends from) and "Procedural" (tree models / density / scale,
   border model / step / offset, decor list, `landmarks` → `WorldBuilder._add_outcrops` / `_add_ruins`,
   `graveyard_share`, `graveyard_ground`, `stray_undead`); landmarks only go where `_is_free()` (spawns, objectives,

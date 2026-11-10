@@ -491,7 +491,7 @@ func _draw_map() -> void:
 			_canvas.draw_rect(Rect2(at - Vector2(5, 5) * k, Vector2(10, 10) * k), OUTLINE, false, 1.5)
 	for place in _mode.territories:
 		var at := _to_map(place.global_position)
-		var r: float = DOT[place.kind] * k * 1.4
+		var r: float = DOT[place.kind] * k * 1.4 * TerritoryNode.SIZE_REACH[place.place_size]
 		_canvas.draw_circle(at, r + 2.0, OUTLINE)
 		_canvas.draw_circle(at, r, _place_color(place))
 		if place.state == TerritoryNode.State.OWNED and place.lord == Net.my_id():
@@ -637,16 +637,18 @@ func _update_panel() -> void:
 		TerritoryNode.State.OWNED:
 			holder = ("yours, lord " + (Net.name_of(place.lord) if place.lord != 0 else "nobody")) if ours \
 					else Net.localize("{label:%d}" % place.owner_team)
-	lines.append("%s · Zone %d · %s" % [place.kind_name(), place.zone, holder])
+	lines.append("%s · Zone %d · %s" % [place.full_name(), place.zone, holder])
 	if ours:
 		if place.unguarded_left >= 0.0:
 			lines.append("UNGUARDED: demons take it in %d s. Leave soldiers here." % ceili(place.unguarded_left))
 		# Per minute (a tick is LogisticsManager.TICK s).
 		var made := place.output()
 		var per_min := 60.0 / LogisticsManager.TICK
-		lines.append("Food %d (+%d/min) · Weapons %d (+%d/min) · Gold %d" % [place.store[&"food"],
-				roundi(made[&"food"] * per_min), place.store[&"equipment"], roundi(made[&"equipment"] * per_min),
-				place.treasury])
+		var room := place.store_cap()
+		lines.append("Food %d/%d (+%d/min) · Weapons %d/%d (+%d/min) · Gold %d" % [place.store[&"food"], room,
+				roundi(made[&"food"] * per_min), place.store[&"equipment"], room,
+				roundi(made[&"equipment"] * per_min), place.treasury])
+		lines.append(_eating_text(place))
 		lines.append("Goods go %s (%d/%d couriers home)" % [_route_text(place), place.couriers, place.courier_total])
 	_info.text = "\n".join(lines)
 	var commands := ours and _can_command(place)
@@ -681,6 +683,25 @@ func _update_panel() -> void:
 	_panel.reset_size()
 
 
+## What the soldiers standing by this place eat from its store: how many they are, the rations a meal, and how
+## many meals (how long) the food here lasts them with nothing more coming in.
+func _eating_text(place: TerritoryNode) -> String:
+	var eaters := 0
+	var reach := float(place.info().supply)
+	for node in get_tree().get_nodes_in_group(&"allies"):
+		var ally := node as Ally
+		if ally == null or ally.is_dead or ally.team_id != place.owner_team:
+			continue
+		var offset := ally.global_position - place.global_position
+		offset.y = 0.0
+		if offset.length() <= reach:
+			eaters += 1
+	if eaters <= 0:
+		return "Eats: no soldiers here"
+	var seconds := int(place.store[&"food"]) / eaters * LogisticsManager.MEAL_SECONDS
+	return "%d soldiers eat %d a meal · lasts %d:%02d" % [eaters, eaters, seconds / 60, seconds % 60]
+
+
 ## The barracks rows: people waiting, then per class how many are armed and their rank, which class its people
 ## are armed with (the pressed Train), and Take (armed ones first, then people armed on the spot).
 func _update_barracks(place: TerritoryNode, ours: bool, commands: bool, me: Player) -> void:
@@ -691,16 +712,23 @@ func _update_barracks(place: TerritoryNode, ours: bool, commands: bool, me: Play
 	var lines := PackedStringArray()
 	var per_min := float(place.info().pool) * TerritoryNode.ZONE_PEOPLE[place.zone] * 60.0 \
 			/ (LogisticsManager.TICK * LogisticsManager.POOL_EVERY)
-	lines.append("Training: %d people waiting (+%.1f/min, room %d/%d)" % [place.people, per_min, place.barracks,
+	lines.append("Waiting: %d (+%.1f/min) · room %d/%d" % [place.people, per_min, place.barracks,
 			place.barracks_cap()])
+	# What arming everybody who waits takes: a weapon each from this store, and the time at this place's pace.
+	var need := place.people * LogisticsManager.MUSTER_EQUIPMENT
+	var seconds := ceili(float(place.people) / place.arm_per_tick()) * int(LogisticsManager.TICK)
+	var have := "%d here" % weapons_here if weapons_here >= need else "%d here, %d SHORT" % [weapons_here, need - weapons_here]
 	if place.train_kind < 0:
 		lines.append("1. Press Train on a class. 2. Each person takes a weapon from this store. 3. Armed ones drill "
 				+ "and rank up (I 45 s · II 2 min · III 4 min · IV 7 min). 4. Take sends them out.")
-	elif weapons_here <= 0 and place.people > 0:
-		lines.append("Arming %s: NO WEAPONS here. Send some by courier." % TerritoryNode.SOLDIER_NAMES[place.train_kind].to_lower())
+		if place.people > 0:
+			lines.append("Arming all %d needs %d weapons (%s)." % [place.people, need, have])
+	elif place.people <= 0:
+		lines.append("Arming %s: nobody waiting. Armed ones drill and rank up." % TerritoryNode.SOLDIER_NAMES[place.train_kind].to_lower())
 	else:
-		lines.append("Arming %s: %d a tick, a weapon each (%d here). Armed ones drill and rank up." % [
-				TerritoryNode.SOLDIER_NAMES[place.train_kind].to_lower(), place.arm_per_tick(), weapons_here])
+		lines.append("Arming %s, %d a tick: all %d need %d weapons (%s) · %d:%02d" % [
+				TerritoryNode.SOLDIER_NAMES[place.train_kind].to_lower(), place.arm_per_tick(), place.people, need, have,
+				seconds / 60, seconds % 60])
 	_people.text = "\n".join(lines)
 	for i in _size_buttons.size():
 		_size_buttons[i].visible = commands

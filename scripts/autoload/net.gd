@@ -15,7 +15,7 @@ signal left_game(reason: String)
 ## The host started the match: every lobby shows a countdown of `seconds`.
 signal countdown_started(seconds: int)
 
-const GAME_ID := "brawlly-lan-v5"
+const GAME_ID := "brawlly-lan-v6"
 const PORT: int = 24565
 const DISCOVERY_PORT: int = 24566
 const MAX_PLAYERS: int = 8

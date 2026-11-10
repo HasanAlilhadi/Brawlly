@@ -124,6 +124,13 @@ var _throne_holder: int = -1
 
 
 ## Every peer: the size of a Conquest world (main.gd, before anything is built).
+## False in tests written for the kinds' own numbers (INFO rows): every place is MEDIUM.
+static var sizes_on: bool = true
+## The land's mix of places and sizes (MapDef.conquest_places / conquest_sizes).
+var _place_share := Vector3.ONE
+var _size_weights := Vector3(0.3, 0.45, 0.25)
+
+
 static func world_half_for(map: MapDef) -> float:
 	return map.world_half if map and map.layout else WORLD_HALF
 
@@ -133,7 +140,26 @@ func setup(match_settings: Dictionary, players: Dictionary, map: MapDef = null) 
 	super.setup(match_settings, players, map)
 	if not (map and map.layout):
 		_place_in_corners(players)
+	if map:
+		_place_share = map.conquest_places
+		_size_weights = map.conquest_sizes
 	_plan_territories(int(settings.get("seed", 0)))
+	_plan_sizes(int(settings.get("seed", 0)))
+
+
+## Every place its own size (TerritoryNode.Size) by the land's weights, from the seed — every peer the same, and
+## its own random stream, so the places stand where they always did. Citadels and the Lair stay MEDIUM.
+func _plan_sizes(match_seed: int) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = match_seed + 5222
+	var total := maxf(_size_weights.x + _size_weights.y + _size_weights.z, 0.001)
+	for planned in _plan:
+		if not sizes_on or planned.kind == TerritoryNode.Kind.CITADEL or planned.kind == TerritoryNode.Kind.THRONE:
+			planned.size = TerritoryNode.Size.MEDIUM
+			continue
+		var roll := rng.randf() * total
+		planned.size = TerritoryNode.Size.SMALL if roll < _size_weights.x else (
+				TerritoryNode.Size.MEDIUM if roll < _size_weights.x + _size_weights.y else TerritoryNode.Size.LARGE)
 
 
 ## Procedural maps: the four factions start in the four corners (the base put them on a circle).
@@ -169,7 +195,9 @@ func _plan_territories(match_seed: int) -> void:
 	var city_index := 0
 	for kind in [TerritoryNode.Kind.CITY, TerritoryNode.Kind.OUTPOST, TerritoryNode.Kind.VILLAGE]:
 		var total: int = {TerritoryNode.Kind.CITY: CITIES, TerritoryNode.Kind.OUTPOST: OUTPOSTS}.get(kind, VILLAGES)
-		total = maxi(roundi(total * area), 3)
+		var share: float = {TerritoryNode.Kind.CITY: _place_share.x, TerritoryNode.Kind.OUTPOST: _place_share.y}.get(
+				kind, _place_share.z)  # the land's own mix (MapDef.conquest_places)
+		total = maxi(roundi(total * area * share), 3)
 		for zone in range(1, ZONES):
 			for i in _zone_share(total, zone):
 				var spot := _free_spot(rng, half, ZONE_EDGES[zone - 1], ZONE_EDGES[zone] if zone < ZONE_EDGES.size() else 1.0)
@@ -248,6 +276,7 @@ func build_objectives(world: Node3D) -> void:
 		territory.kind = planned.kind
 		territory.specialty = int(planned.get("specialty", TerritoryNode.Specialty.NONE)) as TerritoryNode.Specialty
 		territory.zone = int(planned.get("zone", zone_of(planned.pos)))
+		territory.place_size = int(planned.get("size", TerritoryNode.Size.MEDIUM))
 		territory.index = i
 		territory.display_name = planned.name
 		territory.mode = self

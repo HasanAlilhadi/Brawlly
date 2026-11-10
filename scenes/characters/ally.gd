@@ -54,12 +54,13 @@ const BASE_POWER: float = 1.25
 const BOW_MELEE_SHARE: float = 0.5
 ## Conquest weapons wear by battle: a battle ends BATTLE_END seconds after the soldier's last attack, and then
 ## counts as one use (`weapon_uses`). Every WEAR_STEP uses the weapon is weaker (WEAR_LOSS of its damage each),
-## after WEAPON_LIFE uses it is broken (BROKEN_POWER). A new weapon (one weapons supply) resets it.
+## after WEAPON_LIFE uses it is broken: the soldier is useless, every blow, shot or heal of its is BROKEN_DAMAGE
+## (`hit_damage`). A new weapon (one weapons supply) resets it.
 const BATTLE_END: float = 6.0
 const WEAPON_LIFE: int = 8
 const WEAR_STEP: int = 2
 const WEAR_LOSS: float = 0.15
-const BROKEN_POWER: float = 0.3
+const BROKEN_DAMAGE: float = 1.0
 const WEAPON_STATS: Dictionary = {
 	"sword": {},
 	"bow": {"damage": 11.0, "health": 65.0, "cooldown": 1.2},
@@ -291,8 +292,7 @@ func start_rank(value: int) -> void:
 
 
 func _roll_melee_damage() -> Array:
-	var damage := melee_damage * upkeep_damage * (BOW_MELEE_SHARE if is_ranged() else 1.0)
-	return [damage, false]
+	return [hit_damage(melee_damage * (BOW_MELEE_SHARE if is_ranged() else 1.0)), false]
 
 
 func _on_hit_dealt(_victim: Node3D, _amount: float) -> void:
@@ -313,13 +313,30 @@ func _wear_weapon(delta: float) -> void:
 		weapon_uses = mini(weapon_uses + 1, WEAPON_LIFE)
 
 
-## Damage share of its weapon: whole while new, WEAR_LOSS less every WEAR_STEP battles, BROKEN_POWER once broken.
+## Damage share of its weapon: whole while new, WEAR_LOSS less every WEAR_STEP battles, nothing once broken
+## (`hit_damage` then deals BROKEN_DAMAGE).
 func weapon_power() -> float:
 	if weapon_uses < 0:
 		return 1.0
 	if weapon_uses >= WEAPON_LIFE:
-		return BROKEN_POWER
+		return 0.0
 	return 1.0 - WEAR_LOSS * (weapon_uses / WEAR_STEP)
+
+
+## Its weapon has been through WEAPON_LIFE battles: it is useless until it gets a new one.
+func weapon_broken() -> bool:
+	return weapon_uses >= WEAPON_LIFE
+
+
+## Battles its weapon still lasts (WEAPON_LIFE when it never wears).
+func weapon_left() -> int:
+	return WEAPON_LIFE - clampi(weapon_uses, 0, WEAPON_LIFE)
+
+
+## What a blow / shot / heal of `base` strength does with the weapon it has: weaker when worn, BROKEN_DAMAGE when
+## it is broken.
+func hit_damage(base: float) -> float:
+	return BROKEN_DAMAGE if weapon_broken() else base * upkeep_damage
 
 
 ## How far archers shoot: half their hero's bow range (wizards a little less).
@@ -581,10 +598,10 @@ func _release_arrow() -> void:
 	face_now(direction)
 	if weapon == "wizard":
 		_fight()
-		NetSpawn.projectile(&"magic_bolt", from + direction * 0.4, direction, melee_damage * upkeep_damage, self)
+		NetSpawn.projectile(&"magic_bolt", from + direction * 0.4, direction, hit_damage(melee_damage), self)
 		return
 	_fight()
-	NetSpawn.projectile(&"arrow", from + direction * 0.4, direction, melee_damage * upkeep_damage, self)
+	NetSpawn.projectile(&"arrow", from + direction * 0.4, direction, hit_damage(melee_damage), self)
 
 
 ## Healer: walk up to its patient and heal it every cooldown (stepping back from enemies that get close).
@@ -596,7 +613,7 @@ func _heal_move(delta: float) -> Vector3:
 	if _melee_timer <= 0.0 and _action_time <= 0.0 and multiplayer.is_server():
 		_melee_timer = melee_cooldown * randf_range(0.9, 1.1)
 		play_action("holding-right-shoot", 0.4, ARM_RIGHT)
-		var amount := roundf(float(WEAPON_STATS.healer.heal) * (1.0 + RANK_BONUS * rank) * upkeep_damage)
+		var amount := roundf(hit_damage(float(WEAPON_STATS.healer.heal) * (1.0 + RANK_BONUS * rank)))
 		_patient.heal(amount)
 		_net_heal_fx.rpc(_patient.get_path())
 		_heals += 1

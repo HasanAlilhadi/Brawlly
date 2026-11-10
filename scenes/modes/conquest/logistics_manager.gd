@@ -99,7 +99,20 @@ func _ready() -> void:
 
 func _empty_entry() -> Dictionary:
 	return {&"food": 0, &"equipment": 0, &"income": {}, &"food_need": 0, &"starving": 0, &"meal_in": 0, &"worn": 0,
-			&"soldiers": 0, &"cap_bonus": 0, &"barracks": 0, &"general": 0, &"flow": {}}
+			&"soldiers": 0, &"cap_bonus": 0, &"barracks": 0, &"general": 0, &"flow": {}, &"armies": {}}
+
+
+## One hero's soldiers in numbers (the stock entry's "armies": {peer: this}), for the HUD's Army row: how many,
+## how many carry 0 / 1 / .. MAX_RATIONS rations, the battles their weapons still last in all, how many are worn
+## (REARM_AT battles or more: weaker) and how many of those are broken.
+const ARMY_SOLDIERS: int = 0
+const ARMY_RATIONS: int = 1  # .. ARMY_RATIONS + MAX_RATIONS
+const ARMY_WEAPON_LEFT: int = ARMY_RATIONS + MAX_RATIONS + 1
+const ARMY_WORN: int = ARMY_WEAPON_LEFT + 1
+const ARMY_BROKEN: int = ARMY_WORN + 1
+const ARMY_FIELDS: int = ARMY_BROKEN + 1
+## Seconds between two meals.
+const MEAL_SECONDS: int = MEAL_TICKS * int(TICK)
 
 
 ## Server: `amount` of `key` came in (+) or went out (-) for `team`, for `reason` (see FLOW_TICKS).
@@ -447,6 +460,7 @@ func _upkeep(team: int, entry: Dictionary) -> void:
 	var worn := 0
 	var fed := 0
 	var rearmed := 0
+	var armies := {}
 	for node in get_tree().get_nodes_in_group(&"allies"):
 		var ally := node as Ally
 		if ally == null or GameConfig.is_gone(ally) or ally.team_id != team:
@@ -475,6 +489,18 @@ func _upkeep(team: int, entry: Dictionary) -> void:
 			starving += 1
 		if ally.weapon_uses >= REARM_AT:
 			worn += 1
+		if not armies.has(ally.owner_peer):
+			var row := PackedInt32Array()
+			row.resize(ARMY_FIELDS)
+			armies[ally.owner_peer] = row
+		var army: PackedInt32Array = armies[ally.owner_peer]
+		army[ARMY_SOLDIERS] += 1
+		army[ARMY_RATIONS + clampi(ally.rations, 0, MAX_RATIONS)] += 1
+		army[ARMY_WEAPON_LEFT] += ally.weapon_left()
+		army[ARMY_WORN] += 1 if ally.weapon_uses >= REARM_AT else 0
+		army[ARMY_BROKEN] += 1 if ally.weapon_broken() else 0
+		armies[ally.owner_peer] = army
+	entry[&"armies"] = armies
 	note(team, &"food", "Rations for soldiers", -fed)
 	note(team, &"equipment", "New weapons for worn ones", -rearmed)
 	if starved > 0:

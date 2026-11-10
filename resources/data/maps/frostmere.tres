@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="MapDef" format=3]
+
+[ext_resource type="Script" path="res://scripts/game/map_def.gd" id="1_map"]
+
+[resource]
+script = ExtResource("1_map")
+id = &"frostmere"
+display_name = "Frostmere"
+description = "A snowbound north of thick pine woods. A land of hamlets — many small villages, few cities: easy to take, hard to feed an army on."
+ground_color = Color(0.7, 0.77, 0.85, 1)
+sky_color = Color(0.74, 0.83, 0.92, 1)
+ambient_color = Color(0.86, 0.92, 1, 1)
+ambient_energy = 0.55
+sun_color = Color(0.95, 0.97, 1, 1)
+sun_energy = 0.85
+fog_color = Color(0.8, 0.86, 0.93, 1)
+fog_density = 0.003
+minimap_color = Color(0.5, 0.57, 0.63, 0.85)
+tree_models = PackedStringArray("res://assets/environment/graveyard/pine.glb", "res://assets/environment/graveyard/pine.glb", "res://assets/environment/graveyard/pine.glb", "res://assets/environment/graveyard/pine_crooked.glb")
+tree_density = 1.15
+tree_scale = Vector2(1, 1.5)
+decor = [["res://assets/environment/graveyard/rocks.glb", 220, 0.8, 1.5], ["res://assets/environment/graveyard/rocks_tall.glb", 80, 0.8, 1.4], ["res://assets/environment/forest/stones.glb", 140, 0.7, 1.3], ["res://assets/environment/graveyard/trunk.glb", 60, 1.0, 1.5]]
+landmarks = &"outcrops"
+graveyard_share = 0.8
+graveyard_ground = Color(0.68, 0.72, 0.77, 1)
+stray_undead = 0.3
+conquest_places = Vector3(0.6, 0.9, 1.7)
+conquest_sizes = Vector3(0.5, 0.35, 0.15)

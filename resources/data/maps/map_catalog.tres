@@ -6,7 +6,10 @@
 [ext_resource type="Resource" path="res://resources/data/maps/crown_ruins.tres" id="4_crown"]
 [ext_resource type="Resource" path="res://resources/data/maps/gravemoor.tres" id="5_gravemoor"]
 [ext_resource type="Resource" path="res://resources/data/maps/sunstone.tres" id="6_sunstone"]
+[ext_resource type="Resource" path="res://resources/data/maps/ashlands.tres" id="7_ashlands"]
+[ext_resource type="Resource" path="res://resources/data/maps/frostmere.tres" id="8_frostmere"]
+[ext_resource type="Resource" path="res://resources/data/maps/goldmead.tres" id="9_goldmead"]
 
 [resource]
 script = ExtResource("1_catalog")
-maps = Array[ExtResource("2_def")]([ExtResource("3_wildlands"), ExtResource("5_gravemoor"), ExtResource("6_sunstone"), ExtResource("4_crown")])
+maps = Array[ExtResource("2_def")]([ExtResource("3_wildlands"), ExtResource("5_gravemoor"), ExtResource("6_sunstone"), ExtResource("7_ashlands"), ExtResource("8_frostmere"), ExtResource("9_goldmead"), ExtResource("4_crown")])

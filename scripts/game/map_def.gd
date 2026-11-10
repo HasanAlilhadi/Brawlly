@@ -54,6 +54,12 @@ extends Resource
 ## Share of the warbands away from graveyards that are undead anyway.
 @export var stray_undead: float = 0.2
 
+@export_group("Conquest")
+## Conquest on this land: how many Cities / Outposts / Villages it has (× ConquestMode's counts) ...
+@export var conquest_places: Vector3 = Vector3.ONE
+## ... and how often a place is small / medium / large (weights; TerritoryNode.Size).
+@export var conquest_sizes: Vector3 = Vector3(0.3, 0.45, 0.25)
+
 @export_group("Objectives")
 ## Designed maps: the Last Stand circles in order (empty = planned from the seed; procedural maps).
 @export var hold_circles: PackedVector3Array = PackedVector3Array()

@@ -31,6 +31,10 @@ Run from the project folder (`G` = the Godot binary). Tests start the game norma
 # Conquest place upgrades: Walls / Workshops / Barracks / Storehouse bought with a place's treasury, three levels,
 # refused without gold or where they don't fit, sent with the places' numbers, kept when the place changes hands
 "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/conquest_upgrades_test.gd
+# Conquest needs, sizes and lands: a broken weapon deals 1 damage, the stock's "armies" row and the HUD's Army row /
+# card (rations, when the first and last starve, weapon life, worn / broken), the place card (store / room, who eats
+# there, what arming the people takes), small / medium / large places, the lands' own mix of places and sizes
+"$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/conquest_needs_test.gd
 # Malakor, the Six-Armed Sovereign: rules the Lair (4.8 m, six arms, clips), his four phases, the red-X arrow rain and
 # dark meteors, Blood Totems at 66% that heal him, the phase-4 life siphon; the four risen champions lead the armies
 "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/malakor_test.gd

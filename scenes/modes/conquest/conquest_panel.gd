@@ -7,6 +7,9 @@ extends VBoxContainer
 ##   comes in and goes out a minute (LogisticsManager "flow": the last minute). Hovering a row (a tap on touch)
 ##   opens a card beside the panel: where it comes from and where it goes (arming people in barracks, rations,
 ##   new weapons, gate repairs, soldiers leaving, lords taking gold…);
+## - your army (the Army row, LogisticsManager "armies"): how long its food lasts with no more coming and how much
+##   of its weapons is left; its card: rations needed a meal and carried, when the first and the last soldier starve,
+##   the battles the weapons still last, how many are worn and how many broken (a broken one deals 1 damage);
 ## - status lines: General, army cap bonus, next meal, and warnings (hungry soldiers, worn weapons, unguarded
 ##   places) in red.
 ## Made by main.gd in Conquest; reads the mode every REFRESH seconds. Sizes from HudStyle.
@@ -18,7 +21,10 @@ const ROWS: Array = [
 	[&"equipment", "Weapons", "sword", "In your places' stores and caravans. Arming people in the barracks, new weapons for worn ones and gate repairs use them."],
 	[&"gold", "Gold", "coin", "In your places' treasuries. A place's lord takes it with F."],
 	[&"people", "People", "user_group", "In your barracks, armed or not. The barracks arm them with weapons from the place's store."],
+	[&"army", "Army", "shield", "Your soldiers. Each eats a ration a meal and carries up to %d; one with none at a meal dies. A weapon lasts %d battles: weaker every %d, then broken — a soldier with a broken weapon deals 1 damage. Both are refilled near a place you hold or a caravan."],
 ]
+## The row that is about this hero's soldiers, not a stock.
+const ARMY: StringName = &"army"
 const STOCK_KEYS: Dictionary = {&"food": &"food", &"equipment": &"equipment", &"gold": &"gold", &"people": &"barracks"}
 const UP := Color(0.6, 1.0, 0.55)
 const DOWN := Color(1.0, 0.55, 0.45)
@@ -208,6 +214,9 @@ func _refresh() -> void:
 	visible = not _mode.is_over
 	for key: StringName in _rows:
 		var parts: Dictionary = _rows[key]
+		if key == ARMY:
+			_refresh_army_row(parts, stock)
+			continue
 		var flow := _flow(stock, key)
 		var gain := _sum(flow["in"])
 		var loss := _sum(flow["out"])
@@ -270,23 +279,118 @@ func _refresh_status(stock: Dictionary) -> void:
 	_alerts.visible = not alerts.is_empty()
 
 
+## This hero's soldiers in numbers (LogisticsManager.ARMY_* fields; all 0 with no soldiers or before the first tick).
+func _army(stock: Dictionary) -> PackedInt32Array:
+	var row: Variant = stock.get(&"armies", {}).get(Net.my_id())
+	if row is PackedInt32Array and (row as PackedInt32Array).size() >= LogisticsManager.ARMY_FIELDS:
+		return row
+	var empty := PackedInt32Array()
+	empty.resize(LogisticsManager.ARMY_FIELDS)
+	return empty
+
+
+## With no more food coming: seconds until the first soldiers starve and how many they are, and until the last do.
+## A soldier with r rations eats at the next r meals and dies at the one after.
+func _starve_times(army: PackedInt32Array, meal_in: int) -> Dictionary:
+	var first := -1
+	var last := -1
+	for r in LogisticsManager.MAX_RATIONS + 1:
+		if army[LogisticsManager.ARMY_RATIONS + r] > 0:
+			if first < 0:
+				first = r
+			last = r
+	if first < 0:
+		return {"first": 0, "count": 0, "last": 0}
+	return {"first": meal_in + first * LogisticsManager.MEAL_SECONDS,
+			"count": army[LogisticsManager.ARMY_RATIONS + first],
+			"last": meal_in + last * LogisticsManager.MEAL_SECONDS}
+
+
+static func _clock(seconds: int) -> String:
+	return "%d:%02d" % [seconds / 60, seconds % 60]
+
+
+func _refresh_army_row(parts: Dictionary, stock: Dictionary) -> void:
+	var army := _army(stock)
+	var soldiers := army[LogisticsManager.ARMY_SOLDIERS]
+	(parts.total as Label).text = "Army  %d" % soldiers
+	var flow_label := parts.flow as Label
+	if soldiers <= 0:
+		flow_label.text = "no soldiers"
+		flow_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.7))
+		return
+	var times := _starve_times(army, int(stock.get(&"meal_in", 0)))
+	var weapons := roundi(100.0 * army[LogisticsManager.ARMY_WEAPON_LEFT] / (soldiers * Ally.WEAPON_LIFE))
+	flow_label.text = "food %s · weapons %d%%" % [_clock(times.first), weapons]
+	var bad := army[LogisticsManager.ARMY_RATIONS] > 0 or army[LogisticsManager.ARMY_BROKEN] > 0
+	flow_label.add_theme_color_override("font_color", DOWN if bad else UP)
+
+
+## The Army card: what the soldiers need, what they carry and how long that lasts.
+func _refresh_army_detail(parts: Dictionary, stock: Dictionary) -> void:
+	var army := _army(stock)
+	var soldiers := army[LogisticsManager.ARMY_SOLDIERS]
+	var meal_in := int(stock.get(&"meal_in", 0))
+	_detail_title.text = "Your army: %d soldiers" % soldiers
+	_detail_hint.text = String(parts.hint) % [LogisticsManager.MAX_RATIONS, Ally.WEAPON_LIFE, Ally.WEAR_STEP]
+	if soldiers <= 0:
+		_detail_net.text = "Recruit soldiers on the Army tab (T)."
+		_detail_net.add_theme_color_override("font_color", Color.WHITE)
+		return
+	var carried := 0
+	for r in LogisticsManager.MAX_RATIONS + 1:
+		carried += r * army[LogisticsManager.ARMY_RATIONS + r]
+	var times := _starve_times(army, meal_in)
+	var hungry := army[LogisticsManager.ARMY_RATIONS]
+	_detail_line("Food", "", Color.WHITE, HudStyle.FONT_BODY)
+	_detail_line("   Needed a meal", "%d rations" % soldiers, Color.WHITE, HudStyle.FONT_SMALL)
+	_detail_line("   Next meal in", _clock(meal_in), Color.WHITE, HudStyle.FONT_SMALL)
+	_detail_line("   Rations carried", "%d / %d" % [carried, soldiers * LogisticsManager.MAX_RATIONS],
+			UP if carried >= soldiers else DOWN, HudStyle.FONT_SMALL)
+	_detail_line("   No more food: first die in", "%s (%d)" % [_clock(times.first), times.count],
+			DOWN if hungry > 0 else Color.WHITE, HudStyle.FONT_SMALL)
+	_detail_line("   No more food: all dead in", _clock(times.last), Color.WHITE, HudStyle.FONT_SMALL)
+	var left := army[LogisticsManager.ARMY_WEAPON_LEFT]
+	var worn := army[LogisticsManager.ARMY_WORN]
+	var broken := army[LogisticsManager.ARMY_BROKEN]
+	_detail_line("Weapons", "", Color.WHITE, HudStyle.FONT_BODY)
+	_detail_line("   Battles left, all weapons", "%d / %d" % [left, soldiers * Ally.WEAPON_LIFE], Color.WHITE, HudStyle.FONT_SMALL)
+	_detail_line("   Average a soldier", "%.1f of %d" % [float(left) / soldiers, Ally.WEAPON_LIFE], Color.WHITE, HudStyle.FONT_SMALL)
+	_detail_line("   Worn (weaker)", str(worn - broken), DOWN if worn > broken else Color.WHITE, HudStyle.FONT_SMALL)
+	_detail_line("   Broken (1 damage)", str(broken), DOWN if broken > 0 else Color.WHITE, HudStyle.FONT_SMALL)
+	_detail_line("   New weapons needed", str(worn), DOWN if worn > 0 else Color.WHITE, HudStyle.FONT_SMALL)
+	if hungry > 0:
+		_detail_net.text = "%d starve at the next meal" % hungry
+		_detail_net.add_theme_color_override("font_color", DOWN)
+	elif broken > 0:
+		_detail_net.text = "%d useless: weapon broken" % broken
+		_detail_net.add_theme_color_override("font_color", DOWN)
+	else:
+		_detail_net.text = "Fed for %s" % _clock(times.first)
+		_detail_net.add_theme_color_override("font_color", UP)
+
+
 func _refresh_detail(stock: Dictionary) -> void:
 	if not _rows.has(_hovered):
 		_detail.visible = false
 		return
 	var parts: Dictionary = _rows[_hovered]
-	var flow := _flow(stock, _hovered)
-	_detail_title.text = "%s: %d" % [parts.name, int(stock.get(STOCK_KEYS[_hovered], 0))]
-	_detail_hint.text = parts.hint
 	for child in _detail_lines.get_children():
+		_detail_lines.remove_child(child)  # (out now: a freed-later line still counts in the card's size)
 		child.queue_free()
-	_detail_line("Comes in (a minute)", "", Color.WHITE, HudStyle.FONT_BODY)
-	_detail_side(flow["in"], "+", UP)
-	_detail_line("Goes out (a minute)", "", Color.WHITE, HudStyle.FONT_BODY)
-	_detail_side(flow["out"], "−", DOWN)
-	var net := _sum(flow["in"]) - _sum(flow["out"])
-	_detail_net.text = "Net: %s%d a minute" % ["+" if net >= 0 else "−", absi(net)]
-	_detail_net.add_theme_color_override("font_color", UP if net >= 0 else DOWN)
+	if _hovered == ARMY:
+		_refresh_army_detail(parts, stock)
+	else:
+		var flow := _flow(stock, _hovered)
+		_detail_title.text = "%s: %d" % [parts.name, int(stock.get(STOCK_KEYS[_hovered], 0))]
+		_detail_hint.text = parts.hint
+		_detail_line("Comes in (a minute)", "", Color.WHITE, HudStyle.FONT_BODY)
+		_detail_side(flow["in"], "+", UP)
+		_detail_line("Goes out (a minute)", "", Color.WHITE, HudStyle.FONT_BODY)
+		_detail_side(flow["out"], "−", DOWN)
+		var net := _sum(flow["in"]) - _sum(flow["out"])
+		_detail_net.text = "Net: %s%d a minute" % ["+" if net >= 0 else "−", absi(net)]
+		_detail_net.add_theme_color_override("font_color", UP if net >= 0 else DOWN)
 	# Beside the panel, level with the row, kept on screen.
 	var row := parts.row as Control
 	var at := Vector2(get_global_rect().end.x + HudStyle.GAP, row.global_position.y)

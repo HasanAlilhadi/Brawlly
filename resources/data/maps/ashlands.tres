@@ -1,0 +1,31 @@
+[gd_resource type="Resource" script_class="MapDef" format=3]
+
+[ext_resource type="Script" path="res://scripts/game/map_def.gd" id="1_map"]
+
+[resource]
+script = ExtResource("1_map")
+id = &"ashlands"
+display_name = "Ashen Wastes"
+description = "Scorched earth under a red sky: dead trees, black rock and few villages left. A land of forts — many outposts, big strongholds, and the dead walk everywhere."
+ground_color = Color(0.29, 0.26, 0.25, 1)
+sky_color = Color(0.4, 0.22, 0.18, 1)
+ambient_color = Color(1, 0.8, 0.72, 1)
+ambient_energy = 0.6
+sun_color = Color(1, 0.62, 0.44, 1)
+sun_energy = 1.0
+fog_color = Color(0.42, 0.24, 0.2, 1)
+fog_density = 0.004
+minimap_color = Color(0.2, 0.15, 0.14, 0.85)
+tree_models = PackedStringArray("res://assets/environment/graveyard/pine_fall.glb", "res://assets/environment/graveyard/pine_fall.glb", "res://assets/environment/graveyard/pine_fall_crooked.glb", "res://assets/environment/graveyard/pine_crooked.glb")
+tree_density = 0.45
+tree_scale = Vector2(1, 1.5)
+border_model = "res://assets/environment/graveyard/iron_fence_border.glb"
+border_step = 1.0
+border_offset = 0.325
+decor = [["res://assets/environment/graveyard/rocks.glb", 260, 0.8, 1.6], ["res://assets/environment/graveyard/rocks_tall.glb", 110, 0.8, 1.5], ["res://assets/environment/graveyard/debris.glb", 170, 0.9, 1.5], ["res://assets/environment/graveyard/debris_wood.glb", 80, 0.9, 1.4], ["res://assets/environment/graveyard/trunk.glb", 80, 1.0, 1.6], ["res://assets/environment/graveyard/trunk_long.glb", 45, 1.0, 1.5], ["res://assets/environment/dungeon/stones.glb", 150, 0.6, 1.2]]
+landmarks = &"outcrops"
+graveyard_share = 1.6
+graveyard_ground = Color(0.2, 0.18, 0.18, 1)
+stray_undead = 0.6
+conquest_places = Vector3(0.8, 1.6, 0.6)
+conquest_sizes = Vector3(0.2, 0.4, 0.4)

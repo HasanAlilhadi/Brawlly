@@ -55,6 +55,19 @@ const INFO: Dictionary = {
 			"boss": "malakor", "strength": 1.5},
 }
 const SPECIALTY_NAMES: PackedStringArray = ["", "Iron City", "Lumber City", "Farm City"]
+## Every place has its own size (`place_size`, from the match seed: ConquestMode._plan_sizes; Citadels and the Lair are
+## always MEDIUM): a small hamlet is quick to take and gives little, a large one is a fortress worth holding.
+## SIZE_REACH: its ring, walls and supply range × this. SIZE_AMOUNT: everything counted × this — garrison, gate
+## health, capture time, production, store room, barracks (people and room), army cap, upgrade prices.
+enum Size { SMALL, MEDIUM, LARGE }
+const SIZE_NAMES: PackedStringArray = ["Small", "", "Large"]
+const SIZE_REACH: Array[float] = [0.8, 1.0, 1.3]
+const SIZE_AMOUNT: Array[float] = [0.7, 1.0, 1.45]
+## INFO keys that grow with the ring / with the amounts (whole numbers stay whole).
+const REACH_KEYS: Array[String] = ["radius", "supply", "walls"]
+const AMOUNT_KEYS: Array[String] = ["guards", "capture", "gate", "cap", "pool", "pool_cap"]
+## INFO rows by kind and size (made once: `info()`).
+static var _sized: Dictionary = {}
 ## Per zone (0 = the Lair ... 6 = the corners): gate health share (0 = no walls, houses instead), production
 ## share, demon strength, garrison size share, capture time share, extra wave rows for the garrison.
 const ZONE_WALLS: Array[float] = [1.0, 0.0, 0.35, 0.55, 0.75, 1.0, 1.3]
@@ -181,6 +194,8 @@ var treasury: int = 0
 var lord: int = 0
 ## Its place in ConquestMode.territories (set when built).
 var index: int = -1
+## Small / medium / large (Size; every peer, before the tree, from the plan): see SIZE_REACH / SIZE_AMOUNT.
+var place_size: int = Size.MEDIUM
 ## Couriers at home / in all (server; peers get them with the logistics tick), and where its goods go.
 var couriers: int = 1
 var courier_total: int = 1
@@ -209,8 +224,26 @@ var _flag_material: StandardMaterial3D
 var _label: Label3D
 
 
+## Its kind's row, sized (`place_size`): read every number of a place from here, never from INFO.
 func info() -> Dictionary:
-	return INFO[kind]
+	if place_size == Size.MEDIUM:
+		return INFO[kind]
+	var key := kind * 8 + place_size
+	if not _sized.has(key):
+		var row: Dictionary = INFO[kind].duplicate()
+		for name: String in REACH_KEYS:
+			if row.has(name):
+				row[name] = roundi(row[name] * SIZE_REACH[place_size]) if row[name] is int else row[name] * SIZE_REACH[place_size]
+		for name: String in AMOUNT_KEYS:
+			if row.has(name):
+				row[name] = roundi(row[name] * SIZE_AMOUNT[place_size]) if row[name] is int else row[name] * SIZE_AMOUNT[place_size]
+		_sized[key] = row
+	return _sized[key]
+
+
+## "Large Iron City", "Small Village", "Outpost".
+func full_name() -> String:
+	return (SIZE_NAMES[place_size] + " " + kind_name()).strip_edges()
 
 
 func radius() -> float:
@@ -228,7 +261,7 @@ func output() -> Dictionary:
 			&"gold": int(info().get("gold", 0))}
 	for key in SPECIALTY_OUTPUT[specialty]:
 		made[StringName(key)] += int(SPECIALTY_OUTPUT[specialty][key])
-	var boost := 1.0 + WORKSHOP_BONUS * upgrades[UP_WORKSHOPS]
+	var boost := (1.0 + WORKSHOP_BONUS * upgrades[UP_WORKSHOPS]) * SIZE_AMOUNT[place_size]
 	for key in made:
 		made[key] = roundi(made[key] * ZONE_OUTPUT[zone] * boost)
 	return made
@@ -250,12 +283,12 @@ func can_upgrade(i: int) -> bool:
 ## Gold (from this place's treasury) for the next level of upgrade `i`; bigger places cost more.
 func upgrade_cost(i: int) -> int:
 	var level := clampi(upgrades[i], 0, UPGRADE_MAX - 1)
-	return roundi(UPGRADE_COST[level] * UPGRADE_KIND_COST[kind])
+	return roundi(UPGRADE_COST[level] * UPGRADE_KIND_COST[kind] * SIZE_AMOUNT[place_size])
 
 
 ## Most food / weapons its store holds (Storehouse).
 func store_cap() -> int:
-	return roundi(STORE_CAP * (1.0 + STOREHOUSE_BONUS * upgrades[UP_STOREHOUSE]))
+	return roundi(STORE_CAP * SIZE_AMOUNT[place_size] * (1.0 + STOREHOUSE_BONUS * upgrades[UP_STOREHOUSE]))
 
 
 ## People armed with the trained class a logistics tick (Barracks).
@@ -839,7 +872,7 @@ func color() -> Color:
 
 
 func _label_text() -> String:
-	var text := "%s\n%s · Zone %d" % [display_name, kind_name(), zone]
+	var text := "%s\n%s · Zone %d" % [display_name, full_name(), zone]
 	if capturer == DEMONS and progress > 0.0:
 		text += "  DEMONS %d%%" % roundi(progress * 100.0)
 	elif capturer >= 0 and progress > 0.0:

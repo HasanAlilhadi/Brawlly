@@ -90,6 +90,10 @@ portrait on phones. There is no single player: host a game (alone is fine) or jo
   - **Wildlands** — a new procedural forest every match: meadows, mossy rock outcrops, graveyards.
   - **Gravemoor** — a misty moor at dusk: pine woods and many fenced graveyards, so the undead rule here.
   - **Sunstone Ruins** — sun-baked sand around broken courtyards (walls, columns, statues) and colonnades: orc country.
+  - **Ashen Wastes** — scorched earth under a red sky: dead trees, black rock, the dead everywhere. In Conquest: many
+    outposts and big strongholds, few villages.
+  - **Frostmere** — a snowbound north of thick pine woods. In Conquest: many small villages, few cities.
+  - **Goldmead** — wide golden farmland with hardly a tree. In Conquest: many large cities and villages.
   - **Crown Ruins** — a designed arena: the hill in a ruined amphitheater, a ring of walls with eight doors, bases with
     two exits, haunted corner shrines with Rare chests, groves to flank through (rebuild with
     `tools/build_map_crown_ruins.gd`, or edit `scenes/maps/crown_ruins.tscn` in the editor). Co-op modes start at

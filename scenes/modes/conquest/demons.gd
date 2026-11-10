@@ -129,19 +129,26 @@ func _roster(row: Array) -> EnemyRoster:
 	return roster
 
 
-## `at`, or the nearest spot outward along the diagonal clear of every place's ring.
+## `at`, or the nearest spot clear of every place's ring (places come in sizes): first around the middle at the
+## same distance — it stays in its zone —, then outward along the diagonal.
 func _clear_spot(at: Vector3) -> Vector3:
+	for turn: float in [0.0, 0.2, -0.2, 0.4, -0.4, 0.6, -0.6]:
+		var spot := at.rotated(Vector3.UP, turn)
+		if _is_clear(spot):
+			return spot
 	var spot := at
 	for step in 12:
-		var crowded := false
-		for territory in mode.territories:
-			if Warband._flat(spot, territory.position) < territory.radius() + 6.0:
-				crowded = true
-				break
-		if not crowded:
+		if _is_clear(spot):
 			return spot
 		spot += at.normalized() * 4.0
 	return spot
+
+
+func _is_clear(spot: Vector3) -> bool:
+	for territory in mode.territories:
+		if Warband._flat(spot, territory.position) < territory.radius() + 6.0:
+			return false
+	return true
 
 
 ## The living lieutenants.
@@ -257,7 +264,7 @@ func _hammer(unit: Unit, place: TerritoryNode) -> float:
 		return 0.0
 	if unit is Ally:
 		var ally := unit as Ally
-		var blow := ally.melee_damage * ally.upkeep_damage * SOLDIER_GATE_BLOW
+		var blow := ally.hit_damage(ally.melee_damage * SOLDIER_GATE_BLOW)
 		var before := gate.health
 		gate.take_damage(blow, ally)
 		if before > gate.health:

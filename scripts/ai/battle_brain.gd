@@ -201,7 +201,8 @@ func _add(job: BrainJob, unit: Unit, kind: int) -> void:
 
 
 static func _id_of(node: Variant) -> int:
-	return (node as Object).get_instance_id() if node is Object and is_instance_valid(node) else 0
+	# (validity first: `is` on a freed instance is an error)
+	return (node as Object).get_instance_id() if typeof(node) == TYPE_OBJECT and is_instance_valid(node) else 0
 
 
 ## The finished job's picks → orders on the units (main thread).

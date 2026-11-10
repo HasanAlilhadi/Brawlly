@@ -177,6 +177,23 @@ func _process(delta: float) -> void:
 			_shot("dev_panel")
 			main.dev_panel.toggle()
 			main.camera.zoom = 0.6
+			# The Army row's card: what the soldiers need and how long it lasts.
+			var soldiers := player.soldiers()
+			if soldiers.size() >= 2:
+				(soldiers[0] as Ally).rations = 0
+				(soldiers[1] as Ally).weapon_uses = Ally.WEAPON_LIFE
+			mode.logistics.tick()
+			var panel := main.find_child("ConquestPanel", true, false) as ConquestPanel
+			if panel:
+				panel._hover(ConquestPanel.ARMY)
+			_step = 721
+		721:
+			if t < 22.25:
+				return
+			_shot("army_card")
+			var panel := main.find_child("ConquestPanel", true, false) as ConquestPanel
+			if panel:
+				panel._hover(&"")
 			_step = 8
 		8:
 			if t < 22.5:
