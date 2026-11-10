@@ -16,7 +16,8 @@ const HITCH_BUDGET_MS := 45.0
 const HORDE := 100
 const SOLDIERS := 30
 ## The host's frame in the middle of the horde fight, headless: 37.5 ms before the soldier-AI fixes and the
-## adaptive level of detail (GameConfig.overloaded), ~20 after.
+## adaptive level of detail (GameConfig.overloaded), ~20 after, ~15 with the commanders' brain (BattleBrain: the
+## picks on a worker thread). --soldiers=150: 38 → ~23.
 const HORDE_BUDGET_MS := 26.0
 const HORDE_HITCH_MS := 100.0
 const HORDE_TYPES: Array[String] = ["orc_grunt", "skeleton_warrior", "zombie", "orc_thrower", "skeleton_archer", "orc_brute",

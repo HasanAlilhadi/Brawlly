@@ -77,6 +77,10 @@ func _should_shut() -> bool:
 ## keep it shut — the holder's soldiers must be able to get out and fight them.
 func _friend_waiting() -> bool:
 	var infested := territory.state == TerritoryNode.State.INFESTED
+	var brain := BattleBrain.current
+	if brain and brain.has_census():  # the commanders' census: no walk over every unit for every gate
+		return brain.monsters_near(global_position, OPEN_RANGE) if infested \
+				else brain.friends_near(global_position, OPEN_RANGE, territory.owner_team)
 	for node in get_tree().get_nodes_in_group(&"active_enemies" if infested else &"player_units"):
 		var unit := node as Node3D
 		if GameConfig.is_gone(unit) or (not infested and unit.get("team_id") != territory.owner_team):

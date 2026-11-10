@@ -286,7 +286,7 @@ by touch index so the joystick and buttons work together with multi-touch.
   left leads (`_check`, server, every second; also `_net_squads` to every peer). The M map draws them as shields at
   their leader (count inside, yours outlined, a dashed line to the goal) with their own card. Held places raise every faction hero's army cap (`INFO.cap`, added to
   the replicated `follower_cap` as a change only, ≤ `CAP_BONUS_MAX` 100: max army 150 with Command — measured headless,
-  150 soldiers in a 100-monster fight cost the host ~41 ms a frame against ~20 with 30) and score points (the Lair 25 a tick). **Ranks**
+  150 soldiers in a 100-monster fight cost the host ~23 ms a frame against ~15 with 30, since the commanders' brain) and score points (the Lair 25 a tick). **Ranks**
   (`Ally.progression`, every mode): `Unit.take_damage` calls `attacker.credit_kill()` on a killing blow;
   `RANK_KILLS` 2 / 5 / 10 / 20 → ranks I–IV (`RANK_NAMES`), each +`RANK_BONUS` 15% health and damage
   (`refresh_army_bonus`); `rank` is in ally.tscn's Sync (badge Label3D + sparkle). **Siege engines** (`SiegeEngine`,
@@ -600,20 +600,52 @@ by touch index so the joystick and buttons work together with multi-touch.
   Necromancer 90, bolt 12; Vampire Lord 1400/30; Orc Warlord 1800/36.
   spear 10; giant 500/26.
 - Use `GameConfig.is_gone(node)` for target checks (handles freed nodes).
+- **Commanders think, units carry out** (`BattleBrain`, scripts/ai/battle_brain.gd, made by main.gd, server only;
+  test `tests/battle_brain_test.gd`): no soldier or monster scans the battlefield for itself. Every `CYCLE_FRAMES`
+  (10) physics frames the brain takes a snapshot of every unit awake (groups `player_units` + `active_enemies`, plain
+  numbers), a **worker thread** (`BrainJob.run`, scripts/ai/brain_job.gd: never touches a node, the tree or physics)
+  works out everybody's picks on a per-team grid, and the main thread hands them out as instance ids on the unit:
+  `Unit.brain_best` (the foe to go for), `brain_alt` (a shooter's second choice), `brain_near` (the nearest foe),
+  `brain_patient` (a healer's), `brain_cycle`. One pass per army, so its swordsmen spread over the foes
+  (`CROWD_PENALTY`), a foe hitting the hero comes first (`DEFEND_BONUS` / `GUARD_BONUS`), shooters take the wounded.
+  A unit only **checks** the order (`Unit.ordered_foe(id, range, origin)`: alive, hostile, in reach) and carries it
+  out: `Ally._best_enemy(origin, range, own_range)` says what it needs (`scan_origin` / `scan_range` / `scan_own`,
+  read by the next snapshot) and returns the checked pick; `Ally._keep_away` / `_find_patient` and `Enemy._think`
+  (`brain_near`, `brain_best` for `prefers_weak`, `spot_range()`) the same. What a unit still does itself is small
+  and local: the gate of a walled place it is sent at (`breach_point`), a line-of-fire ray for its pick, stepping
+  around what is in the way (three tries, below). Orders that can't wait go around the brain: a hit
+  (`Enemy.provoke`), a band's alert, the hero's KILL target. The thread gets `WAIT_FRAMES` (4), then the main
+  thread waits for it (bounded order age, same in fast tests); `think_now()` runs a cycle at once (tests);
+  `include(unit)` adds a thinker outside the two groups. **Census**: the last finished snapshot also answers "who
+  stands near this point" on the main thread (`has_census()`, `factions_near`, `monsters_near`, `friends_near`,
+  `nearest_foe_of`): `TerritoryNode._ring_census` / `_demons_near` / `_guards_needed` (and `_update_capture` only
+  every `CAPTURE_STEP` 0.2 s), `TerritoryGate._friend_waiting` and `Animal._nearest_threat` ask it instead of each
+  walking over every unit (that cost grew with places held × army sizes); with no fresh census they look for
+  themselves. **New AI that needs "who is near" asks the brain** (a `brain_*` order or a census question) — never
+  a loop over a unit group per unit per frame. Measured (`tests/conquest_perf_test.gd`, 100 monsters on the hero,
+  headless): 30 soldiers 17.5 → ~15 ms a frame, 150 soldiers 38 → ~23 ms (the scans were ~12 ms of it).
 - AI targeting is sticky: pick targets with `Unit.choose_target(current, candidate, keep_range)` (keeps the current
   one for `TARGET_LOCK_TIME` and switches only to a much closer one). `Enemy.provoke(attacker, direct)`: squad alerts
   never retarget an orc that is already fighting; only a direct hit from a much closer attacker does.
 - AI movement goes through `Unit.engage(target)` (spreads attackers around the target) and `Unit.steer(dir)`
   (avoids trees/houses with shape casts sized to the unit's `radius`, sidesteps when stuck, + separation between
-  same-side units; keeps going around the same side up to 90° before switching, `STEER_ANGLES`). Use these for new AI.
+  same-side units). **Three tries**: straight ahead, and when that is blocked three other ways, never more
+  (`STEER_TRIES`: a little to the side it last went, a little to the other, square to that side; already going
+  around something: a bit less than its turn, the same, a bit more — `STEER_STEP` up to `STEER_MAX` — so it follows
+  a wall to its end and comes back around it; wedged: `UNSTICK_TRIES`); none free → the freest. A unit standing
+  where it wants to be (`Unit.settle(delta)`: in reach of its target, at its slot) only steps away from neighbours
+  that are too close (looked at every `SETTLE_INTERVAL`), else stands still; AI units move with
+  `CROWD_MAX_SLIDES` 2 collision passes (heroes 6). Use these for new AI.
   `Unit.chase_avoid_mask`: extra layers `engage()` steers around while still chasing (soldiers: enemies, so they go
   around orcs in the way). Soldiers commit to their target (`Ally._commit_target`: no switching to a closer enemy
   until it's dead or out of range) — orcs keep the sticky `choose_target` rule.
 - Soldiers follow in a compact spiral formation (`Ally._update_slot`), at most `Player.follower_cap` (30–50) per player;
   archers stand in rows of five behind the hero (against its walking direction, `_heading`).
-- **Soldier AI** (`scenes/characters/ally.gd`, test `tests/ally_test.gd`): targets come from `Ally._best_enemy()` (teamwork:
+- **Soldier AI** (`scenes/characters/ally.gd`, test `tests/ally_test.gd`): targets come from the commanders' brain
+  (above) through `Ally._best_enemy()` (teamwork, in `BrainJob._pick`:
   enemies whose `target` is the hero count `DEFEND_BONUS` m closer, a squadmate `GUARD_BONUS`; melee soldiers add
-  `CROWD_PENALTY` per squadmate on the same enemy so they spread; archers prefer the wounded and a clear line);
+  `CROWD_PENALTY` per squadmate on the same enemy so they spread; archers prefer the wounded, and take the second
+  choice when their own ray finds the first one's line blocked);
   melee soldiers commit (`_commit_target`) but switch to an enemy hitting the hero / a squadmate. Archers shoot from
   `archer_range()` = `ARCHER_RANGE_SHARE` (half) × their hero's `aim_range`, look out from the hero, only with a clear
   line of fire (`_clear_shot`; otherwise they walk around what blocks it) and step back from an enemy within
@@ -634,21 +666,22 @@ by touch index so the joystick and buttons work together with multi-touch.
   `LOD_CALM_NEAR` 2 frames when calm, `LOD_CALM_FAR` 4 when calm and beyond `Enemy.LOD_FAR` of every hero,
   `LOD_BUSY_FAR` 2 when fighting far away, every frame when fighting near a hero or using an ability. Measured by
   `tests/conquest_perf_test.gd` (the hero walks to the Lair: the host's frame at the gate 13.9 → ~7 ms, worst frame on
-  the way 64 → 16 ms; then 100 monsters on the hero and 30 soldiers: 37.5 → ~20 ms; `--probe` / `--kinds=a,b
+  the way 64 → 16 ms; then 100 monsters on the hero and 30 soldiers: 37.5 → ~20 → ~15 ms with the commanders' brain; `--probe` / `--kinds=a,b
   --window=s` print what each kind of node costs). In a big fight **`GameConfig.overloaded`** (main.gd feeds the
   physics tick time to `update_load`: on above `LOAD_HIGH_MS`, off below `LOAD_LOW_MS`) makes fighting enemies and
   soldiers think every other frame and shrinks the animation range. `physics/common/max_physics_steps_per_frame` = 2
   (project setting): a heavy tick slows the game a little instead of running up to 8 catch-up ticks a frame (that was
   7 fps in a horde, now ~25). **Animation level of detail** (`AnimationLod`, scripts/components/, made by main.gd,
   `focus` = what the camera follows): beyond `near_range` 30 m (`overloaded_range` 12 m) a character's AnimationPlayer
-  goes to manual and is advanced every `SLOW_EVERY` frames. Soldier AI: `_best_enemy` counts the crowd once and casts
-  a line only for a winner, archers re-check their line of fire / step-back every `SHOT_CHECK_FRAMES`, the hero shares
-  one list of followers / their slots (`follower_index`), crowd counts (`crowd_on`, `crowd_moved`) and nearby threats
-  (`threats()`: `_best_threat`) per `FOLLOWERS_CACHE_FRAMES` (physics frames, game time). Hit splashes: one per unit per `Unit.HURT_FX_GAP`, none beyond `HitFx.FX_RANGE` of the
+  goes to manual and is advanced every `SLOW_EVERY` frames. Soldier AI: who to fight comes from the commanders'
+  brain (a worker thread, above), archers re-check their line of fire / step-back every `SHOT_CHECK_FRAMES`, the hero
+  shares one list of followers / their slots (`follower_index`) per `FOLLOWERS_CACHE_FRAMES` (physics frames, game
+  time). Hit splashes: one per unit per `Unit.HURT_FX_GAP`, none beyond `HitFx.FX_RANGE` of the
   camera (`near_view`). A unit slower than `Unit.STILL_SPEED` doesn't move that frame (crowd shoves).
 - **Dev panel** (`DevPanel`, scenes/ui/dev_panel.gd; the HUD's DEV button / F3, action `dev_panel`): frame time
   (worst of the last seconds), monsters awake, bands awake, draw calls, and in Conquest where you are (zone, the
-  nearest place's holder / garrison awake or asleep / gate / store / training), the demons (campaigns, rally) and the
+  nearest place's holder / garrison awake or asleep / gate / store / training), the commanders' brain (units in the
+  snapshot, how many take orders, the worker thread's ms and the main thread's share), the demons (campaigns, rally) and the
   next supply tick; host tools: god mode, +1000 coins, kill monsters near, go to the place picked on the map, AI and
   animation level of detail on / off. Members that are provoked or walking back (`Enemy.is_busy()`) stay awake. Damage
   calls `Unit._on_damaged(attacker)`; enemies forward it to `Warband.alert(attacker)`, which provokes the whole band

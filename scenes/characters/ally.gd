@@ -7,8 +7,11 @@ extends Unit
 ## `archer_range()` (half their hero's bow range) with a clear line of fire; wizard — magic bolts from a little
 ## closer; healer — no attack, heals the most wounded friend near (`_heal_move`). The three ranged kinds step
 ## back from enemies that get close and stand in rows behind the hero (`is_ranged()`).
-## Teamwork (`_best_enemy`): enemies hitting the hero, then the soldiers, come first; melee soldiers spread
-## over the enemies instead of piling on one; archers focus the wounded. Following: when a wall or a building
+## **A soldier carries out orders, it doesn't look around for itself**: who to fight comes from its commander
+## (`BattleBrain`, one pass for the whole army on a worker thread — `_best_enemy` only says what it needs and checks
+## the pick): enemies hitting the hero, then the soldiers, come first; melee soldiers spread over the enemies
+## instead of piling on one; archers focus the wounded. So do a healer's patient and who a shooter steps back from.
+## Following: when a wall or a building
 ## cuts a soldier off from its spot, it walks the hero's recent path (`Player.trail`, `_trail_point`).
 ## The player's army order (Player.army_order) changes where the formation stands: around the player
 ## (FOLLOW), or around Player.army_point, where they fight everything nearby (CHARGE) or guard it (HOLD);
@@ -19,7 +22,6 @@ extends Unit
 ## leader (`squad_leader`, a banner) walks to the squad's goal, the rest follow it and stand around the goal there
 ## (`_think_squad`), guarding it within ConquestSquads.GUARD.
 
-const TARGET_GROUPS: Array[StringName] = [&"active_enemies", &"player_units"]
 const BOW_SCENE := preload("res://assets/items/forest/bow.glb")
 const ORB_SCENE := preload("res://scenes/characters/soldier_orb.tscn")
 const POTION_SCENE := preload("res://assets/items/dungeon/potion.glb")
@@ -155,6 +157,13 @@ var _squad_spot: Vector3 = Vector3.INF
 
 var leader: Player
 var target: Node3D
+## What it asks its commander for (BattleBrain reads these): a foe within `scan_range` of `scan_origin` (INF =
+## where it stands), else within `scan_own` of itself (0 = no second look). Set by `_best_enemy`.
+var scan_origin: Vector3 = Vector3.INF
+var scan_range: float = 0.0
+var scan_own: float = 0.0
+## A pick may be this much farther than asked (it is a few frames old; the hero and the soldier moved on).
+const ORDER_SLACK: float = 2.0
 
 var _think_timer: float = 0.0
 ## Server: the leader's order_serial this soldier has obeyed.
@@ -187,6 +196,7 @@ func _ready() -> void:
 	add_to_group(&"allies")
 	add_to_group(&"player_units")
 	_think_timer = randf() * 0.3
+	scan_range = aggro_range  # (orders from its first moment, before its first think)
 	_base_max_health = max_health * BASE_POWER
 	_base_damage = melee_damage * BASE_POWER
 	_find_leader()
@@ -410,6 +420,8 @@ func _desired_move(delta: float) -> Vector3:
 	if _think_timer <= 0.0 or (is_instance_valid(leader) and leader.order_serial != _order_serial):
 		_think_timer = 0.25 + randf() * 0.1
 		_think()
+		if brain_cycle < 0:
+			_think_timer = NO_ORDERS_WAIT  # just arrived, no orders yet: they come within a brain cycle
 
 	if is_healer() and not GameConfig.is_gone(_patient):
 		return _heal_move(delta)
@@ -420,7 +432,7 @@ func _desired_move(delta: float) -> Vector3:
 	if mustering and is_instance_valid(leader):
 		return _nav_move(leader.global_position, delta, MUSTER_JOIN * 0.5)
 	if squad > 0:
-		return _nav_move(_squad_spot, delta, 0.6) if _squad_spot != Vector3.INF else _separation * 0.5
+		return _nav_move(_squad_spot, delta, 0.6) if _squad_spot != Vector3.INF else settle(delta)
 	var order := _order()
 	if order == Player.Order.MARCH:
 		return _march_move(delta)
@@ -444,7 +456,7 @@ func _desired_move(delta: float) -> Vector3:
 		_match_pace = clampf((leader_speed + dist * 1.2) / maxf(move_speed, 0.1), walk_share, 1.0)
 		return steer(to_slot.normalized(), delta) if dist >= 0.15 else leader.velocity.normalized()
 	if dist < 0.4:
-		return _separation * 0.5
+		return settle(delta)
 	# Run when behind, walk the last bit.
 	return steer(to_slot.normalized() * (1.0 if dist > walk_distance else 0.5), delta)
 
@@ -475,7 +487,7 @@ func _shoot_at(delta: float) -> Vector3:
 	var away := _keep_away_cached()
 	if away != Vector3.ZERO:
 		return steer(away, delta)
-	return _separation * 0.5
+	return settle(delta)
 
 
 ## `_clear_shot(node)`, looked at again every SHOT_CHECK_FRAMES frames (a ray every frame per archer was a big share of a fight).
@@ -497,9 +509,10 @@ func _keep_away_cached() -> Vector3:
 	return _away
 
 
-## Away from the closest enemy within ARCHER_KEEP_AWAY (a little toward the hero), or ZERO.
+## Away from the closest enemy within ARCHER_KEEP_AWAY (a little toward the hero), or ZERO. Who that is comes
+## from its commander (`brain_near`).
 func _keep_away() -> Vector3:
-	var near := find_nearest([&"active_enemies", &"player_units"], ARCHER_KEEP_AWAY)
+	var near := ordered_foe(brain_near, ARCHER_KEEP_AWAY)
 	if near == null:
 		return Vector3.ZERO
 	var away := global_position - near.global_position
@@ -591,7 +604,7 @@ func _heal_move(delta: float) -> Vector3:
 			kills += 1
 			_check_rank()
 	var away := _keep_away_cached()
-	return steer(away, delta) if away != Vector3.ZERO else _separation * 0.5
+	return steer(away, delta) if away != Vector3.ZERO else settle(delta)
 
 
 @rpc("authority", "call_local", "unreliable")
@@ -601,23 +614,14 @@ func _net_heal_fx(path: NodePath) -> void:
 		HitFx.flash(patient.global_position + Vector3(0, 0.9, 0), HitFx.REVIVE_SPARKLE, Color(HEAL_COLOR, 0.9), 1.0, 0.4)
 
 
-## Healer (server, every think): the most wounded friend within HEAL_SIGHT (its hero and squad first), or null.
+## Healer (server, every think): the most wounded friend within HEAL_SIGHT (its hero first), or null — picked by
+## its commander (`brain_patient`, BrainJob._soldier); the healer only checks they are still there.
 func _find_patient() -> Unit:
-	var best: Unit = null
-	var best_share := 0.97
-	for node in get_tree().get_nodes_in_group(&"player_units"):
-		var unit := node as Unit
-		if unit == null or GameConfig.is_gone(unit) or unit.team_id != team_id or unit.max_health <= 0.0:
-			continue
-		if flat_distance_to(unit) > HEAL_SIGHT:
-			continue
-		var share := unit.health / unit.max_health
-		if unit == leader:
-			share -= 0.1  # the hero first
-		if share < best_share:
-			best_share = share
-			best = unit
-	return best
+	var unit := instance_from_id(brain_patient) as Unit if brain_patient != 0 else null
+	if unit == null or GameConfig.is_gone(unit) or unit.team_id != team_id \
+			or flat_distance_to(unit) > HEAL_SIGHT + ORDER_SLACK:
+		return null
+	return unit
 
 
 func _walk_to(point: Vector3, delta: float) -> Vector3:
@@ -640,10 +644,7 @@ func _think() -> void:
 		if walking.length() > 0.8:
 			_heading = _heading.slerp(walking.normalized(), 0.5).normalized()
 	_via = Vector3.INF
-	var before := target
 	_think_orders()
-	if target != before and not is_ranged() and is_instance_valid(leader) and squad == 0:
-		leader.crowd_moved(before, target)
 	if breach_point != Vector3.INF and _nav:
 		_nav.target_position = breach_point
 	if is_healer():
@@ -799,86 +800,30 @@ func _defending(enemy: Node3D) -> bool:
 	return victim == leader or (victim is Ally and (victim as Ally).owner_peer == owner_peer)
 
 
-## Teamwork target choice within `max_range` of `origin`: the closest, but enemies hitting the hero count as
-## DEFEND_BONUS m closer (hitting a squadmate: GUARD_BONUS); melee soldiers add CROWD_PENALTY per squadmate
-## already on it (they spread over the enemies); archers prefer the wounded and a clear line of fire.
-func _best_enemy(origin: Vector3, max_range: float) -> Node3D:
-	# Near its hero (the usual case): pick from the hero's shared list of threats (worked out once for the army).
-	if is_instance_valid(leader) and squad == 0 \
-			and _flat(origin - leader.global_position).length() + max_range < Player.THREAT_RANGE:
-		return _best_threat(origin, max_range)
-	var ranged := is_ranged()
-	# (a hero being swapped for a new weapon is gone for a frame)
-	var crowded := not ranged and is_instance_valid(leader)
-	var range_sq := max_range * max_range
-	var best: Node3D = null
-	var best_score := INF
-	for group in TARGET_GROUPS:
-		for node in get_tree().get_nodes_in_group(group):
-			var enemy := node as Node3D
-			if enemy == null or enemy == self:
-				continue
-			var dx := enemy.global_position.x - origin.x
-			var dz := enemy.global_position.z - origin.z
-			if dx * dx + dz * dz > range_sq:
-				continue  # far: nothing else to look at
-			if GameConfig.is_gone(enemy) or not GameConfig.is_hostile(self, enemy):
-				continue
-			var score := sqrt(dx * dx + dz * dz)
-			if _defending(enemy):
-				score -= DEFEND_BONUS if enemy.get("target") == leader else GUARD_BONUS
-			if enemy == target:
-				score -= 1.0  # no flip-flopping between two close ones
-			if ranged:
-				var hp: Variant = enemy.get("health")
-				var top: Variant = enemy.get("max_health")
-				if hp is float and top is float and top > 0.0:
-					score -= 2.0 * (1.0 - hp / top)
-				if score >= best_score:
-					continue
-				if not _clear_shot(enemy):  # a ray only for one that would win
-					score += BLOCKED_PENALTY
-			elif crowded:
-				# Melee squadmates already on it (counted once for the whole army by the hero; not us).
-				score += CROWD_PENALTY * maxi(leader.crowd_on(enemy) - (1 if enemy == target else 0), 0)
-			if score < best_score:
-				best_score = score
-				best = enemy
-	return best
+## Who to fight within `max_range` of `origin` (else within `own_range` of itself): it tells its commander what it
+## needs (`scan_*`, for the next cycle) and takes the commander's pick (`brain_best`) if that still fits — alive,
+## hostile, in reach. The teamwork is in the pick (BrainJob._pick): the closest, but enemies hitting the hero count
+## as DEFEND_BONUS m closer (hitting a soldier of the army: GUARD_BONUS); melee soldiers add CROWD_PENALTY per
+## comrade already on it (they spread over the enemies); shooters prefer the wounded. A shooter looks along its
+## line of fire itself: blocked, and the commander's second choice is clear → that one.
+func _best_enemy(origin: Vector3, max_range: float, own_range: float = 0.0) -> Node3D:
+	var own := origin.distance_squared_to(global_position) < 0.01
+	scan_origin = Vector3.INF if own else origin
+	scan_range = max_range
+	scan_own = own_range
+	var pick := _ordered_pick(brain_best, origin, max_range, own_range)
+	if pick and brain_alt != 0 and shoots() and not _clear_shot(pick):
+		var other := _ordered_pick(brain_alt, origin, max_range, own_range)
+		if other and _clear_shot(other):
+			return other
+	return pick
 
 
-## `_best_enemy` from the hero's `threats()` rows (same scoring: closest, bonuses, crowd / hurt and line of fire).
-func _best_threat(origin: Vector3, max_range: float) -> Node3D:
-	var ranged := is_ranged()
-	var range_sq := max_range * max_range
-	var best: Node3D = null
-	var best_score := INF
-	for row: Array in leader.threats():
-		var item: Variant = row[0]
-		if not is_instance_valid(item) or item == self:
-			continue  # (freed since the list was made: a typed variable can't even hold it)
-		var enemy := item as Node3D
-		var dx := enemy.global_position.x - origin.x
-		var dz := enemy.global_position.z - origin.z
-		if dx * dx + dz * dz > range_sq:
-			continue
-		var score := sqrt(dx * dx + dz * dz) - float(row[1])
-		if enemy == target:
-			score -= 1.0  # no flip-flopping between two close ones
-		if ranged:
-			score -= 2.0 * float(row[2])
-			if score >= best_score:
-				continue
-			if not _clear_shot(enemy):  # a ray only for one that would win
-				score += BLOCKED_PENALTY
-		else:
-			if score >= best_score:
-				continue
-			score += CROWD_PENALTY * maxi(leader.crowd_on(enemy) - (1 if enemy == target else 0), 0)
-		if score < best_score and not GameConfig.is_gone(enemy):
-			best_score = score
-			best = enemy
-	return best
+func _ordered_pick(id: int, origin: Vector3, max_range: float, own_range: float) -> Node3D:
+	var pick := ordered_foe(id, max_range + ORDER_SLACK, origin)
+	if pick == null and own_range > 0.0:
+		pick = ordered_foe(id, own_range + ORDER_SLACK)
+	return pick
 
 
 ## A new order: drop the current fight and go (KILL: straight for the target).
@@ -951,7 +896,7 @@ func _think_muster() -> void:
 func _nav_move(goal: Vector3, delta: float, arrive: float) -> Vector3:
 	var to_goal := _flat(goal - global_position)
 	if to_goal.length() < arrive:
-		return _separation * 0.5
+		return settle(delta)
 	var step := to_goal
 	if _nav:
 		var next := _flat(_nav.get_next_path_position() - global_position)
@@ -979,9 +924,8 @@ func _think_order(order: int) -> void:
 	_update_slot()
 	var point := leader.army_point
 	var guard := charge_radius if order == Player.Order.CHARGE else hold_radius
-	var candidate := _best_enemy(point, guard)
-	if candidate == null and order == Player.Order.CHARGE:
-		candidate = _best_enemy(global_position, _sight())
+	# (charging soldiers also fight what is near them on the way there)
+	var candidate := _best_enemy(point, guard, _sight() if order == Player.Order.CHARGE else 0.0)
 	target = _commit_target(target if is_instance_valid(target) and target is Unit else null, candidate, guard + 6.0)
 	if target and target.global_position.distance_to(point) > guard + 6.0:
 		target = null  # don't get dragged away from the point

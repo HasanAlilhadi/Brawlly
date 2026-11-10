@@ -208,6 +208,7 @@ bindings change). Bindings are Input Map actions (Project Settings → Input Map
 | Match stats & awards | `scripts/game/match_stats.gd` |
 | Character base (health, melee, animations, weapons in hands) | `scenes/characters/unit.gd` |
 | Player / soldier AI | `scenes/characters/player.gd`, `ally.gd` (stats in `ally.tscn`) |
+| Who fights whom (soldiers' and monsters' targets, picked for everybody on a worker thread) + "who is near" census | `scripts/ai/battle_brain.gd`, `brain_job.gd` |
 | Enemies (composition) | `scenes/characters/enemy.gd` + components in `scripts/enemies/` (movement, attacks, abilities, traits); one scene per type in `scenes/characters/enemies/` |
 | Warbands: marching, formation, alerts, respawns, rout | `scenes/world/warband.gd` |
 | Trees, chests, pickups, arrows | `scenes/world/`, `scenes/items/`, `scenes/combat/` |
@@ -252,6 +253,7 @@ Desktop is always landscape. The phone orientation is set with `tools/set_orient
 ├── scripts/             # .gd files
 │   ├── autoload/        # Singletons (GameManager, AudioManager, SaveManager…)
 │   ├── components/      # Reusable behaviour scripts
+│   ├── ai/              # BattleBrain: the commanders' picks, worked out on a worker thread
 │   └── utils/           # Helpers / static functions
 ├── resources/           # .tres files
 │   ├── themes/          # UI themes

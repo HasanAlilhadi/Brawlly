@@ -20,6 +20,11 @@ Run from the project folder (`G` = the Godot binary). Tests start the game norma
 # and the worst frame stay in budget (--probe / --kinds=a,b --window=s: what each kind of node costs; a window, no
 # --headless: also the renderer's CPU / GPU time)
 "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/conquest_perf_test.gd
+# The commanders' brain (BattleBrain): the picks on a hand-made snapshot (an army spreads over the foes, the foe
+# hitting the hero first, shooters the wounded + a second choice, monsters the nearest / the weakest / the nearest
+# hero for wave monsters, a healer's patient), soldiers and monsters take their targets from its orders and pick no
+# fight with it switched off, a hit still provokes at once; steering: three tries, around a wall, walled in = stays
+"$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/battle_brain_test.gd
 # Conquest gates: a held gate opens for its soldier with demons at it; soldiers ordered into a rival's walled Citadel
 # go to its gate and hit it (no pressing against the wall), and march in once it is down
 "$G" --headless --path . --fixed-fps 60 res://tests/test_runner.tscn -- --test=res://tests/conquest_gates_test.gd

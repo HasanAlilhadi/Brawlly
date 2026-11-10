@@ -15,7 +15,17 @@ const LOOPING_ANIMS: Array[String] = ["idle", "walk", "sprint"]
 ## Directions tried (radians from the desired one, + = the side we're already going around) when the way
 ## ahead is blocked. Our own side is tried up to 90° before switching sides, so a unit walks along a wide
 ## obstacle (a wall of orcs, a house) instead of flip-flopping in front of it.
-const STEER_ANGLES: Array[float] = [0.0, 0.4, -0.4, 0.8, -0.8, 1.2, 1.6, -1.2, -1.6, 2.1, -2.1, 2.6, -2.6]
+## Steering: straight ahead first; blocked (a tree, a wall, a soldier in the way) → three other ways and no more
+## (a unit boxed in used to probe thirteen directions every look, for nothing); none free → the freest of the four.
+## The first time: these (× the side it last went around: a little to that side, a little to the other, square to
+## that side). Already going around something: a bit less than the turn it is on, the same, a bit more
+## (STEER_STEP, up to STEER_MAX) — it follows a wall to its end and comes back around it.
+const STEER_TRIES: Array[float] = [0.7, -0.7, 1.6]
+const STEER_STEP: float = 0.45
+const STEER_MAX: float = 2.8
+## Wedged for a few checks (`_check_stuck`): it changes side and takes one of these three (square, square the
+## other way, back and around) for a moment.
+const UNSTICK_TRIES: Array[float] = [1.6, -1.6, 2.4]
 const STEER_INTERVAL: float = 0.15
 ## Target stickiness: after picking a target, keep it at least this long, and only switch to one that
 ## is much closer (at most this fraction of the current distance). Stops AI flip-flopping.
@@ -171,8 +181,25 @@ var _knockback: Vector3 = Vector3.ZERO
 ## Conquest (ConquestDemons): what it wants lies behind a shut gate, so it walks to this spot in front of the gate
 ## and hits the gate there (INF = none). Set by the server for monsters and soldiers alike.
 var breach_point: Vector3 = Vector3.INF
+## Orders from its commander (server, `BattleBrain`: one mind picks for everybody, off the main thread) as instance
+## ids, 0 = none: the foe to go for, a shooter's second choice, the nearest foe, a healer's patient. `brain_cycle`:
+## the cycle that gave them (-1: none yet). The unit only checks them (`ordered_foe`) and carries them out.
+var brain_best: int = 0
+var brain_alt: int = 0
+var brain_near: int = 0
+var brain_patient: int = 0
+var brain_cycle: int = -1
+## A unit that has no orders yet (just spawned) thinks again this soon (s) instead of a full think later.
+const NO_ORDERS_WAIT: float = 0.05
 ## Slower than this (m/s) a unit doesn't move this frame (a crowd's tiny shoves cost the host a lot of collision work).
 const STILL_SPEED: float = 0.2
+## Collision passes a move may take (CharacterBody3D.max_slides; heroes keep the default 6, Player._ready): in a
+## crowd every pass hits the next body, and a soldier in a fight spent most of its move sliding around its
+## neighbours (62 → 35 us a move in a 250-unit fight).
+const CROWD_MAX_SLIDES: int = 2
+## `settle()`: how often a standing unit looks at its neighbours, and the push below which it doesn't bother.
+const SETTLE_INTERVAL: float = 0.4
+const SETTLE_DEADZONE: float = 0.25
 ## At most one hit splash (sparks, flash, squash) per unit this often (s).
 const HURT_FX_GAP: float = 0.12
 var _last_hurt_fx_ms: int = -100000
@@ -188,6 +215,7 @@ var _steer_timer: float = 0.0
 var _steer_angle: float = 0.0
 var _steer_side: float = 1.0
 var _separation: Vector3 = Vector3.ZERO
+var _settle_timer: float = 0.0
 var _slot_angle: float = 0.0
 var _slot_target: Node3D
 var _probe_shape: SphereShape3D
@@ -210,6 +238,7 @@ func _ready() -> void:
 	health = max_health  # not a hit (`_spawned` is still false: no squash / flash)
 	net_position = global_position
 	motion_mode = CharacterBody3D.MOTION_MODE_FLOATING
+	max_slides = CROWD_MAX_SLIDES
 	anim.speed_scale = anim_speed
 	for anim_name in LOOPING_ANIMS:
 		if anim.has_animation(anim_name):
@@ -911,6 +940,20 @@ func find_nearest(groups: Array[StringName], max_range: float, origin: Vector3 =
 	return best
 
 
+## The foe an order names (`brain_*` id), if it still stands, is still hostile and is within `max_range` of
+## `origin` (INF: of this unit) — else null. Orders are a few frames old: this is the unit's own check.
+func ordered_foe(id: int, max_range: float, origin: Vector3 = Vector3.INF) -> Node3D:
+	if id == 0:
+		return null
+	var foe := instance_from_id(id) as Node3D
+	if foe == null or GameConfig.is_gone(foe) or not GameConfig.is_hostile(self, foe):
+		return null
+	var from := global_position if origin == Vector3.INF else origin
+	var dx := foe.global_position.x - from.x
+	var dz := foe.global_position.z - from.z
+	return foe if dx * dx + dz * dz <= max_range * max_range else null
+
+
 ## AI target choice with stickiness: keeps `current` while it is valid and within `keep_range`, unless
 ## `candidate` is much closer and the lock time is over. Returns the target to use.
 func choose_target(current: Node3D, candidate: Node3D, keep_range: float) -> Node3D:
@@ -972,7 +1015,7 @@ func engage(target: Node3D, delta: float, attack: bool = true) -> Vector3:
 		face_now(to)
 		if attack:
 			melee()
-		return _separation * 0.5
+		return settle(delta)
 	if target != _slot_target:
 		# Pick a spot on the side we're coming from, with some spread.
 		_slot_target = target
@@ -984,6 +1027,20 @@ func engage(target: Node3D, delta: float, attack: bool = true) -> Vector3:
 		desired.y = 0.0
 	# The target itself (e.g. a camp) is not an obstacle; while still chasing, others in the way are.
 	return steer(desired, delta, target, dist > reach + 1.5)
+
+
+## Standing where it wants to be (in reach of its target, at its spot in the formation): a small step away from
+## neighbours that stand too close, looked at every SETTLE_INTERVAL s; nobody too close → it stands still (a still
+## unit does no collision work). The push used to be the one left over from its last walking step, for as long as
+## it stood: a crowd of fighters slid against each other every frame.
+func settle(delta: float) -> Vector3:
+	_settle_timer -= delta
+	if _settle_timer <= 0.0:
+		_settle_timer = SETTLE_INTERVAL + randf() * 0.1
+		_separation = _compute_separation() if separation_strength > 0.0 else Vector3.ZERO
+		if _separation.length() < SETTLE_DEADZONE:
+			_separation = Vector3.ZERO
+	return _separation * 0.5
 
 
 ## Turns a desired direction into one that goes around obstacles, plus separation from
@@ -999,8 +1056,7 @@ func steer(desired: Vector3, delta: float, ignore: Node3D = null, chasing: bool 
 	if _steer_timer <= 0.0:
 		_steer_timer = STEER_INTERVAL + randf() * 0.05
 		_check_stuck(strength)
-		_steer_angle = _pick_steer_angle(want, ignore, 1.2 if _unstick_time > 0.0 else 0.0,
-				chase_avoid_mask if chasing else 0)
+		_steer_angle = _pick_steer_angle(want, ignore, _unstick_time > 0.0, chase_avoid_mask if chasing else 0)
 		_separation = _compute_separation() if separation_strength > 0.0 else Vector3.ZERO
 	var dir := want.rotated(Vector3.UP, _steer_angle) + _separation * separation_strength
 	return dir.normalized() * strength
@@ -1019,10 +1075,12 @@ func _check_stuck(strength: float) -> void:
 		_stuck_checks = 0
 
 
-## Picks the direction closest to `want` whose path is free of trees / houses for `steer_lookahead`.
+## Straight at `want` when the way is free of trees / houses for `steer_lookahead`, else one of three other ways
+## (see STEER_TRIES; `unstick`: UNSTICK_TRIES, no straight) — the first free one, else the freest. At most four
+## casts.
 ## The probe is sized to the unit, so big ones (giants, the Warlord) look for wide enough gaps.
-## `min_angle` > 0 forces a sideways step (used to get unstuck). `extra_mask`: more layers to go around.
-func _pick_steer_angle(want: Vector3, ignore: Node3D, min_angle: float = 0.0, extra_mask: int = 0) -> float:
+## `extra_mask`: more layers to go around.
+func _pick_steer_angle(want: Vector3, ignore: Node3D, unstick: bool = false, extra_mask: int = 0) -> float:
 	if _probe_shape == null:
 		_probe_shape = SphereShape3D.new()
 		_probe_shape.radius = clampf(radius * 0.6, 0.24, 0.5)
@@ -1037,15 +1095,28 @@ func _pick_steer_angle(want: Vector3, ignore: Node3D, min_angle: float = 0.0, ex
 	var space := get_world_3d().direct_space_state
 	var best_angle := 0.0
 	var best_free := -1.0
-	for base_angle in STEER_ANGLES:
-		if absf(base_angle) < min_angle:
-			continue
-		var angle := base_angle * _steer_side
+	if not unstick:
+		query.motion = want * steer_lookahead
+		best_free = space.cast_motion(query)[0]
+		if best_free >= 0.999:
+			return 0.0
+	var tries: Array[float] = []
+	if unstick:
+		for base_angle in UNSTICK_TRIES:
+			tries.append(base_angle * _steer_side)
+	elif absf(_steer_angle) < 0.01:
+		for base_angle in STEER_TRIES:
+			tries.append(base_angle * _steer_side)
+	else:
+		var around := absf(_steer_angle)
+		var side := signf(_steer_angle)
+		tries = [maxf(around - STEER_STEP, 0.3) * side, around * side, minf(around + STEER_STEP, STEER_MAX) * side]
+		best_free = -1.0  # on its way around something: the freest of these three, not back into it
+	for angle in tries:
 		query.motion = want.rotated(Vector3.UP, angle) * steer_lookahead
 		var free: float = space.cast_motion(query)[0]
 		if free >= 0.999:
-			if angle != 0.0:
-				_steer_side = signf(angle)  # keep going around the same side
+			_steer_side = signf(angle)  # keep going around the same side
 			return angle
 		if free > best_free:
 			best_free = free

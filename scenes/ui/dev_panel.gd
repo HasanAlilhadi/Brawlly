@@ -3,8 +3,9 @@ extends PanelContainer
 ## Developer panel (the HUD's DEV button / F3, action `dev_panel`): what the game is doing right now, refreshed
 ## four times a second — frame time (and the worst frame of the last seconds), how many units / monsters are awake,
 ## and, in Conquest, where you are (zone, the nearest place: its holder, garrison, gate) and what the demons are up
-## to (campaigns, the King's rally, raids). On the host (or offline) it also has a few tools: god mode, coins, kill
-## the monsters around you, go to the place selected on the M map, an AI level-of-detail switch.
+## to (campaigns, the King's rally, raids), and what the commanders' mind (BattleBrain) costs. On the host (or
+## offline) it also has a few tools: god mode, coins, kill the monsters around you, go to the place selected on the
+## M map, an AI level-of-detail switch.
 ## Built in code; main.gd makes it in the HUD.
 
 const REFRESH: float = 0.25
@@ -115,6 +116,12 @@ func _update() -> void:
 	lines.append("Draw calls %d · objects drawn %d" % [
 			Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME),
 			Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME)])
+	var brain := _main.get("battle_brain") as BattleBrain if _main else null
+	if brain and multiplayer.is_server():
+		# The commanders' mind: who fights whom, worked out for everybody on a worker thread.
+		lines.append("Commanders: %d units, %d take orders · %.1f ms on a worker thread · %.1f ms here · %d a second" % [
+				brain.last_rows, brain.last_asking, brain.last_thread_ms, brain.last_main_ms,
+				roundi(float(Engine.physics_ticks_per_second) / BattleBrain.CYCLE_FRAMES)])
 	var me := _hero()
 	var mode := _main.get("game_mode") as ConquestMode if _main else null
 	if me and mode:

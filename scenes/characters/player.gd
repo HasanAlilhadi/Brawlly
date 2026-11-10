@@ -209,17 +209,11 @@ const WAVE_PIERCE: int = 3
 @export_range(0.0, 1.0) var crit_chance: float = 0.15
 @export var crit_multiplier: float = 1.8
 
-## `followers()` / `threats()` / `crowd_on()` keep their lists this many physics frames (game time).
+## `followers()` keeps its list (and the formation slots) this many physics frames (game time).
 const FOLLOWERS_CACHE_FRAMES: int = 15
 var _followers: Array[Node] = []
 var _followers_until: int = 0
 var _follower_slots: Dictionary = {}
-var _crowd: Dictionary = {}
-var _crowd_until: int = 0
-var _threats: Array = []
-var _threats_until: int = 0
-## `threats()` reach (m around the hero).
-const THREAT_RANGE: float = 40.0
 ## Network id of the player controlling this hero (set at spawn).
 var peer_id: int = 1
 var display_name: String = "Player"
@@ -502,6 +496,7 @@ func _ready() -> void:
 		model = $Model
 		anim = model.find_child("AnimationPlayer", true, false) as AnimationPlayer
 	super()
+	max_slides = 6  # a hero slides smoothly along walls and around a crowd (AI units: Unit.CROWD_MAX_SLIDES)
 	add_to_group(&"players")
 	add_to_group(&"player_units")
 	_base_melee_damage = melee_damage
@@ -1793,69 +1788,12 @@ func follower_index(ally: Node) -> int:
 	return int(_follower_slots.get(ally, 0))
 
 
-## How many of this hero's melee followers are after `enemy` right now (soldiers spread over the enemies).
-func crowd_on(enemy: Node) -> int:
-	_refresh_followers()
-	if Engine.get_physics_frames() >= _crowd_until:
-		_crowd_until = Engine.get_physics_frames() + FOLLOWERS_CACHE_FRAMES
-		_crowd.clear()
-		for ally in _followers:
-			var on: Variant = ally.get("target")
-			if is_instance_valid(on) and not ally.is_ranged():
-				_crowd[on] = int(_crowd.get(on, 0)) + 1
-	return int(_crowd.get(enemy, 0))
-
-
-## The hostiles near this hero for its soldiers to pick from, worked out once per FOLLOWERS_CACHE_FRAMES frames for the whole
-## army: [enemy, bonus (m closer it counts: hitting the hero / a soldier of ours), hurt share (0 whole .. 1)] rows
-## within THREAT_RANGE. Soldiers within reach of it pick from this instead of every unit in the world.
-func threats() -> Array:
-	var now := Engine.get_physics_frames()
-	if now < _threats_until:
-		return _threats
-	_threats_until = now + FOLLOWERS_CACHE_FRAMES
-	_threats.clear()
-	var range_sq := THREAT_RANGE * THREAT_RANGE
-	for group in Ally.TARGET_GROUPS:
-		for node in get_tree().get_nodes_in_group(group):
-			var enemy := node as Node3D
-			if enemy == null:
-				continue
-			var dx := enemy.global_position.x - global_position.x
-			var dz := enemy.global_position.z - global_position.z
-			if dx * dx + dz * dz > range_sq or GameConfig.is_gone(enemy) or not GameConfig.is_hostile(self, enemy):
-				continue
-			var bonus := 0.0
-			var victim: Variant = enemy.get("target")
-			if victim is Node3D and is_instance_valid(victim):
-				if victim == self:
-					bonus = Ally.DEFEND_BONUS
-				elif victim is Ally and (victim as Ally).owner_peer == peer_id:
-					bonus = Ally.GUARD_BONUS
-			var hurt := 0.0
-			var unit := enemy as Unit
-			if unit and unit.max_health > 0.0:
-				hurt = 1.0 - unit.health / unit.max_health
-			_threats.append([enemy, bonus, hurt])
-	return _threats
-
-
-## A melee follower went from `old` to `new` target: the counts follow at once (the next soldier to pick sees it).
-func crowd_moved(old: Variant, new: Variant) -> void:
-	crowd_on(null)  # (fresh counts first if they are due)
-	if is_instance_valid(old) and _crowd.has(old):
-		_crowd[old] = maxi(int(_crowd[old]) - 1, 0)
-	if is_instance_valid(new):
-		_crowd[new] = int(_crowd.get(new, 0)) + 1
-
-
 ## One list of the followers (and their slots) per FOLLOWERS_CACHE_FRAMES frames or army change, shared by all of them.
 func _refresh_followers() -> void:
 	var now := Engine.get_physics_frames()
 	if now < _followers_until:
 		return
 	_followers_until = now + FOLLOWERS_CACHE_FRAMES
-	_crowd_until = 0
 	_followers.clear()
 	_follower_slots.clear()
 	var melee := 0

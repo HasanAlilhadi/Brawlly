@@ -180,7 +180,7 @@ func _think() -> void:
 	if _asleep:
 		_calm_down()
 		return
-	var near := find_nearest(TARGET_GROUPS, AGGRO_RANGE if is_wild() else FLEE_RANGE)
+	var near := _nearest_threat(AGGRO_RANGE if is_wild() else FLEE_RANGE)
 	if is_wild():
 		if is_angry():
 			if GameConfig.is_gone(target) or flat_distance_to(target) > CALM_RANGE:
@@ -193,6 +193,14 @@ func _think() -> void:
 			_get_angry(near)
 	elif near:
 		_scare(near, true)
+
+
+## The nearest hero / soldier within `distance`: from the commanders' census (BattleBrain) when there is one.
+func _nearest_threat(distance: float) -> Node3D:
+	var brain := BattleBrain.current
+	if brain and brain.has_census():
+		return brain.nearest_foe_of(team_id, global_position, distance)
+	return find_nearest(TARGET_GROUPS, distance)
 
 
 ## Walk to a spot near home, eat a while, walk to another one.

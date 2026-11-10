@@ -120,6 +120,8 @@ const GARRISON_RANGE: float = 70.0
 const SPAWN_PER_FRAME: int = 1
 ## Seconds between label text updates.
 const LABEL_REFRESH: float = 0.25
+## Who stands in the ring (capturing, taking back) is looked at this often (s), not every frame.
+const CAPTURE_STEP: float = 0.2
 ## The garrison sleeps (no AI, not targeted) while no hero or soldier is within this distance of the ring and none
 ## of it is fighting, like a far warband.
 const GARRISON_WAKE: float = 50.0
@@ -200,6 +202,8 @@ var _guards_awake: bool = true
 var _sync_timer: float = 0.0
 var _check_timer: float = 0.0
 var _label_timer: float = randf() * 0.25
+## Server: time since this place last looked at who stands in its ring (`_update_capture`, every CAPTURE_STEP s).
+var _capture_wait: float = randf() * CAPTURE_STEP
 var _material: StandardMaterial3D
 var _flag_material: StandardMaterial3D
 var _label: Label3D
@@ -451,7 +455,10 @@ func _process(delta: float) -> void:
 		State.INFESTED:
 			changed = _update_infested(delta)
 		State.NEUTRAL, State.OWNED:
-			changed = _update_capture(delta)
+			_capture_wait += delta
+			if _capture_wait >= CAPTURE_STEP:  # who stands in the ring: a few times a second, not every frame
+				changed = _update_capture(_capture_wait)
+				_capture_wait = 0.0
 			if state == State.OWNED:
 				_lord_timer -= delta
 				if _lord_timer <= 0.0:
@@ -502,12 +509,12 @@ func _hero_within(distance: float) -> bool:
 ## Exactly one faction (not the owner) in the ring, nobody of the owner's, the gate down: the banner rises.
 ## Demons (a raid) in a held ring with nobody of the owner's and no standing gate take it back the same way.
 func _update_capture(delta: float) -> bool:
-	var inside := _teams_inside()
+	var inside := _ring_census()
 	var taker := -1
 	var open := gate == null or gate.is_broken()
 	if inside.size() == 1 and not inside.has(owner_team) and open:
 		taker = inside.keys()[0]
-	elif inside.is_empty() and state == State.OWNED and open and kind != Kind.CITADEL and not _demons_inside().is_empty():
+	elif inside.is_empty() and state == State.OWNED and open and kind != Kind.CITADEL and _demons_near():
 		taker = DEMONS  # a faction's Citadel never falls to demons (its gate can be broken)
 	var before := progress
 	var before_capturer := capturer
@@ -536,7 +543,18 @@ func contested() -> bool:
 	return not inside.is_empty()
 
 
-## Factions with a standing hero or soldier inside the ring (team -> count).
+## `_teams_inside()` for the capture check, which runs all the time: from the commanders' census (BattleBrain: one
+## grid of everybody, a cycle old at most) — every place walking over every unit, every frame, was a frame cost that
+## grew with the places held × the armies. No fresh census: the exact look.
+func _ring_census() -> Dictionary:
+	var brain := BattleBrain.current
+	if brain and brain.has_census():
+		return brain.factions_near(global_position, radius())
+	return _teams_inside()
+
+
+## Factions with a standing hero or soldier inside the ring right now (team -> count): a walk over every hero and
+## soldier — for what is asked once a second or less (the guard countdown, gate repairs).
 func _teams_inside() -> Dictionary:
 	var teams := {}
 	var r := radius()
@@ -650,6 +668,14 @@ func withdraw(player: Player) -> int:
 	return taken
 
 
+## Whether a living (awake) demon stands in the ring.
+func _demons_near() -> bool:
+	var brain := BattleBrain.current
+	if brain and brain.has_census():
+		return brain.monsters_near(global_position, radius())
+	return not _demons_inside().is_empty()
+
+
 ## Living demons standing in the ring.
 func _demons_inside() -> Array[Node]:
 	var found: Array[Node] = []
@@ -750,12 +776,17 @@ func _spawn_some() -> void:
 ## A hero or soldier near the ring, or one of the garrison busy fighting / walking back.
 func _guards_needed() -> bool:
 	var reach := radius() + GARRISON_WAKE
-	for node in get_tree().get_nodes_in_group(&"player_units"):
-		var unit := node as Node3D
-		if GameConfig.is_gone(unit):
-			continue
-		if Vector2(unit.global_position.x - global_position.x, unit.global_position.z - global_position.z).length() < reach:
+	var brain := BattleBrain.current
+	if brain and brain.has_census():
+		if brain.friends_near(global_position, reach):
 			return true
+	else:
+		for node in get_tree().get_nodes_in_group(&"player_units"):
+			var unit := node as Node3D
+			if GameConfig.is_gone(unit):
+				continue
+			if Vector2(unit.global_position.x - global_position.x, unit.global_position.z - global_position.z).length() < reach:
+				return true
 	for guard in _guards:
 		if not GameConfig.is_gone(guard) and (guard as Enemy).is_busy():
 			return true

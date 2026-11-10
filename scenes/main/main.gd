@@ -68,6 +68,8 @@ var conquest_panel: ConquestPanel
 var dev_panel: DevPanel
 ## Far characters animate less often (follows what the camera follows).
 var animation_lod: AnimationLod
+## The commanders' mind: picks every soldier's and monster's foe on a worker thread (server; idle on clients).
+var battle_brain: BattleBrain
 @onready var pause_menu: PauseMenu = $PauseMenu
 
 var game_mode: GameMode
@@ -198,6 +200,9 @@ func _ready() -> void:
 	animation_lod = AnimationLod.new()
 	animation_lod.name = "AnimationLod"
 	add_child(animation_lod)
+	battle_brain = BattleBrain.new()
+	battle_brain.name = "BattleBrain"
+	add_child(battle_brain)
 	dev_panel = DevPanel.new()  # DEV button / F3: what the game is doing (+ host tools)
 	dev_panel.setup(self)
 	hud.add_child(dev_panel)

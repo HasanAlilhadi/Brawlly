@@ -15,8 +15,6 @@ extends Unit
 ## on every peer.
 
 ## Enemies fight every player and every player's soldiers.
-const TARGET_GROUPS: Array[StringName] = [&"player_units"]
-const WAVE_TARGET_GROUPS: Array[StringName] = [&"players"]
 ## XP per point of max health (grunt 80 hp: 2, brute 420: 10, a boss: 20+).
 const XP_PER_HEALTH: float = 0.025
 ## Largest XP orb; bigger drops are split.
@@ -380,6 +378,8 @@ func _get_move_input(delta: float) -> Vector3:
 	if _think_timer <= 0.0:
 		_think_timer = 0.25 + randf() * 0.1
 		_think()
+		if brain_cycle < 0:
+			_think_timer = NO_ORDERS_WAIT  # just risen, no orders yet: they come within a brain cycle
 	move_speed = _base_speed * (provoked_speed_multiplier if is_provoked() else 1.0) * speed_boost * rage_speed \
 			* (GameConfig.BLOOD_MOON_SPEED if GameConfig.raging_at(global_position) else 1.0)
 
@@ -463,14 +463,18 @@ func _update_far() -> void:
 			return
 
 
+## Server, a few times a second. It carries out what it is told — its band (alerts, tactics), a hit (`provoke`) —
+## and who is near comes from the commanders' mind (`BattleBrain`: `brain_near` the nearest hero / soldier,
+## `brain_best` the most wounded for those that prefer them); it never scans the battlefield itself.
 func _think() -> void:
 	_update_far()
+	if BattleBrain.current and not is_in_group(&"active_enemies"):
+		BattleBrain.current.include(self)  # nothing woke it the usual way: it still gets its orders
 	if wave_enemy:
-		var nearest := find_nearest(WAVE_TARGET_GROUPS, GameConfig.world_half * 3.0)
-		if nearest != target:
+		var nearest := ordered_foe(brain_near, INF)  # the nearest hero, however far
+		if nearest and nearest != target:
 			target = nearest
-			if target:
-				lock_target()
+			lock_target()
 		_returning = false
 		return
 	var dist_home := global_position.distance_to(home)
@@ -478,7 +482,7 @@ func _think() -> void:
 	if is_provoked():
 		if GameConfig.is_gone(target) and dist_home <= provoked_leash:
 			# Our target fell: take on the next foe close by before giving up.
-			target = find_nearest(TARGET_GROUPS, provoked_sight_range * 0.6)
+			target = ordered_foe(brain_near, provoked_sight_range * 0.6)
 			if target:
 				lock_target()
 		if GameConfig.is_gone(target) or dist_home > provoked_leash:
@@ -498,13 +502,18 @@ func _think() -> void:
 	if _returning:
 		return
 	var before := target
-	var candidate := find_weakest(aggro_range) if prefers_weak else find_nearest(TARGET_GROUPS, aggro_range)
+	var candidate := ordered_foe(brain_best if prefers_weak else brain_near, aggro_range)
 	target = choose_target(target, candidate, aggro_range * 1.5)
 	if target and target != before and is_instance_valid(band):
 		band.alert(target)  # one of them spots you: the whole band comes
 	if target == null and band == null and randf() < 0.12:
 		var angle := randf() * TAU
 		_wander_point = home + Vector3(cos(angle), 0.0, sin(angle)) * randf_range(0.5, 3.0)
+
+
+## How far it is told about foes (BattleBrain): what it spots when calm, who it takes on next when provoked.
+func spot_range() -> float:
+	return maxf(aggro_range, provoked_sight_range * 0.6)
 
 
 ## The foe within `max_range` with the least health left (share), closer ones first on a tie.
